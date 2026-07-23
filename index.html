@@ -237,11 +237,11 @@
   .month-controls{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
   .month-controls select{font-family:'Paperlogy';font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;}
   .month-table-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);}
-  .month-table{width:100%;border-collapse:collapse;font-size:12px;min-width:760px;}
+  .month-table{width:100%;border-collapse:collapse;font-size:12px;min-width:680px;table-layout:fixed;}
   .month-table th{background:var(--paper);padding:8px 6px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;}
-  .month-table th:first-child{text-align:left;padding-left:12px;min-width:195px;}
+  .month-table th:first-child{text-align:left;padding-left:12px;padding-right:6px;width:118px;}
   .month-table td{padding:6px;text-align:center;border-bottom:1px solid var(--line);}
-  .month-table td:first-child{text-align:left;padding-left:12px;font-family:'Paperlogy';white-space:nowrap;}
+  .month-table td:first-child{text-align:left;padding-left:12px;padding-right:6px;font-family:'Paperlogy';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .month-branch-row td{background:var(--navy);color:#fff;font-weight:600;font-family:'Paperlogy';text-align:left;padding:7px 12px;}
   .month-cell{font-family:'Paperlogy';font-weight:600;border-radius:4px;}
   .m-good{background:var(--good-soft);color:var(--good);}
