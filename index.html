@@ -458,9 +458,8 @@
 <div id="roleOverlay">
   <!-- 배경 장식 -->
   <div style="position:absolute;inset:0;overflow:hidden;pointer-events:none;">
-    <div style="position:absolute;top:-80px;right:-80px;width:280px;height:280px;border-radius:50%;background:rgba(126,177,56,.18);"></div>
+    <div style="position:absolute;top:-40px;right:-40px;width:160px;height:160px;border-radius:50%;background:rgba(126,177,56,.18);"></div>
     <div style="position:absolute;top:60px;right:30px;width:80px;height:80px;border-radius:50%;background:rgba(251,215,75,.12);"></div>
-    <div style="position:absolute;bottom:200px;left:-30px;width:140px;height:140px;border-radius:50%;background:rgba(126,177,56,.12);"></div>
     <div style="position:absolute;top:140px;right:60px;width:10px;height:10px;border-radius:50%;background:rgba(251,215,75,.5);"></div>
     <div style="position:absolute;top:200px;right:90px;width:6px;height:6px;border-radius:50%;background:rgba(251,215,75,.35);"></div>
     <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);"></div>
@@ -648,6 +647,26 @@
         <button onclick="printQr()" style="flex:1;padding:12px;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;font-family:'Paperlogy',sans-serif;">🖨 인쇄</button>
         <button onclick="downloadQr()" style="flex:1;padding:12px;background:var(--navy);border:none;border-radius:12px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;font-family:'Paperlogy',sans-serif;">⬇ 저장</button>
       </div>
+    </div>
+  </div>
+</div>
+<!-- 제출 확인 팝업 -->
+<div id="submitConfirmOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:400;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeSubmitConfirm()">
+  <div style="background:#fff;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;box-shadow:0 -8px 40px rgba(0,0,0,.2);">
+    <div style="background:linear-gradient(135deg,var(--navy),var(--navy-2));padding:20px 20px 16px;border-radius:24px 24px 0 0;">
+      <div style="font-size:11px;color:rgba(255,255,255,.6);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">제출 전 확인</div>
+      <div style="font-size:18px;font-weight:700;color:#fff;">입력 내용을 확인해 주세요</div>
+    </div>
+    <div id="submitConfirmBody" style="padding:16px 20px 8px;"></div>
+    <div style="display:flex;gap:10px;padding:12px 20px 32px;">
+      <button onclick="closeSubmitConfirm()"
+        style="flex:1;padding:15px;border:1.5px solid var(--line);border-radius:14px;background:#fff;font-size:15px;font-weight:600;color:var(--muted);cursor:pointer;font-family:'Paperlogy',sans-serif;">
+        ✏ 수정
+      </button>
+      <button onclick="confirmAndSubmit()"
+        style="flex:2;padding:15px;border:none;border-radius:14px;background:var(--navy);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:'Paperlogy',sans-serif;">
+        제출 확인 →
+      </button>
     </div>
   </div>
 </div>
@@ -2166,7 +2185,7 @@ function addTripRow(prefillStart = null){
           <span class="tr-fuel-required" style="display:none;color:var(--bad);font-size:12px;margin-left:4px;">* 필수</span>
         </label>
         <div class="fuel-amt" id="fuel-${id}">
-          <input type="number" class="tr-fuel check-sub-input" placeholder="주유금액 입력 (원)" oninput="scheduleDraft()">
+          <input type="text" inputmode="numeric" class="tr-fuel check-sub-input" placeholder="주유금액 입력 (원)" oninput="formatFuelInput(this);scheduleDraft()">
         </div>
       </div>
       <div class="check-field">
@@ -2275,6 +2294,22 @@ function togglePersonalUse(chk, id){
   scheduleDraft();
 }
 
+function formatFuelInput(inp){
+  const pos = inp.selectionStart;
+  const before = inp.value.slice(0, pos).replace(/[^0-9]/g,'').length;
+  const raw = inp.value.replace(/[^0-9]/g,'');
+  if(!raw){ inp.value=''; return; }
+  const formatted = raw.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  inp.value = formatted;
+  // 커서 위치 복원
+  let count=0, newPos=0;
+  for(let i=0;i<formatted.length;i++){
+    if(formatted[i]!==',') count++;
+    if(count>=before){ newPos=i+1; break; }
+  }
+  try{ inp.setSelectionRange(newPos, newPos); }catch(e){}
+}
+
 function toggleFuelField(chk, id){
   const fuel = document.getElementById('fuel-'+id);
   if(fuel) fuel.style.display = chk.checked ? 'block' : 'none';
@@ -2292,7 +2327,8 @@ function collectRows(){
     const user = card.querySelector('.tr-user').value.trim();
     const isPersonal = card.querySelector('.tr-personal-chk')?.checked || false;
     const hasFuel = card.querySelector('.tr-fuel-chk').checked;
-    const fuel = hasFuel ? parseFuelAmount(card.querySelector('.tr-fuel').value) : 0;
+    const fuelRaw = card.querySelector('.tr-fuel')?.value.replace(/,/g,'') || '0';
+    const fuel = hasFuel ? parseFuelAmount(fuelRaw) : 0;
     const statusBtn = card.querySelector('.status-btn.active-good, .status-btn.active-bad');
     const status = statusBtn ? statusBtn.dataset.val : '정상';
     const note = card.querySelector('.tr-note').value.trim();
@@ -2307,6 +2343,71 @@ function showUserFormErr(msg){
   el.textContent = msg; el.style.display = 'block';
   el.scrollIntoView({behavior:'smooth', block:'nearest'});
   setTimeout(()=>el.style.display='none', 5000);
+}
+
+// 제출 확인 팝업
+let _pendingSubmitData = null;
+
+function closeSubmitConfirm(){
+  document.getElementById('submitConfirmOverlay').style.display = 'none';
+  _pendingSubmitData = null;
+}
+
+function showSubmitConfirm(submitter, plate, rows){
+  const v = data.vehicles[plate] || {};
+  const branch = v.branch || FLEET_REGISTRY.find(r=>r.plate===plate)?.branch || '';
+  const model = modelShort(v.model || FLEET_REGISTRY.find(r=>r.plate===plate)?.model || '');
+
+  let html = '';
+  // 헤더 정보
+  html += `<div style="background:var(--paper);border-radius:12px;padding:14px 16px;margin-bottom:14px;">
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+      <span style="font-size:12px;color:var(--muted);">제출자</span>
+      <span style="font-size:14px;font-weight:700;color:var(--ink);">${submitter}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+      <span style="font-size:12px;color:var(--muted);">차량번호</span>
+      <span style="font-size:14px;font-weight:700;color:var(--navy);font-family:'Paperlogy';">${plate} · ${model}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
+      <span style="font-size:12px;color:var(--muted);">사업장</span>
+      <span style="font-size:14px;font-weight:600;color:var(--ink);">${branch}</span>
+    </div>
+  </div>`;
+
+  // 운행 건 목록
+  html += `<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">운행 기록 ${rows.length}건</div>`;
+  rows.forEach((r,i)=>{
+    const dateStr = r.dateFrom===r.dateTo ? r.dateFrom : `${r.dateFrom} ~ ${r.dateTo}`;
+    const dist = Math.max(0,(Number(r.endOdo)||0)-(Number(r.startOdo)||0));
+    html += `<div style="border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:13px;font-weight:700;color:var(--navy);">운행 #${i+1}</span>
+        <span style="font-size:12px;color:var(--muted);">${dateStr||'날짜 미입력'}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;">
+        <div><span style="color:var(--muted);">시작거리</span> <b>${Number(r.startOdo).toLocaleString()} km</b></div>
+        <div><span style="color:var(--muted);">종료거리</span> <b>${Number(r.endOdo).toLocaleString()} km</b></div>
+        <div><span style="color:var(--muted);">주행거리</span> <b style="color:var(--good);">${dist.toLocaleString()} km</b></div>
+        <div><span style="color:var(--muted);">운전자</span> <b>${r.user||'-'}</b></div>
+      </div>
+      <div style="margin-top:6px;font-size:12px;color:var(--ink);"><span style="color:var(--muted);">행선지</span> <b>${r.dest||'-'}</b></div>
+      ${r.fuel?`<div style="margin-top:4px;font-size:12px;"><span style="color:var(--muted);">주유비</span> <b>${Number(r.fuel).toLocaleString()}원</b></div>`:''}
+      ${r.isPersonal?'<div style="margin-top:4px;"><span style="background:#EFF6FF;color:#1D4ED8;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">개인사용</span></div>':''}
+      ${r.isDaeCha?`<div style="margin-top:4px;"><span style="background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">대차 ${r.daeChaPate}</span></div>`:''}
+    </div>`;
+  });
+
+  document.getElementById('submitConfirmBody').innerHTML = html;
+  document.getElementById('submitConfirmOverlay').style.display = 'flex';
+}
+
+async function confirmAndSubmit(){
+  if(!_pendingSubmitData) return;
+  // 데이터 먼저 저장 후 팝업 닫기
+  const {submitter, plate, rows} = _pendingSubmitData;
+  closeSubmitConfirm();
+  await doSubmit(submitter, plate, rows);
 }
 
 async function submitDirectInput(){
@@ -2328,6 +2429,19 @@ async function submitDirectInput(){
     if(r.isPersonal && !r.fuel){ showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유비를 입력해 주세요.`); return; }
   }
 
+  // 주행거리 1000km 이상 행 체크
+  const longRows = rows.map((r,i)=>({i, dist: Math.max(0,(Number(r.endOdo)||0)-(Number(r.startOdo)||0))})).filter(x=>x.dist>=1000);
+  if(longRows.length > 0){
+    const msg = longRows.map(x=>`운행 #${x.i+1}: ${x.dist.toLocaleString()} km`).join(', ');
+    if(!confirm(`⚠️ 주행거리가 1,000km 이상인 기록이 있습니다.\n\n${msg}\n\n입력값이 맞는지 확인해 주세요.\n계속 진행하시겠습니까?`)) return;
+  }
+
+  // 검증 통과 → 팝업 표시
+  _pendingSubmitData = {submitter, plate, rows};
+  showSubmitConfirm(submitter, plate, rows);
+}
+
+async function doSubmit(submitter, plate, rows){
   // isoDate 계산 + trip 포맷 변환
   await refreshDataFromStorage();
   if(!data.vehicles[plate]) data.vehicles[plate]={model:REGISTRY_MAP[plate]?.model||'',branch:REGISTRY_MAP[plate]?.branch||'미배정',originalBranch:REGISTRY_MAP[plate]?.branch||'미배정',active:true,trips:[]};
@@ -2613,24 +2727,36 @@ function loadUserEditable(){
     html+=`
     <div style="margin-bottom:18px;">
       <div class="user-edit-plate">
-        <span>${plate}</span>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:var(--navy);">${plate} <span style="font-size:12px;font-weight:500;color:var(--muted);">${modelShort(data.vehicles[plate]?.model||'')}</span></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">${data.vehicles[plate]?.branch||''}</div>
+        </div>
         <span style="font-size:12px;color:var(--muted);font-family:'Paperlogy';">${rows.length}건</span>
       </div>
-      <table style="margin:0;border-radius:0;">
-        <thead><tr><th>일자</th><th>시작</th><th>종료</th><th>거리</th><th>주유비</th><th>행선지</th><th>비고</th><th></th></tr></thead>
-        <tbody>
-          ${rows.map(f=>`<tr data-plate="${f.plate}" data-idx="${f.tripIdx}" data-key="${f.trip.isoDate}|${f.trip.startOdo}|${f.trip.endOdo}|${f.trip.submitter||''}">
-            <td><input class="ue-inp" value="${f.trip.date||''}" data-f="date" style="width:68px;"></td>
-            <td><input class="ue-inp mono" value="${f.trip.startOdo??''}" data-f="startOdo" oninput="recalcUeDist(this)" style="width:62px;"></td>
-            <td><input class="ue-inp mono" value="${f.trip.endOdo??''}" data-f="endOdo" oninput="recalcUeDist(this)" style="width:62px;"></td>
-            <td><input class="ue-inp mono" value="${f.trip.distance??''}" data-f="distance" readonly tabindex="-1" style="width:52px;background:var(--paper);color:var(--muted);cursor:not-allowed;"></td>
-            <td><input class="ue-inp mono" value="${f.trip.fuel||''}" data-f="fuel" style="width:62px;"></td>
-            <td><input class="ue-inp" value="${f.trip.dest||''}" data-f="dest" style="width:100px;"></td>
-            <td><input class="ue-inp" value="${f.trip.note||''}" data-f="note" style="width:80px;"></td>
-            <td><span style="color:var(--good);font-size:11px;font-weight:600;display:none;" class="ue-saved">저장됨</span></td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
+      <div style="padding:8px 0;">
+        ${rows.map(f=>`<div data-plate="${f.plate}" data-idx="${f.tripIdx}" data-key="${f.trip.isoDate}|${f.trip.startOdo}|${f.trip.endOdo}|${f.trip.submitter||''}" style="border:1.5px solid var(--line);border-radius:12px;margin:0 12px 10px;padding:12px 14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <input class="ue-inp" value="${f.trip.date||''}" data-f="date" placeholder="날짜" style="font-size:14px;font-weight:600;color:var(--navy);border:1px solid var(--line);border-radius:8px;padding:6px 10px;width:110px;">
+            <span class="ue-saved" style="color:var(--good);font-size:11px;font-weight:600;display:none;">✓ 저장됨</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+            <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">시작거리</div>
+              <input class="ue-inp mono" value="${f.trip.startOdo??''}" data-f="startOdo" oninput="recalcUeDist(this)" placeholder="0" style="width:100%;font-size:14px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;text-align:right;"></div>
+            <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">종료거리</div>
+              <input class="ue-inp mono" value="${f.trip.endOdo??''}" data-f="endOdo" oninput="recalcUeDist(this)" placeholder="0" style="width:100%;font-size:14px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;text-align:right;"></div>
+            <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">주행거리</div>
+              <input class="ue-inp mono" value="${f.trip.distance??''}" data-f="distance" readonly tabindex="-1" style="width:100%;font-size:14px;font-weight:700;color:var(--good);border:1px solid var(--good-soft);border-radius:8px;padding:8px 6px;text-align:right;background:var(--good-soft);cursor:not-allowed;"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">행선지</div>
+              <input class="ue-inp" value="${f.trip.dest||''}" data-f="dest" placeholder="행선지" style="width:100%;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;"></div>
+            <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">주유비</div>
+              <input class="ue-inp mono" value="${f.trip.fuel||''}" data-f="fuel" placeholder="0" style="width:100%;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;"></div>
+          </div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">비고</div>
+            <input class="ue-inp" value="${f.trip.note||''}" data-f="note" placeholder="특이사항" style="width:100%;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;"></div>
+        </div>`).join('')}
+      </div>
     </div>`;
   });
 
@@ -2641,14 +2767,16 @@ function loadUserEditable(){
 }
 
 function recalcUeDist(inp){
-  const tr=inp.closest('tr');
-  const s=Number(tr.querySelector('[data-f="startOdo"]').value)||0;
-  const e=Number(tr.querySelector('[data-f="endOdo"]').value)||0;
-  tr.querySelector('[data-f="distance"]').value=Math.max(0,e-s);
+  const row=inp.closest('[data-plate]');
+  if(!row) return;
+  const s=Number(row.querySelector('[data-f="startOdo"]').value)||0;
+  const e=Number(row.querySelector('[data-f="endOdo"]').value)||0;
+  const dInp=row.querySelector('[data-f="distance"]');
+  if(dInp) dInp.value=Math.max(0,e-s);
 }
 
 async function saveUserEdits(name){
-  const rows=document.querySelectorAll('#userEditBody tbody tr');
+  const rows=document.querySelectorAll('#userEditBody [data-plate]');
   // 저장 직전 최신 데이터 재조회 후 키 기반 매칭 (동시 수정 유실 방지)
   await refreshDataFromStorage();
   rows.forEach(tr=>{
