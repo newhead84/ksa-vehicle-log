@@ -909,6 +909,11 @@ function enterUserMode(){
   loadData().then(()=>{
     buildVehicleDropdown();  // 사업장 목록 완성
     checkDraftBanner();
+    // 제출자 이름 입력칸이 보이도록 상단으로 스크롤
+    setTimeout(()=>{
+      const sub = document.getElementById('submitterInput');
+      if(sub) sub.scrollIntoView({behavior:'smooth', block:'start'});
+    }, 100);
     // URL에서 직접 읽어 자동선택 (가장 안정적)
     const _p = new URLSearchParams(window.location.search).get('plate');
     if(_p){
@@ -2187,7 +2192,8 @@ function addTripRow(prefillStart = null){
     const userInp = card.querySelector('.tr-user');
     if(userInp && !userInp.value) userInp.value = submitterVal;
   }
-  card.scrollIntoView({behavior:'smooth', block:'nearest'});
+  // 추가 카드만 스크롤 (첫 카드는 상단 유지)
+  if(rowCounter > 1) card.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
 function removeTripRow(id){
