@@ -1893,6 +1893,13 @@ function buildBranchDropdown(){
   });
 }
 
+function syncSubmitterFromUser(inp){
+  const subInp = document.getElementById('submitterInput');
+  if(subInp && !subInp.value.trim()){
+    subInp.value = inp.value;
+  }
+}
+
 function syncUserFields(name){
   // 제출자 이름 변경 시 운전자 필드가 비어있거나 이전 제출자 값이면 동기화
   document.querySelectorAll('.tr-user').forEach(inp=>{
@@ -2124,7 +2131,7 @@ function addTripRow(prefillStart = null){
           <span>운전자</span>
           <span style="font-size:11px;color:var(--muted);font-weight:400;">제출자와 다를 경우 수정하세요</span>
         </label>
-        <input type="text" class="tr-user" placeholder="운전자 이름" oninput="this.dataset.autoFilled='false';scheduleDraft()">
+        <input type="text" class="tr-user" placeholder="운전자 이름" oninput="this.dataset.autoFilled='false';syncSubmitterFromUser(this);scheduleDraft()">
       </div>
       <div class="form-field">
         <label>차량 상태</label>
