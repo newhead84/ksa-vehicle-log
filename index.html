@@ -794,32 +794,7 @@ async function fbSet(path, value){
 let data = { vehicles: {} };
 
 // URL 파라미터 차량번호 저장 (페이지 로드 시)
-let _qrPlate = null;
-(function(){
-  try{
-    const raw = new URLSearchParams(window.location.search).get('plate');
-    if(raw) _qrPlate = decodeURIComponent(raw);
-  }catch(e){}
-})();
 
-function applyQrAutoSelect(plate){
-  if(!plate) return;
-  const branch = data.vehicles[plate]?.branch
-    || FLEET_REGISTRY.find(v=>v.plate===plate)?.branch || '';
-  if(!branch) return;
-
-  // 사업장 선택 (동기)
-  const bSel = document.getElementById('userBranchSelect');
-  if(!bSel) return;
-  bSel.value = branch;
-  onBranchSelect();  // 차량 드롭다운 채움 (동기)
-
-  // 차량 선택 (동기)
-  const pSel = document.getElementById('userPlateSelect');
-  if(!pSel) return;
-  pSel.value = plate;
-  onVehicleSelect(); // 운행 카드 생성
-}
 let currentRole = null; // 'user' | 'admin'
 let sessionSubmits = []; // 이번 세션에서 사용자가 제출한 항목들
 
@@ -932,12 +907,24 @@ function enterUserMode(){
   pushAppState('user');
 
   loadData().then(()=>{
-    buildVehicleDropdown();
+    buildVehicleDropdown();  // 사업장 목록 완성
     checkDraftBanner();
-    // QR 파라미터로 진입한 경우 자동선택
-    if(_qrPlate){
-      applyQrAutoSelect(_qrPlate);
-      _qrPlate = null;
+    // URL에서 직접 읽어 자동선택 (가장 안정적)
+    const _p = new URLSearchParams(window.location.search).get('plate');
+    if(_p){
+      const plate = decodeURIComponent(_p);
+      const branch = data.vehicles[plate]?.branch
+        || FLEET_REGISTRY.find(v=>v.plate===plate)?.branch || '';
+      if(branch){
+        // Step1: 사업장 선택 → 차량 목록 채움
+        const bSel = document.getElementById('userBranchSelect');
+        bSel.value = branch;
+        onBranchSelect();
+        // Step2: 차량 선택 → 운행카드 생성 (onBranchSelect 동기 완료 후)
+        const pSel = document.getElementById('userPlateSelect');
+        pSel.value = plate;
+        onVehicleSelect();
+      }
     }
   });
 }
