@@ -529,13 +529,6 @@
         style="width:100%;border:1.5px solid var(--line);border-radius:12px;padding:15px 14px;font-size:16px;font-family:'Paperlogy',sans-serif;background:#fff;color:var(--ink);"
         onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--line)'">
     </div>
-    <div class="draft-banner" id="draftBanner">
-      <span>💾 임시저장된 기록이 있습니다</span>
-      <div class="draft-btns">
-        <button class="btn btn-primary" style="padding:6px 14px;font-size:12px;" onclick="restoreDraft()">불러오기</button>
-        <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;" onclick="clearDraft()">삭제</button>
-      </div>
-    </div>
     <div class="vehicle-select-card" style="padding:16px 16px 20px;border-radius:0;border-bottom:1px solid var(--line);margin-bottom:0;">
       <label>사업장 선택</label>
       <select class="plate-select" id="userBranchSelect" onchange="onBranchSelect()" style="margin-bottom:12px;">
@@ -928,11 +921,8 @@ function enterUserMode(){
   loadData().then(()=>{
     buildVehicleDropdown();  // 사업장 목록 완성
     checkDraftBanner();
-    // 제출자 이름 입력칸이 보이도록 상단으로 스크롤
-    setTimeout(()=>{
-      const sub = document.getElementById('submitterInput');
-      if(sub) sub.scrollIntoView({behavior:'smooth', block:'start'});
-    }, 100);
+    // 최초 진입 시 항상 페이지 맨 위(헤더 포함)부터 보이도록
+    window.scrollTo(0, 0);
     // URL에서 직접 읽어 자동선택 (가장 안정적)
     const _p = new URLSearchParams(window.location.search).get('plate');
     if(_p){
