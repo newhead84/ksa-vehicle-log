@@ -812,10 +812,10 @@ const FLEET_REGISTRY = [
 {"plate":"181호6037","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"경남지역본부"},
 {"plate":"181호6089","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"경남지역본부"},
 {"plate":"231호4154","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"부산지역본부"},
-{"plate":"181호6039","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"광주전남"},
-{"plate":"181호6091","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"광주전남"},
-{"plate":"231호4157","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"광주전남"},
-{"plate":"231호4158","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"광주전남"},
+{"plate":"181호6039","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"광주전남제주지역본부"},
+{"plate":"181호6091","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"광주전남제주지역본부"},
+{"plate":"231호4157","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"광주전남제주지역본부"},
+{"plate":"231호4158","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"광주전남제주지역본부"},
 {"plate":"181호6035","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"대구경북지역본부"},
 {"plate":"181호6042","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"대구경북지역본부"},
 {"plate":"231호4136","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대구경북지역본부"},
@@ -857,7 +857,7 @@ const ORG_ORDER = [
   "경기강원지역본부","강원지부","인천지역본부",
   "대전세종충남지역본부","충남지부","충북지역본부",
   "대구경북지역본부","부산지역본부","경남지역본부",
-  "울산지역본부","광주전남","전북지역본부"
+  "울산지역본부","광주전남제주지역본부","전북지역본부"
 ];
 function orgOrderIndex(b){ const i=ORG_ORDER.indexOf(b); return i===-1?999:i; }
 function compareByOrg(a,b){ const ia=orgOrderIndex(a),ib=orgOrderIndex(b); return ia!==ib?ia-ib:a.localeCompare(b); }
