@@ -526,7 +526,7 @@
     <!-- 제출자 이름 입력 (사업장 위) -->
     <div style="background:var(--card);padding:16px;border-bottom:1px solid var(--line);margin-bottom:0;">
       <label style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:8px;">제출자 이름</label>
-      <input id="submitterInput" placeholder="이름을 입력하세요" maxlength="20" oninput="syncUserFields(this.value)"
+      <input id="submitterInput" placeholder="이름을 입력하세요" maxlength="20" oninput="syncUserFields(this.value)" onkeydown="this.dataset.syncedFromDriver='false'"
         style="width:100%;border:1.5px solid var(--line);border-radius:12px;padding:15px 14px;font-size:16px;font-family:'Paperlogy',sans-serif;background:#fff;color:var(--ink);"
         onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--line)'">
     </div>
@@ -1900,8 +1900,11 @@ function buildBranchDropdown(){
 
 function syncSubmitterFromUser(inp){
   const subInp = document.getElementById('submitterInput');
-  if(subInp && !subInp.value.trim()){
+  if(!subInp) return;
+  // 제출자가 비어있거나, 이전에 운전자에 의해 자동입력된 경우에만 업데이트
+  if(!subInp.value.trim() || subInp.dataset.syncedFromDriver === 'true'){
     subInp.value = inp.value;
+    subInp.dataset.syncedFromDriver = inp.value ? 'true' : 'false';
   }
 }
 
