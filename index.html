@@ -22,6 +22,11 @@
 
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#16233F">
 <title>차량운행일지 통합관리</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -29,47 +34,82 @@
   :root{
     --navy:#16233F;
     --navy-2:#1F3358;
-    --paper:#F3F4EF;
+    --paper:#F2F3F7;
     --card:#FFFFFF;
     --ink:#1A1F2B;
     --muted:#6B7280;
     --accent:#C2790F;
-    --accent-soft:#F4E4C5;
-    --good:#1F7A4D;
-    --good-soft:#E2F0E7;
-    --bad:#B23A2E;
-    --bad-soft:#F6E2DF;
-    --line:#E1E3DC;
-    --radius:14px;
+    --accent-soft:#FEF3E2;
+    --good:#16A34A;
+    --good-soft:#DCFCE7;
+    --bad:#DC2626;
+    --bad-soft:#FEE2E2;
+    --line:#E5E7EB;
+    --radius:16px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 16px);
   }
-  *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:'IBM Plex Sans KR',sans-serif;}
-  body{padding:0;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html{height:100%;}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:'IBM Plex Sans KR',sans-serif;font-size:16px;-webkit-font-smoothing:antialiased;}
+  body{min-height:100%;overscroll-behavior:none;}
   h1,h2,h3{font-family:'Newsreader',serif;margin:0;letter-spacing:-0.01em;}
   .mono{font-family:'IBM Plex Mono',monospace;}
   .muted{color:var(--muted);}
+  button,input,select,textarea{font-family:'IBM Plex Sans KR',sans-serif;-webkit-appearance:none;appearance:none;}
+  input[type="date"]::-webkit-calendar-picker-indicator{opacity:.6;}
 
-  /* ===== Role overlay ===== */
+  /* ===== Role overlay (풀스크린 앱 스타일) ===== */
   #roleOverlay{
-    position:fixed;inset:0;background:var(--navy);display:flex;align-items:center;justify-content:center;z-index:100;
+    position:fixed;inset:0;
+    background:linear-gradient(160deg, #16233F 0%, #1F3358 60%, #0D1626 100%);
+    display:flex;align-items:flex-end;justify-content:center;z-index:100;
+    padding-bottom:max(40px, var(--safe-bottom));
   }
   .role-box{
-    background:var(--card);border-radius:20px;padding:44px 48px;width:min(440px,90vw);text-align:center;
+    background:var(--card);
+    border-radius:32px 32px 0 0;
+    padding:36px 28px max(32px, var(--safe-bottom));
+    width:100%;max-width:480px;
+    text-align:center;
+    box-shadow:0 -8px 40px rgba(0,0,0,.3);
   }
-  .role-eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:10px;}
-  .role-title{font-family:'Newsreader',serif;font-size:28px;font-weight:600;color:var(--navy);margin-bottom:6px;}
-  .role-sub{font-size:13px;color:var(--muted);margin-bottom:32px;}
+  .role-logo-area{
+    position:absolute;top:0;left:0;right:0;
+    display:flex;flex-direction:column;align-items:center;
+    padding-top:max(60px, calc(var(--safe-top) + 50px));
+    color:#fff;
+  }
+  .role-logo-icon{font-size:48px;margin-bottom:12px;}
+  .role-logo-title{font-family:'Newsreader',serif;font-size:28px;font-weight:600;color:#fff;margin-bottom:6px;}
+  .role-logo-sub{font-size:13px;color:rgba(255,255,255,.55);}
+  .role-eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:8px;}
+  .role-title{font-family:'Newsreader',serif;font-size:22px;font-weight:600;color:var(--navy);margin-bottom:4px;}
+  .role-sub{font-size:13px;color:var(--muted);margin-bottom:28px;}
   .role-btns{display:flex;flex-direction:column;gap:10px;}
-  .btn-role-user{background:var(--navy);color:#fff;border:none;border-radius:10px;padding:14px;font-family:'IBM Plex Sans KR';font-size:14px;font-weight:600;cursor:pointer;}
-  .btn-role-user:hover{background:var(--navy-2);}
-  .btn-role-admin{background:none;border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:13px;font-family:'IBM Plex Sans KR';font-size:13px;font-weight:600;cursor:pointer;}
-  .btn-role-admin:hover{border-color:var(--accent);color:var(--accent);}
-  .admin-login-wrap{margin-top:16px;display:none;}
-  .admin-login-wrap input{width:100%;border:1px solid var(--line);border-radius:8px;padding:11px 13px;font-family:'IBM Plex Mono';font-size:14px;text-align:center;margin-bottom:10px;}
-  .admin-login-wrap input:focus{outline:none;border-color:var(--accent);}
-  .btn-login{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:11px;width:100%;font-family:'IBM Plex Sans KR';font-size:13px;font-weight:600;cursor:pointer;}
-  .btn-login:hover{opacity:.9;}
-  .login-err{color:var(--bad);font-size:12px;margin-top:6px;display:none;}
+  .btn-role-user{
+    background:var(--navy);color:#fff;border:none;border-radius:14px;
+    padding:17px;font-size:16px;font-weight:700;cursor:pointer;
+    box-shadow:0 4px 14px rgba(22,35,63,.3);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+  }
+  .btn-role-admin{
+    background:var(--paper);border:none;color:var(--muted);border-radius:14px;
+    padding:15px;font-size:14px;font-weight:600;cursor:pointer;
+  }
+  .admin-login-wrap{margin-top:14px;display:none;}
+  .admin-login-wrap input{
+    width:100%;border:2px solid var(--line);border-radius:12px;
+    padding:15px 14px;font-family:'IBM Plex Mono';font-size:16px;
+    text-align:center;margin-bottom:10px;letter-spacing:.1em;
+    background:var(--paper);
+  }
+  .admin-login-wrap input:focus{outline:none;border-color:var(--accent);background:#fff;}
+  .btn-login{
+    background:var(--accent);color:#fff;border:none;border-radius:12px;
+    padding:15px;width:100%;font-size:15px;font-weight:700;cursor:pointer;
+  }
+  .login-err{color:var(--bad);font-size:13px;margin-top:8px;display:none;}
 
   /* ===== Main wrapper ===== */
   #mainWrap{display:none;padding:28px 32px 80px;}
@@ -235,48 +275,146 @@
   .branch-edit .orig{font-size:11px;color:var(--muted);}
 
   /* ===== 최근 제출 로그 (사용자용) ===== */
-  .submit-log{margin-top:28px;}
-  .submit-log h3{font-family:'Newsreader',serif;font-size:17px;color:var(--navy);margin-bottom:10px;}
+  .submit-log{margin-top:20px;padding:0 16px;}
+  .submit-log h3{font-family:'Newsreader',serif;font-size:17px;color:var(--navy);margin-bottom:10px;padding:0 4px;}
   .submit-log-item{background:var(--card);border:1px solid var(--good);border-radius:10px;padding:12px 16px;margin-bottom:8px;font-size:13px;}
   .submit-log-item .sl-plate{font-family:'IBM Plex Mono';font-weight:600;color:var(--navy);margin-bottom:2px;}
   .submit-log-item .sl-meta{font-size:11px;color:var(--muted);}
-  /* ===== 직접 입력 폼 (사용자 모드) ===== */
+  /* ===== 직접 입력 폼 (모바일 앱 스타일) ===== */
   #userInputSection{padding:0;}
-  .vehicle-select-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 16px;margin-bottom:14px;}
-  .vehicle-select-card label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:6px;}
-  .plate-select{width:100%;border:2px solid var(--navy);border-radius:10px;padding:13px 14px;font-family:'IBM Plex Mono';font-size:16px;font-weight:600;color:var(--navy);background:#fff;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2316233F' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;}
-  .last-odo-hint{margin-top:8px;font-size:12.5px;color:var(--muted);padding:8px 10px;background:var(--paper);border-radius:7px;display:none;}
-  .last-odo-hint b{color:var(--navy);font-family:'IBM Plex Mono';}
-  .draft-banner{background:var(--accent-soft);border:1px solid var(--accent);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:none;align-items:center;justify-content:space-between;gap:10px;}
-  .draft-banner span{font-size:13px;color:var(--accent);font-weight:600;}
+
+  .vehicle-select-card{
+    background:var(--card);padding:16px 16px 20px;margin-bottom:8px;
+    border-bottom:1px solid var(--line);
+  }
+  .vehicle-select-card label{
+    font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;
+    text-transform:uppercase;display:block;margin-bottom:8px;
+  }
+  .plate-select{
+    width:100%;border:0;border-radius:12px;padding:15px 42px 15px 16px;
+    font-size:16px;font-weight:600;color:var(--navy);
+    background:var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%236B7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 15px center;
+    appearance:none;-webkit-appearance:none;cursor:pointer;
+  }
+  .plate-select:focus{outline:2px solid var(--navy);outline-offset:2px;}
+
+  .last-odo-hint{
+    margin-top:10px;font-size:13px;color:var(--muted);
+    padding:10px 14px;background:var(--good-soft);border-radius:10px;display:none;
+    display:none;gap:6px;align-items:center;
+  }
+  .last-odo-hint b{color:var(--good);font-family:'IBM Plex Mono';font-size:15px;}
+
+  .draft-banner{
+    background:var(--accent-soft);border-left:4px solid var(--accent);
+    padding:14px 16px;margin:8px 16px;border-radius:10px;
+    display:none;align-items:center;justify-content:space-between;gap:10px;
+  }
+  .draft-banner span{font-size:13px;color:var(--accent);font-weight:700;}
   .draft-banner .draft-btns{display:flex;gap:6px;flex-shrink:0;}
-  .trip-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;}
-  .trip-card-head{background:var(--navy);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;}
-  .trip-card-head .trip-num{font-size:13px;font-weight:700;}
-  .trip-card-head .btn-del-row{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;}
-  .trip-card-body{padding:14px 16px;display:flex;flex-direction:column;gap:12px;}
-  .form-field label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;display:block;margin-bottom:5px;}
-  .form-field input,.form-field select,.form-field textarea{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:12px 13px;font-family:'IBM Plex Sans KR';font-size:15px;background:#fff;-webkit-appearance:none;}
-  .form-field input:focus,.form-field select:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(22,35,63,.1);}
-  .form-field input.auto-filled{border-color:#3B82F6;background:#EFF6FF;color:#1D4ED8;}
+
+  .trip-card{
+    background:var(--card);margin:8px 16px;border-radius:20px;overflow:hidden;
+    box-shadow:0 2px 12px rgba(0,0,0,.07);
+  }
+  .trip-card-head{
+    background:var(--navy);color:#fff;padding:14px 18px;
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  .trip-card-head .trip-num{font-size:15px;font-weight:700;letter-spacing:.02em;}
+  .trip-card-head .btn-del-row{
+    background:rgba(255,255,255,.15);border:none;color:rgba(255,255,255,.9);
+    border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;
+  }
+  .trip-card-body{padding:18px 18px 20px;display:flex;flex-direction:column;gap:16px;}
+
+  .form-field label{
+    font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em;
+    display:block;margin-bottom:8px;
+  }
+  .form-field input,.form-field select,.form-field textarea{
+    width:100%;border:1.5px solid var(--line);border-radius:12px;
+    padding:15px 14px;font-size:16px;background:#fff;color:var(--ink);
+    transition:border-color .15s;
+  }
+  .form-field input:focus,.form-field select:focus{
+    outline:none;border-color:var(--navy);box-shadow:0 0 0 4px rgba(22,35,63,.08);
+  }
+  .form-field input.auto-filled{border-color:#3B82F6;background:#EFF6FF;color:#1E40AF;}
   .form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-  .dist-badge{background:var(--good-soft);border:1px solid var(--good);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--good);font-weight:600;text-align:center;}
-  .dist-badge span{font-family:'IBM Plex Mono';font-size:16px;}
+
+  .dist-badge{
+    background:linear-gradient(135deg,var(--good-soft),#f0fdf4);
+    border-radius:12px;padding:12px 16px;
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  .dist-badge .dist-label{font-size:12px;color:var(--good);font-weight:600;}
+  .dist-badge span{font-family:'IBM Plex Mono';font-size:22px;font-weight:700;color:var(--good);}
+  .dist-badge .dist-unit{font-size:13px;color:var(--good);}
+
   .status-toggle{display:flex;gap:8px;}
-  .status-btn{flex:1;padding:11px;border:1.5px solid var(--line);border-radius:9px;background:#fff;font-family:'IBM Plex Sans KR';font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;}
+  .status-btn{
+    flex:1;padding:14px 8px;border:1.5px solid var(--line);border-radius:12px;
+    background:#fff;font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;
+    transition:all .15s;
+  }
   .status-btn.active-good{border-color:var(--good);background:var(--good-soft);color:var(--good);}
   .status-btn.active-bad{border-color:var(--bad);background:var(--bad-soft);color:var(--bad);}
-  .fuel-toggle-row{display:flex;align-items:center;gap:10px;}
-  .fuel-toggle-row label{font-size:14px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:7px;cursor:pointer;}
-  .fuel-toggle-row input[type="checkbox"]{width:18px;height:18px;accent-color:var(--navy);}
-  .fuel-amt{margin-top:8px;display:none;}
-  .add-row-btn{width:100%;padding:15px;border:2px dashed var(--line);border-radius:var(--radius);background:none;font-family:'IBM Plex Sans KR';font-size:15px;font-weight:600;color:var(--muted);cursor:pointer;margin-bottom:14px;transition:.15s;}
-  .add-row-btn:hover{border-color:var(--navy);color:var(--navy);background:var(--paper);}
-  .submit-bar{display:flex;gap:10px;position:sticky;bottom:0;background:var(--paper);padding:12px 0 4px;border-top:1px solid var(--line);margin-top:4px;}
-  .submit-bar .btn-draft{flex:1;padding:14px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-family:'IBM Plex Sans KR';font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;}
-  .submit-bar .btn-submit{flex:2;padding:14px;border:none;border-radius:10px;background:var(--navy);color:#fff;font-family:'IBM Plex Sans KR';font-size:15px;font-weight:700;cursor:pointer;}
-  .draft-saved-hint{font-size:11px;color:var(--good);text-align:center;margin-top:4px;height:14px;}
-  .form-err{color:var(--bad);font-size:13px;padding:10px 14px;background:var(--bad-soft);border-radius:8px;margin-bottom:10px;display:none;}
+
+  /* 토글 스위치 스타일 체크박스 */
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-top:1px solid var(--line);}
+  .toggle-row label{font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;display:flex;align-items:center;gap:10px;}
+  .toggle-row .toggle-desc{font-size:12px;color:var(--muted);font-weight:400;display:block;margin-top:2px;}
+  .toggle-switch{position:relative;width:50px;height:28px;flex-shrink:0;}
+  .toggle-switch input{opacity:0;width:0;height:0;position:absolute;}
+  .toggle-slider{
+    position:absolute;inset:0;background:var(--line);border-radius:28px;cursor:pointer;
+    transition:.2s;
+  }
+  .toggle-slider:before{
+    content:'';position:absolute;width:22px;height:22px;left:3px;top:3px;
+    background:#fff;border-radius:50%;transition:.2s;
+    box-shadow:0 1px 4px rgba(0,0,0,.2);
+  }
+  .toggle-switch input:checked + .toggle-slider{background:var(--navy);}
+  .toggle-switch input:checked + .toggle-slider:before{transform:translateX(22px);}
+
+  .fuel-amt{margin-top:0;display:none;padding-top:12px;}
+  .daecha-field{display:none;padding-top:12px;}
+
+  .add-row-btn{
+    width:calc(100% - 32px);margin:8px 16px;padding:17px;
+    border:2px dashed var(--line);border-radius:16px;background:none;
+    font-size:15px;font-weight:700;color:var(--muted);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    transition:.15s;
+  }
+  .add-row-btn:active{background:var(--paper);}
+
+  .submit-bar{
+    position:fixed;bottom:0;left:0;right:0;
+    background:rgba(242,243,247,.95);
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    padding:12px 16px max(16px, var(--safe-bottom));
+    display:flex;gap:10px;z-index:20;
+    border-top:1px solid var(--line);
+    max-width:600px;margin:0 auto;
+  }
+  .submit-bar .btn-draft{
+    flex:1;padding:16px;border:1.5px solid var(--line);border-radius:14px;
+    background:#fff;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;
+  }
+  .submit-bar .btn-submit{
+    flex:2.5;padding:16px;border:none;border-radius:14px;
+    background:var(--navy);color:#fff;font-size:16px;font-weight:700;cursor:pointer;
+    box-shadow:0 4px 14px rgba(22,35,63,.3);
+  }
+  .draft-saved-hint{font-size:12px;color:var(--good);text-align:center;margin-top:6px;padding:0 16px;min-height:16px;}
+  .form-err{
+    color:var(--bad);font-size:14px;padding:14px 16px;
+    background:var(--bad-soft);border-radius:12px;margin:8px 16px;display:none;
+  }
 
   .user-edit-wrap{margin-top:28px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
   .user-edit-head{background:var(--navy);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}
@@ -290,13 +428,18 @@
 
 <!-- ===== 역할 선택 오버레이 ===== -->
 <div id="roleOverlay">
+  <div class="role-logo-area">
+    <div class="role-logo-icon">🚗</div>
+    <div class="role-logo-title">차량운행일지</div>
+    <div class="role-logo-sub">총무팀 · 차량 통합관리</div>
+  </div>
   <div class="role-box">
-    <div class="role-eyebrow">총무팀 · 차량관리</div>
-    <div class="role-title">차량운행일지 통합관리</div>
-    <div class="role-sub">사용 목적을 선택해 주세요</div>
+    <div class="role-eyebrow">시작하기</div>
+    <div class="role-title">어떤 용도로 사용하시나요?</div>
+    <div class="role-sub" style="margin-bottom:24px;"></div>
     <div class="role-btns">
-      <button class="btn-role-user" onclick="enterUserMode()">📋 운행일지 제출하기</button>
-      <button class="btn-role-admin" onclick="showAdminLogin()">관리자 →</button>
+      <button class="btn-role-user" onclick="enterUserMode()">🚗 &nbsp;운행일지 제출하기</button>
+      <button class="btn-role-admin" onclick="showAdminLogin()">관리자 대시보드 →</button>
       <div class="admin-login-wrap" id="adminLoginWrap">
         <input type="password" id="adminPwInput" placeholder="관리자 비밀번호" onkeydown="if(event.key==='Enter')tryAdminLogin()">
         <button class="btn-login" onclick="tryAdminLogin()">로그인</button>
@@ -323,7 +466,7 @@
   </div>
 
   <!-- ===== 관리자 모드 헤더 ===== -->
-  <div class="admin-topbar" id="adminTopbar" style="display:none;">
+  <div class="admin-topbar" id="adminTopbar" style="display:none;padding:28px 24px 0;">
     <div>
       <div class="brand-eyebrow">총무팀 · 차량관리</div>
       <h1>차량운행일지 통합관리 <span class="admin-badge">관리자</span></h1>
@@ -341,10 +484,10 @@
   </div>
 
   <!-- 관리자 전용: stat strip -->
-  <div class="stat-strip" id="statStrip" style="display:none;"></div>
+  <div class="stat-strip" id="statStrip" style="display:none;padding:0 24px;"></div>
 
   <!-- ===== 사용자: 직접 입력 폼 ===== -->
-  <div id="userInputSection" style="display:none;">
+  <div id="userInputSection" style="display:none;padding-bottom:20px;">
     <div class="draft-banner" id="draftBanner">
       <span>💾 임시저장된 기록이 있습니다</span>
       <div class="draft-btns">
@@ -352,7 +495,7 @@
         <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;" onclick="clearDraft()">삭제</button>
       </div>
     </div>
-    <div class="vehicle-select-card">
+    <div class="vehicle-select-card" style="padding:16px 16px 20px;border-radius:0;border-bottom:1px solid var(--line);margin-bottom:0;">
       <label>사업장 선택</label>
       <select class="plate-select" id="userBranchSelect" onchange="onBranchSelect()" style="margin-bottom:12px;">
         <option value="">-- 사업장을 먼저 선택하세요 --</option>
@@ -378,13 +521,13 @@
 
 
   <!-- 사용자 모드: 이번 세션 제출 로그 -->
-  <div class="submit-log" id="submitLog" style="display:none;">
+  <div class="submit-log" id="submitLog" style="display:none;padding:0 0 120px;">
     <h3>이번 세션 제출 기록</h3>
     <div id="submitLogItems"></div>
   </div>
 
   <!-- 사용자 제출 기록 수정 섹션 -->
-  <div class="user-edit-wrap" id="userEditWrap" style="display:none;">
+  <div class="user-edit-wrap" id="userEditWrap" style="display:none;margin:12px 16px;border-radius:16px;">
     <div class="user-edit-head">
       <h3>내 제출 기록 수정</h3>
       <button class="btn-exit" onclick="closeUserEdit()">✕ 닫기</button>
@@ -399,7 +542,7 @@
   </div>
 
   <!-- ===== 관리자 전용: 통계 및 차량 현황 ===== -->
-  <div id="adminSections" style="display:none;">
+  <div id="adminSections" style="display:none;padding:0 24px;">
     <div class="section-head">
       <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>지역구분별 가동현황</h2>
     </div>
@@ -454,8 +597,8 @@
 // ============================================================
 // ★ 설정 - 이 두 줄만 변경하면 됩니다 ★
 // ============================================================
-const FIREBASE_URL = 'https://ksa-vehicle-log-default-rtdb.asia-southeast1.firebasedatabase.app'; // ← STEP 2에서 복사한 URL
-const ADMIN_PW     = 'ksa2026'; // ← 원하는 관리자 비밀번호로 변경
+const FIREBASE_URL = 'https://YOUR-PROJECT.firebaseio.com'; // ← Firebase URL로 교체
+const ADMIN_PW     = 'ksa2026';                             // ← 관리자 비밀번호 변경
 // ============================================================
 
 const STORAGE_KEY  = 'fleet-data';
@@ -1480,7 +1623,7 @@ function addTripRow(prefillStart = null){
           <input type="number" class="tr-end" placeholder="0" oninput="calcRowDist('${id}');autoFillNextRow('${id}');scheduleDraft()">
         </div>
       </div>
-      <div class="dist-badge">주행거리 <span id="dist-${id}" class="mono">–</span> km</div>
+      <div class="dist-badge"><span class="dist-label">주행거리</span><span id="dist-${id}">–</span><span class="dist-unit">km</span></div>
       <div class="form-field">
         <label>행선지</label>
         <input type="text" class="tr-dest" placeholder="예: DRB본사, 고객사 방문" oninput="scheduleDraft()">
@@ -1504,10 +1647,10 @@ function addTripRow(prefillStart = null){
           <input type="number" class="tr-fuel" placeholder="주유금액 (원)" oninput="scheduleDraft()">
         </div>
       </div>
-      <div class="form-field">
-        <div class="fuel-toggle-row" style="margin-bottom:0;">
-          <label><input type="checkbox" class="tr-daecha-chk" onchange="toggleDaeCha(this,'${id}')"> 대차 운행</label>
-          <span style="font-size:11px;color:var(--muted);margin-left:4px;">(수리 중 대차 사용 시 체크)</span>
+      <div class="form-field" style="padding:0;">
+        <div class="toggle-row">
+          <label for="daecha-chk-${id}">🔄 대차 운행<span class="toggle-desc">수리 중 대차 사용 시 선택</span></label>
+          <label class="toggle-switch"><input type="checkbox" id="daecha-chk-${id}" class="tr-daecha-chk" onchange="toggleDaeCha(this,'${id}')"><span class="toggle-slider"></span></label>
         </div>
         <div class="daecha-field" id="daecha-${id}" style="display:none;margin-top:8px;">
           <div style="background:var(--accent-soft);border:1px solid var(--accent);border-radius:9px;padding:10px 12px;">
@@ -1547,7 +1690,7 @@ function calcRowDist(id){
   const s = Number(card.querySelector('.tr-start').value)||0;
   const e = Number(card.querySelector('.tr-end').value)||0;
   const el = document.getElementById('dist-'+id);
-  if(el){ el.textContent = (e>s ? (e-s).toLocaleString() : '–'); }
+  if(el){ el.textContent = (e>0 && e>s) ? (e-s).toLocaleString() : '–'; }
 }
 
 function autoFillNextRow(id){
