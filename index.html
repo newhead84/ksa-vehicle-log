@@ -266,11 +266,10 @@
   .month-controls{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
   .month-controls select{font-family:'Paperlogy';font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;}
   .month-table-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);}
-  .month-table{width:100%;border-collapse:collapse;font-size:12px;min-width:760px;table-layout:fixed;}
+  .month-table{width:100%;border-collapse:collapse;font-size:12px;min-width:680px;table-layout:fixed;}
   .month-table th{background:var(--paper);padding:8px 4px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;}
-  .month-table th:first-child{text-align:left;padding-left:12px;padding-right:6px;width:168px;}
-  .month-table th:nth-child(n+2):nth-child(-n+13){width:34px;}
-  .month-table th:last-child{width:46px;}
+  .month-table th:first-child{text-align:left;padding-left:12px;padding-right:6px;width:140px;}
+  .month-table th:last-child{width:44px;}
   .month-table td{padding:6px 3px;text-align:center;border-bottom:1px solid var(--line);}
   .month-table td:first-child{text-align:left;padding-left:12px;padding-right:6px;font-family:'Paperlogy';}
   .plate-cell{display:flex;flex-direction:row;align-items:baseline;gap:6px;line-height:1.25;white-space:nowrap;overflow:hidden;}
@@ -540,12 +539,10 @@
     .region-table th .region-th-note{display:block;font-size:9px!important;margin-top:2px;white-space:normal;}
     .util-bar{width:40px;}
 
-    /* 월별 가동율 표: 차량번호+차종을 한 줄로 표시 (좌우 스크롤로 확인), 월 컬럼은 폭을 줄여 확보 */
-    .month-table{min-width:640px;}
-    .month-table th:first-child{width:150px;}
+    /* 월별 가동율 표: 차량번호+차종을 한 줄로 표시 (좌우 스크롤로 확인) */
+    .month-table{min-width:560px;}
+    .month-table th:first-child{width:130px;}
     .month-table td:first-child{padding-left:10px;padding-right:4px;}
-    .month-table th:nth-child(n+2):nth-child(-n+13){width:28px;}
-    .month-table th:last-child{width:38px;}
     .plate-cell{gap:5px;}
     .plate-cell .plate-num{font-size:12px;}
     .plate-cell .plate-model{font-size:11px;}
