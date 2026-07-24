@@ -660,7 +660,8 @@
     </div>
     <div style="padding:24px;text-align:center;">
       <div id="qrCodeContainer" style="display:inline-block;padding:12px;background:#fff;border:1px solid var(--line);border-radius:12px;"></div>
-      <div style="font-size:13px;font-weight:700;color:#10975c;margin-top:10px;">QR 스캔 시 운행정보 입력 페이지 이동</div>
+      <div style="font-size:13px;font-weight:700;color:#e81657;margin-top:12px;">차량 사용 시 운행정보 입력 필수</div>
+      <div style="font-size:12px;font-weight:700;color:#007944;margin-top:3px;">QR 스캔 시 운행정보 입력 페이지 이동</div>
       <div style="display:flex;gap:8px;margin-top:16px;">
         <button onclick="printQr()" style="flex:1;padding:12px;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;font-family:'Paperlogy',sans-serif;">🖨 인쇄</button>
         <button onclick="downloadQr()" style="flex:1;padding:12px;background:var(--navy);border:none;border-radius:12px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;font-family:'Paperlogy',sans-serif;">⬇ 저장</button>
@@ -1619,14 +1620,16 @@ function printQr(){
       .plate{font-family:'Paperlogy',sans-serif;font-weight:700;font-size:22px;color:#1a1f2b;margin:8px 0 2px;}
       .branch{font-family:'Paperlogy',sans-serif;font-weight:400;font-size:12px;color:#6b7280;margin-bottom:16px;}
       img{width:180px;height:180px;}
-      .hint{font-family:'Paperlogy',sans-serif;font-weight:700;font-size:13px;color:#10975c;margin-top:12px;}
+      .hint-required{font-family:'Paperlogy',sans-serif;font-weight:700;font-size:13px;color:#e81657;margin-top:14px;}
+      .hint-action{font-family:'Paperlogy',sans-serif;font-weight:700;font-size:12px;color:#007944;margin-top:4px;}
     </style></head><body>
     <div class="card">
       <div class="logo">KSA 공용차량</div>
       <div class="plate">${plate}</div>
       <div class="branch">${branch}</div>
       <img src="${img}">
-      <div class="hint">QR 스캔 시<br>운행정보 입력 페이지 이동</div>
+      <div class="hint-required">차량 사용 시 운행정보 입력 필수</div>
+      <div class="hint-action">QR 스캔 시 운행정보 입력 페이지 이동</div>
     </div>
     <script>window.onload=()=>window.print();<\/script>
   </body></html>`);
@@ -1735,16 +1738,38 @@ async function generateBulkQrPdf(plates){
       doc.setFont('helvetica', 'normal');
     }
 
-    // 2) 레이아웃 상수 (A4 가로: 297 x 210mm)
+    // 2) 레이아웃 상수 (A4 가로: 297 x 210mm) — 페이지당 4 x 2 = 8매로 확대
     const pageW = 297, pageH = 210;
-    const margin = 8;
-    const cols = 6, rows = 3; // 페이지당 6 x 3 = 18개
-    const gapX = 4, gapY = 6;
+    const margin = 10;
+    const cols = 4, rows = 2; // 페이지당 4 x 2 = 8개
+    const gapX = 8, gapY = 10; // 카드 사이 여백(절취선이 지나갈 공간)
     const usableW = pageW - margin*2;
     const usableH = pageH - margin*2;
     const cardW = (usableW - gapX*(cols-1)) / cols;
     const cardH = (usableH - gapY*(rows-1)) / rows;
-    const qrSize = Math.min(cardW - 8, cardH * 0.55);
+    const qrSize = Math.min(cardW - 12, cardH * 0.55);
+
+    // 카드 사이 여백 한가운데에 절취선(재단선)을 그어 가위/재단기로 자르기 쉽게 표시
+    function drawCutGuides(){
+      doc.setDrawColor(190, 190, 190);
+      doc.setLineWidth(0.2);
+      if(typeof doc.setLineDashPattern === 'function') doc.setLineDashPattern([1.2, 1], 0);
+      // 세로 절취선 (열 사이)
+      for(let c = 0; c < cols - 1; c++){
+        const rightEdge = margin + c*(cardW+gapX) + cardW;
+        const nextLeft = margin + (c+1)*(cardW+gapX);
+        const xMid = (rightEdge + nextLeft) / 2;
+        doc.line(xMid, margin - 3, xMid, pageH - margin + 3);
+      }
+      // 가로 절취선 (행 사이)
+      for(let r = 0; r < rows - 1; r++){
+        const bottomEdge = margin + r*(cardH+gapY) + cardH;
+        const nextTop = margin + (r+1)*(cardH+gapY);
+        const yMid = (bottomEdge + nextTop) / 2;
+        doc.line(margin - 3, yMid, pageW - margin + 3, yMid);
+      }
+      if(typeof doc.setLineDashPattern === 'function') doc.setLineDashPattern([], 0);
+    }
 
     // 3) 화면에 보이지 않는 임시 영역에서 QR 코드를 하나씩 캔버스로 생성
     const tempWrap = document.createElement('div');
@@ -1761,7 +1786,7 @@ async function generateBulkQrPdf(plates){
 
       tempWrap.innerHTML = '';
       new QRCode(tempWrap, {
-        text: url, width: 240, height: 240,
+        text: url, width: 280, height: 280,
         colorDark: '#17593d', colorLight: '#ffffff',
         correctLevel: QRCode.CorrectLevel.M
       });
@@ -1771,6 +1796,7 @@ async function generateBulkQrPdf(plates){
       if(col === 0 && row === 0){
         if(pageStarted) doc.addPage();
         pageStarted = true;
+        drawCutGuides();
       }
 
       const x = margin + col * (cardW + gapX);
@@ -1778,40 +1804,46 @@ async function generateBulkQrPdf(plates){
 
       // 카드 테두리
       doc.setDrawColor(23, 89, 61); // #17593d
-      doc.setLineWidth(0.4);
-      doc.roundedRect(x, y, cardW, cardH, 2, 2, 'S');
+      doc.setLineWidth(0.5);
+      doc.roundedRect(x, y, cardW, cardH, 3, 3, 'S');
 
       // 로고
       doc.setTextColor(23, 89, 61);
-      doc.setFontSize(7);
+      doc.setFontSize(9);
       if(fontOk) doc.setFont('Paperlogy', 'bold');
-      doc.text('KSA 공용차량', x + cardW/2, y + 5.5, { align: 'center' });
+      doc.text('KSA 공용차량', x + cardW/2, y + 8, { align: 'center' });
 
       // 차량번호 + 모델
       doc.setTextColor(26, 31, 43);
-      doc.setFontSize(11);
+      doc.setFontSize(15);
       if(fontOk) doc.setFont('Paperlogy', 'bold');
       const plateLabel = model ? `${plate} · ${model}` : plate;
-      doc.text(plateLabel, x + cardW/2, y + 10.5, { align: 'center', maxWidth: cardW - 4 });
+      doc.text(plateLabel, x + cardW/2, y + 16, { align: 'center', maxWidth: cardW - 6 });
 
       // 지역본부
       doc.setTextColor(107, 114, 128);
-      doc.setFontSize(7);
+      doc.setFontSize(9);
       if(fontOk) doc.setFont('Paperlogy', 'normal');
-      doc.text(branch, x + cardW/2, y + 15, { align: 'center', maxWidth: cardW - 4 });
+      doc.text(branch, x + cardW/2, y + 22, { align: 'center', maxWidth: cardW - 6 });
 
       // QR 이미지
       if(qrImg){
         const qx = x + (cardW - qrSize)/2;
-        const qy = y + 17;
+        const qy = y + 26;
         doc.addImage(qrImg, 'PNG', qx, qy, qrSize, qrSize);
       }
 
-      // 하단 안내문 (KSA 디자인가이드 Main Green 적용, 시인성 확보를 위해 확대/볼드)
-      doc.setTextColor(16, 151, 92); // KSA Main Green #10975c
-      doc.setFontSize(7.5);
+      // 안내문 1: 필수 안내 (KSA Point Red — 강조/경고 톤)
+      doc.setTextColor(232, 22, 87); // #e81657
+      doc.setFontSize(9.5);
       if(fontOk) doc.setFont('Paperlogy', 'bold');
-      doc.text('QR 스캔 시 운행정보 입력 페이지 이동', x + cardW/2, y + cardH - 3, { align: 'center' });
+      doc.text('차량 사용 시 운행정보 입력 필수', x + cardW/2, y + cardH - 9, { align: 'center' });
+
+      // 안내문 2: 동작 안내 (KSA Sub Green — 필수 문구와 구분되는 톤)
+      doc.setTextColor(0, 121, 68); // #007944
+      doc.setFontSize(8.5);
+      if(fontOk) doc.setFont('Paperlogy', 'bold');
+      doc.text('QR 스캔 시 운행정보 입력 페이지 이동', x + cardW/2, y + cardH - 4, { align: 'center' });
 
       col++;
       if(col >= cols){ col = 0; row++; }
@@ -1829,6 +1861,7 @@ async function generateBulkQrPdf(plates){
     showAdminToast('QR 일괄 PDF 생성 중 오류가 발생했습니다: ' + err.message, 'bad');
   }
 }
+
 
 function downloadQr(){
   const plate = document.getElementById('qrModalPlate').textContent.split('·')[0].trim();
