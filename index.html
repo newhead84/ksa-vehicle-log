@@ -268,8 +268,9 @@
   .month-table-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);}
   .month-table{width:100%;border-collapse:collapse;font-size:12px;min-width:680px;table-layout:fixed;}
   .month-table th{background:var(--paper);padding:8px 4px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;}
-  .month-table th:first-child{text-align:left;padding-left:12px;padding-right:6px;width:140px;}
-  .month-table th:last-child{width:44px;}
+  .month-table th:first-child{text-align:left;padding-left:12px;padding-right:6px;width:20%;}
+  .month-table th:nth-child(n+2):nth-child(-n+13){width:6%;}
+  .month-table th:last-child{width:8%;}
   .month-table td{padding:6px 3px;text-align:center;border-bottom:1px solid var(--line);}
   .month-table td:first-child{text-align:left;padding-left:12px;padding-right:6px;font-family:'Paperlogy';}
   .plate-cell{display:flex;flex-direction:row;align-items:baseline;gap:6px;line-height:1.25;white-space:nowrap;overflow:hidden;}
@@ -542,6 +543,8 @@
     /* 월별 가동율 표: 차량번호+차종을 한 줄로 표시 (좌우 스크롤로 확인) */
     .month-table{min-width:560px;}
     .month-table th:first-child{width:130px;}
+    .month-table th:nth-child(n+2):nth-child(-n+13){width:auto;}
+    .month-table th:last-child{width:auto;}
     .month-table td:first-child{padding-left:10px;padding-right:4px;}
     .plate-cell{gap:5px;}
     .plate-cell .plate-num{font-size:12px;}
