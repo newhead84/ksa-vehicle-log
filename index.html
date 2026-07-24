@@ -147,54 +147,6 @@
   .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
   .table-scroll .region-table{min-width:560px;}
 
-  /* ===== 모바일 반응형: 관리자 대시보드 잘림/오버플로우 방지 ===== */
-  @media (max-width:640px){
-    #mainWrap{padding:18px 14px 90px;}
-    .user-header{margin:-18px -14px 22px;padding:16px 14px;}
-    #statStrip,#adminSections{padding:0!important;}
-
-    #adminTopbar{padding:18px 14px 0!important;}
-    .admin-topbar{margin-bottom:16px;gap:10px;}
-    .admin-topbar h1{font-size:19px;}
-    .admin-topbar .sub{font-size:12px;}
-    .admin-badge{font-size:10px;padding:2px 7px;margin-left:6px;}
-
-    /* 버튼 그룹: 한 줄로 밀어내지 않고 자연스럽게 줄바꿈 + 버튼 자체도 축소 */
-    .admin-topbar-actions{gap:6px;width:100%;}
-    .admin-topbar-actions .reset-btn{font-size:11px;padding:6px 9px;}
-    .admin-topbar-actions #lastSyncLabel{width:100%;order:-1;margin-bottom:2px;}
-
-    /* 통계 카드: 숫자가 계속 늘어나는 카드(총거리/주유비)는 한 줄 전체를 쓰고,
-       작은 값(관리차량/운행건수)만 절반씩 나란히 배치 */
-    .stat-strip{grid-template-columns:1fr 1fr;gap:8px;}
-    .stat-strip .stat-card.stat-wide{grid-column:1/-1;}
-    .stat-card{padding:12px 16px;min-width:0;}
-    .stat-card .label{font-size:11px;margin-bottom:6px;}
-    .odometer{flex-wrap:wrap;row-gap:4px;}
-    .odo-digit{width:22px;height:30px;font-size:17px;}
-    .odo-unit{font-size:12px;}
-    .stat-plain{font-size:20px;}
-    .stat-wide .stat-plain{font-size:23px;}
-
-    .section-head{margin:22px 0 8px;}
-    .section-head h2{font-size:16px;}
-    .search-box{width:100%;min-width:0;}
-    .collapsible-title{flex-wrap:wrap;}
-
-    /* 차량 카드 그리드: 좁은 화면에서 카드 최소폭 낮춰 잘림 방지 */
-    .vehicle-grid{grid-template-columns:1fr;gap:10px;}
-
-    /* 지역 요약 표: 좁으면 가로 스크롤로, 폰트/여백 축소 */
-    .region-table th,.region-table td{padding:7px 8px;font-size:12px;}
-    .util-bar{width:44px;}
-
-    /* 월별 가동율 표 첫 컬럼 폭 축소 */
-    .month-table th:first-child{width:88px;}
-
-    .modal{padding:18px 16px;width:94vw;}
-    .modal-head .plate-big{font-size:19px;}
-  }
-
   /* ===== User mode header ===== */
   .user-header{background:var(--navy);margin:-28px -32px 28px;padding:20px 32px;display:flex;align-items:center;gap:16px;}
   .user-header-title{color:#fff;font-family:'Paperlogy',sans-serif;font-size:20px;font-weight:600;}
@@ -525,6 +477,57 @@
   .user-edit-head h3{font-family:'Paperlogy',sans-serif;font-size:17px;margin:0;}
   .user-edit-plate{padding:12px 18px;background:var(--paper);border-bottom:1px solid var(--line);font-family:'Paperlogy';font-weight:600;font-size:14px;color:var(--navy);display:flex;align-items:center;justify-content:space-between;}
   .user-edit-err{color:var(--bad);font-size:12px;padding:10px 18px;display:none;}
+
+  /* ===== 모바일 반응형: 관리자 대시보드 잘림/오버플로우 방지 =====
+     ※ 캐스케이드 우선순위를 위해 항상 스타일시트 맨 마지막에 위치해야 함
+        (동일 specificity의 데스크탑 규칙보다 나중에 와야 모바일에서 실제로 적용됨) */
+  @media (max-width:640px){
+    #mainWrap{padding:18px 14px 90px;}
+    .user-header{margin:-18px -14px 22px;padding:16px 14px;}
+    #statStrip,#adminSections{padding:0!important;}
+
+    #adminTopbar{padding:18px 14px 0!important;}
+    .admin-topbar{margin-bottom:16px;gap:10px;}
+    .admin-topbar h1{font-size:19px;}
+    .admin-topbar .sub{font-size:12px;}
+    .admin-badge{font-size:10px;padding:2px 7px;margin-left:6px;}
+
+    /* 버튼 그룹: 한 줄로 밀어내지 않고 자연스럽게 줄바꿈 + 버튼 자체도 축소 */
+    .admin-topbar-actions{gap:6px;width:100%;}
+    .admin-topbar-actions .reset-btn{font-size:11px;padding:6px 9px;}
+    .admin-topbar-actions #lastSyncLabel{width:100%;order:-1;margin-bottom:2px;}
+
+    /* 통계 카드: 숫자가 계속 늘어나는 카드(총거리/주유비)는 한 줄 전체를 쓰고,
+       작은 값(관리차량/운행건수)만 절반씩 나란히 배치 */
+    #statStrip{grid-template-columns:1fr 1fr;gap:8px;}
+    .stat-strip .stat-card.stat-wide{grid-column:1/-1;}
+    .stat-card{padding:12px 16px;min-width:0;}
+    .stat-card .label{font-size:11px;margin-bottom:6px;}
+    .odometer{flex-wrap:wrap;row-gap:4px;}
+    .odo-digit{width:22px;height:30px;font-size:17px;}
+    .odo-unit{font-size:12px;}
+    .stat-plain{font-size:20px;}
+    .stat-wide .stat-plain{font-size:23px;}
+
+    .section-head{margin:22px 0 8px;}
+    .section-head h2{font-size:16px;}
+    .search-box{width:100%;min-width:0;}
+    .collapsible-title{flex-wrap:wrap;}
+
+    /* 차량 카드 그리드: 좁은 화면에서 카드 최소폭 낮춰 잘림 방지 */
+    .vehicle-grid{grid-template-columns:1fr;gap:10px;}
+
+    /* 지역 요약 표: 좁으면 가로 스크롤로, 폰트/여백 축소 */
+    .region-table th,.region-table td{padding:7px 8px;font-size:12px;}
+    .util-bar{width:44px;}
+
+    /* 월별 가동율 표 첫 컬럼 폭 축소 */
+    .month-table th:first-child{width:88px;}
+
+    .modal{padding:18px 16px;width:94vw;}
+    .modal-head .plate-big{font-size:19px;}
+  }
+
 </style>
 </head>
 <body>
