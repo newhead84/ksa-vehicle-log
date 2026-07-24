@@ -262,6 +262,14 @@
   .region-group-head h3{font-size:16px;color:var(--navy);}
   .region-group-head .rg-meta{font-size:12px;color:var(--muted);}
 
+  /* ===== 운행자별/개인사용 현황 공용 테이블 ===== */
+  .data-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;font-size:13px;}
+  .data-table th{background:var(--paper);text-align:left;font-weight:600;color:var(--muted);font-size:12px;white-space:nowrap;}
+  .data-table td, .data-table th{padding:9px 12px;}
+  .data-table td.mono, .data-table th.mono{font-family:'Paperlogy';}
+  .data-table tbody tr:hover td{background:var(--paper);}
+  .personal-tag{background:#EFF6FF;color:#1D4ED8;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;white-space:nowrap;}
+
   /* ===== Monthly utilization table ===== */
   .month-controls{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
   .month-controls select{font-family:'Paperlogy';font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;}
@@ -729,6 +737,25 @@
     </div>
     <div class="section-body" id="monthlyAreaWrap">
       <div id="monthlyArea"></div>
+    </div>
+
+    <div class="section-head">
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>운행자별 사용 현황</h2>
+    </div>
+    <div class="section-body" id="driverSummaryWrap">
+      <input class="search-box" id="driverSearchBox" placeholder="운행자 이름 검색…" oninput="renderDriverSummary()" style="margin-bottom:12px;max-width:280px;">
+      <div id="driverSummary"></div>
+    </div>
+
+    <div class="section-head">
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>개인사용 현황</h2>
+    </div>
+    <div class="section-body" id="personalUseWrap">
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
+        <input class="search-box" id="personalSearchBox" placeholder="운행자·차량번호·지역구분 검색…" oninput="renderPersonalUseList()" style="max-width:280px;">
+        <div id="personalUseSummaryBar" style="font-size:12.5px;color:var(--ink);"></div>
+      </div>
+      <div id="personalUseList"></div>
     </div>
 
     <div class="section-head" style="margin-bottom:10px;">
@@ -1593,6 +1620,79 @@ function renderRegionSummary(){
   document.getElementById('regionSummary').innerHTML=`<div class="table-scroll"><table class="region-table"><thead><tr><th>지역구분</th><th>차량대수</th><th>운행건수<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (당시소속 기준)</span></th><th>총주행거리</th><th>총주유비</th><th>가동율</th></tr></thead><tbody>${rows||`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted);">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
 }
 
+// 차량 전체를 순회하며 운행기록을 운행자(t.user) 기준으로 집계
+function driverSummaryMap(){
+  const map={};
+  Object.keys(data.vehicles).forEach(p=>{
+    (data.vehicles[p].trips||[]).forEach(t=>{
+      const name=(t.user||'').trim()||'(미입력)';
+      if(!map[name]) map[name]={count:0,dist:0,fuel:0,personal:0,lastDate:'',plates:new Set()};
+      const m=map[name];
+      m.count++;
+      m.dist+=Number(t.distance)||0;
+      m.fuel+=Number(t.fuel)||0;
+      if(t.isPersonal) m.personal++;
+      if(!m.lastDate || (t.isoDate||'')>m.lastDate) m.lastDate=t.isoDate||'';
+      m.plates.add(p);
+    });
+  });
+  return map;
+}
+
+function renderDriverSummary(){
+  const map=driverSummaryMap();
+  const q=(document.getElementById('driverSearchBox')?.value||'').trim();
+  let names=Object.keys(map).filter(n=>n.includes(q));
+  names.sort((a,b)=>map[b].count-map[a].count||a.localeCompare(b));
+  const rows=names.map(name=>{
+    const m=map[name];
+    const plateList=Array.from(m.plates);
+    const plateDisp=plateList.slice(0,3).join(', ')+(plateList.length>3?` 외 ${plateList.length-3}대`:'');
+    return `<tr>
+      <td><b>${name}</b></td>
+      <td class="mono">${m.count}건</td>
+      <td class="mono">${m.dist.toLocaleString()}km</td>
+      <td class="mono">${m.fuel.toLocaleString()}원</td>
+      <td class="mono">${m.personal>0?`<span class="personal-tag">${m.personal}건</span>`:'0건'}</td>
+      <td style="color:var(--muted);font-size:12px;">${plateDisp}</td>
+      <td class="mono" style="color:var(--muted);">${m.lastDate||'-'}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('driverSummary').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>운행자</th><th>운행건수</th><th>총주행거리</th><th>총주유비</th><th>개인사용건수</th><th>이용차량</th><th>최근운행일</th></tr></thead><tbody>${rows||`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
+}
+
+// 전체 차량의 운행기록 중 개인사용(isPersonal) 건만 모아서 반환
+function personalUseTrips(){
+  const list=[];
+  Object.keys(data.vehicles).forEach(p=>{
+    (data.vehicles[p].trips||[]).forEach(t=>{
+      if(t.isPersonal) list.push({plate:p, branch:t.branchAtTime||data.vehicles[p].branch||'미배정', ...t});
+    });
+  });
+  list.sort((a,b)=>(b.isoDate||'').localeCompare(a.isoDate||''));
+  return list;
+}
+
+function renderPersonalUseList(){
+  const q=(document.getElementById('personalSearchBox')?.value||'').trim();
+  let list=personalUseTrips();
+  if(q) list=list.filter(t=>(t.user||'').includes(q)||t.plate.includes(q)||(t.branch||'').includes(q));
+  const totalDist=list.reduce((s,t)=>s+(Number(t.distance)||0),0);
+  const totalFuel=list.reduce((s,t)=>s+(Number(t.fuel)||0),0);
+  const rows=list.map(t=>`<tr>
+    <td class="mono">${t.date||t.isoDate||''}</td>
+    <td class="mono"><b>${t.plate}</b></td>
+    <td>${t.branch||''}</td>
+    <td>${t.user||''}</td>
+    <td class="mono">${(Number(t.distance)||0).toLocaleString()}km</td>
+    <td class="mono">${(Number(t.fuel)||0).toLocaleString()}원</td>
+    <td>${t.dest||''}</td>
+    <td style="color:var(--muted);">${t.submitter||''}</td>
+  </tr>`).join('');
+  document.getElementById('personalUseSummaryBar').innerHTML=list.length?`총 <b>${list.length}건</b> · 주행거리 <b>${totalDist.toLocaleString()}km</b> · 총주유비 <b>${totalFuel.toLocaleString()}원</b>`:'';
+  document.getElementById('personalUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>주행거리</th><th>주유비</th><th>행선지</th><th>제출자</th></tr></thead><tbody>${rows||`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted);">개인사용 기록이 없습니다</td></tr>`}</tbody></table></div>`;
+}
+
 function vcardHtml(p){
   const{v,trips,totalDist,totalFuel,issues,lastDate,util}=vehicleStatsOf(p);
   const inactive=v.active===false;
@@ -1629,6 +1729,8 @@ function toggleInactive(){
 }
 function renderVehicles(){
   renderRegionSummary();
+  renderDriverSummary();
+  renderPersonalUseList();
   const q=(document.getElementById('searchBox').value||'').trim();
   let plates=Object.keys(data.vehicles).filter(p=>p.includes(q)||(data.vehicles[p].branch||'').includes(q));
   if(!showInactive) plates=plates.filter(p=>data.vehicles[p].active!==false);
@@ -2348,9 +2450,9 @@ function exportToExcel(){
   const ws1=XLSX.utils.json_to_sheet(vehicleRows);
   ws1['!cols']=[{wch:12},{wch:28},{wch:16},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10}];
   const tripRows=[];
-  plates.forEach(p=>(data.vehicles[p].trips||[]).slice().sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||'')).forEach(t=>{tripRows.push({'차량번호':p,'지역구분':data.vehicles[p].branch||'','일자(원본)':t.date||'','인식된날짜':t.isoDate||'','시작거리':t.startOdo,'종료거리':t.endOdo,'주행거리(km)':t.distance,'제출자':t.submitter||'','사용자':t.user||'','행선지':t.dest||'','주유비(원)':t.fuel||0,'차량상태':t.status||'','비고':t.note||''});}));
+  plates.forEach(p=>(data.vehicles[p].trips||[]).slice().sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||'')).forEach(t=>{tripRows.push({'차량번호':p,'지역구분':data.vehicles[p].branch||'','일자(원본)':t.date||'','인식된날짜':t.isoDate||'','시작거리':t.startOdo,'종료거리':t.endOdo,'주행거리(km)':t.distance,'제출자':t.submitter||'','운행자':t.user||'','행선지':t.dest||'','주유비(원)':t.fuel||0,'개인사용여부':t.isPersonal?'개인사용':'','차량상태':t.status||'','비고':t.note||''});}));
   const ws2=XLSX.utils.json_to_sheet(tripRows);
-  ws2['!cols']=[{wch:12},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10},{wch:12},{wch:10},{wch:10},{wch:20},{wch:10},{wch:10},{wch:20}];
+  ws2['!cols']=[{wch:12},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10},{wch:12},{wch:10},{wch:10},{wch:20},{wch:10},{wch:10},{wch:16},{wch:20}];
   const year=monthlyYear||new Date().getFullYear();
   const monthlyRows=plates.map(p=>{
     const hasAnyData=hasMonthlyDataFor(p,year);
@@ -2368,10 +2470,26 @@ function exportToExcel(){
   });
   const ws3=XLSX.utils.json_to_sheet(monthlyRows);
   ws3['!cols']=[{wch:12},{wch:16},{wch:16}].concat(Array(24).fill({wch:12})).concat([{wch:12},{wch:12}]);
+
+  const driverMap=driverSummaryMap();
+  const driverNames=Object.keys(driverMap).sort((a,b)=>driverMap[b].count-driverMap[a].count||a.localeCompare(b));
+  const driverRows=driverNames.map(name=>{
+    const m=driverMap[name];
+    return {'운행자':name,'운행건수':m.count,'총주행거리(km)':m.dist,'총주유비(원)':m.fuel,'개인사용건수':m.personal,'이용차량':Array.from(m.plates).join(', '),'최근운행일':m.lastDate||''};
+  });
+  const ws4=XLSX.utils.json_to_sheet(driverRows);
+  ws4['!cols']=[{wch:14},{wch:10},{wch:14},{wch:14},{wch:12},{wch:30},{wch:12}];
+
+  const personalRows=personalUseTrips().map(t=>({'일자':t.date||t.isoDate||'','차량번호':t.plate,'지역구분':t.branch||'','운행자':t.user||'','주행거리(km)':t.distance||0,'주유비(원)':t.fuel||0,'행선지':t.dest||'','제출자':t.submitter||'','비고':t.note||''}));
+  const ws5=XLSX.utils.json_to_sheet(personalRows);
+  ws5['!cols']=[{wch:12},{wch:12},{wch:16},{wch:10},{wch:12},{wch:12},{wch:20},{wch:10},{wch:20}];
+
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws1,'차량현황');
   XLSX.utils.book_append_sheet(wb,ws2,'전체운행기록');
   XLSX.utils.book_append_sheet(wb,ws3,`월별가동율_${year}`);
+  XLSX.utils.book_append_sheet(wb,ws4,'운행자별현황');
+  XLSX.utils.book_append_sheet(wb,ws5,'개인사용현황');
   XLSX.writeFile(wb,`차량운행관리_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
