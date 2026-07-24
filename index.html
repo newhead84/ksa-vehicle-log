@@ -59,7 +59,7 @@
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html{height:100%;}
-  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:'Paperlogy',sans-serif;font-size:16px;-webkit-font-smoothing:antialiased;}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:'Paperlogy',sans-serif;font-size:16px;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
   body{min-height:100%;overscroll-behavior:none;}
   h1,h2,h3{font-family:'Paperlogy',sans-serif;margin:0;letter-spacing:-0.01em;}
   .mono{font-family:'Paperlogy',monospace;}
@@ -164,14 +164,14 @@
     .admin-topbar-actions .reset-btn{font-size:11px;padding:6px 9px;}
     .admin-topbar-actions #lastSyncLabel{width:100%;order:-1;margin-bottom:2px;}
 
-    /* 통계 카드: 4열 강제배치를 2열로 줄여서 숫자가 잘리지 않게 */
-    .stat-strip{grid-template-columns:1fr 1fr;gap:10px;}
-    .stat-card{padding:12px 14px;min-width:0;}
-    .stat-card .label{font-size:10px;margin-bottom:6px;}
-    .odometer{flex-wrap:wrap;row-gap:4px;}
-    .odo-digit{width:18px;height:26px;font-size:14px;}
+    /* 통계 카드: 숫자가 계속 늘어나므로 2열이 아닌 전체폭 1열로 배치해 여유 확보 */
+    .stat-strip{grid-template-columns:1fr;gap:8px;}
+    .stat-card{padding:12px 16px;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+    .stat-card .label{font-size:11px;margin-bottom:0;}
+    .odometer{flex-wrap:wrap;row-gap:4px;justify-content:flex-end;}
+    .odo-digit{width:19px;height:27px;font-size:15px;}
     .odo-unit{font-size:11px;}
-    .stat-plain{font-size:19px;}
+    .stat-plain{font-size:21px;text-align:right;}
 
     .section-head{margin:22px 0 8px;}
     .section-head h2{font-size:16px;}
@@ -221,10 +221,10 @@
   .stat-strip{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:14px;margin-bottom:26px;}
   .stat-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;}
   .stat-card .label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:8px;}
-  .odometer{display:flex;gap:3px;}
+  .odometer{display:flex;gap:3px;flex-wrap:wrap;}
   .odo-digit{background:var(--navy);color:#F2E6CC;font-family:'Paperlogy';font-weight:600;font-size:22px;width:26px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:3px;}
   .odo-unit{align-self:center;margin-left:6px;font-size:12px;color:var(--muted);}
-  .stat-plain{font-family:'Paperlogy';font-size:26px;font-weight:600;color:var(--navy);}
+  .stat-plain{font-family:'Paperlogy';font-size:26px;font-weight:600;color:var(--navy);overflow-wrap:anywhere;word-break:break-all;}
   .stat-card .delta{font-size:11px;color:var(--muted);margin-top:6px;}
 
   /* ===== Dropzone ===== */
