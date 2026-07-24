@@ -1,1 +1,40 @@
+name: Update Fuel Price from Opinet
 
+on:
+  schedule:
+    - cron: '0 22 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  update-fuel-price:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Opinet average gasoline price
+        id: fetch
+        env:
+          OPINET_API_KEY: ${{ secrets.OPINET_API_KEY }}
+        run: |
+          set -e
+          RESPONSE=$(curl -s "https://www.opinet.co.kr/api/avgAllPrice.do?out=json&code=${OPINET_API_KEY}")
+          echo "Opinet response: $RESPONSE"
+          PRICE=$(echo "$RESPONSE" | jq -r '.RESULT.OIL[] | select(.PRODCD=="B027") | .PRICE')
+          if [ -z "$PRICE" ] || [ "$PRICE" = "null" ]; then
+            echo "Could not find B027 gasoline price"
+            exit 1
+          fi
+          PRICE_ROUNDED=$(printf "%.0f" "$PRICE")
+          echo "price=$PRICE_ROUNDED" >> "$GITHUB_OUTPUT"
+
+      - name: Write to Firebase Realtime Database
+        env:
+          FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
+          PRICE: ${{ steps.fetch.outputs.price }}
+        run: |
+          set -e
+          UPDATED_AT=$(date -u +"%Y-%m-%d %H:%M UTC")
+          BODY=$(jq -n --arg price "$PRICE" --arg updatedAt "$UPDATED_AT" --arg source "opinet-B027" \
+            '{price: ($price|tonumber), updatedAt: $updatedAt, source: $source}')
+          echo "Writing: $BODY"
+          curl -s -X PUT "${FIREBASE_URL}/fuel-price.json" \
+            -H "Content-Type: application/json" \
+            -d "$BODY"
