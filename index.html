@@ -491,8 +491,8 @@
     <div style="font-size:22px;font-weight:700;color:#fff;text-align:center;margin:10px 0 4px;line-height:1.35;">업무용 차량 운행정보 관리</div>
     <div class="role-logo-sub">회원홍보자산실</div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;width:100%;max-width:280px;">
-      <button onclick="openWeekendModal()" style="background:rgba(251,215,75,.15);border:1px solid rgba(251,215,75,.4);color:#fff;border-radius:14px;padding:11px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Paperlogy',sans-serif;text-align:left;">📋 주말·공휴일 개인사용 안내</button>
-      <button onclick="openParkingModal()" style="background:rgba(251,215,75,.15);border:1px solid rgba(251,215,75,.4);color:#fff;border-radius:14px;padding:11px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Paperlogy',sans-serif;text-align:left;">🅿 DT센터 주차안내</button>
+      <button onclick="openWeekendModal()" style="background:rgba(251,215,75,.15);border:1px solid rgba(251,215,75,.4);color:#fff;border-radius:14px;padding:11px 16px;font-size:14.5px;font-weight:600;cursor:pointer;font-family:'Paperlogy',sans-serif;text-align:left;display:flex;align-items:center;gap:9px;"><span style="font-size:16px;line-height:1;flex-shrink:0;">📋</span><span>주말·공휴일 개인사용 안내</span></button>
+      <button onclick="openParkingModal()" style="background:rgba(251,215,75,.15);border:1px solid rgba(251,215,75,.4);color:#fff;border-radius:14px;padding:11px 16px;font-size:14.5px;font-weight:600;cursor:pointer;font-family:'Paperlogy',sans-serif;text-align:left;display:flex;align-items:center;gap:9px;"><span style="font-size:16px;line-height:1;flex-shrink:0;">🅿</span><span>DT센터 주차안내</span></button>
     </div>
   </div>
   <div class="role-box">
@@ -660,7 +660,7 @@
     </div>
     <div style="padding:24px;text-align:center;">
       <div id="qrCodeContainer" style="display:inline-block;padding:12px;background:#fff;border:1px solid var(--line);border-radius:12px;"></div>
-      <div style="font-size:11px;color:var(--muted);margin-top:10px;">QR 스캔 시 차량정보 자동 입력됩니다</div>
+      <div style="font-size:13px;font-weight:700;color:#10975c;margin-top:10px;">QR 스캔 시 운행정보 입력 페이지 이동</div>
       <div style="display:flex;gap:8px;margin-top:16px;">
         <button onclick="printQr()" style="flex:1;padding:12px;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;font-family:'Paperlogy',sans-serif;">🖨 인쇄</button>
         <button onclick="downloadQr()" style="flex:1;padding:12px;background:var(--navy);border:none;border-radius:12px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;font-family:'Paperlogy',sans-serif;">⬇ 저장</button>
@@ -1619,14 +1619,14 @@ function printQr(){
       .plate{font-family:'Paperlogy',sans-serif;font-weight:700;font-size:22px;color:#1a1f2b;margin:8px 0 2px;}
       .branch{font-family:'Paperlogy',sans-serif;font-weight:400;font-size:12px;color:#6b7280;margin-bottom:16px;}
       img{width:180px;height:180px;}
-      .hint{font-family:'Paperlogy',sans-serif;font-weight:400;font-size:11px;color:#9ca3af;margin-top:12px;}
+      .hint{font-family:'Paperlogy',sans-serif;font-weight:700;font-size:13px;color:#10975c;margin-top:12px;}
     </style></head><body>
     <div class="card">
       <div class="logo">KSA 공용차량</div>
       <div class="plate">${plate}</div>
       <div class="branch">${branch}</div>
       <img src="${img}">
-      <div class="hint">스캔하면 운행정보 입력 화면으로<br>바로 이동합니다</div>
+      <div class="hint">QR 스캔 시<br>운행정보 입력 페이지 이동</div>
     </div>
     <script>window.onload=()=>window.print();<\/script>
   </body></html>`);
@@ -1807,11 +1807,11 @@ async function generateBulkQrPdf(plates){
         doc.addImage(qrImg, 'PNG', qx, qy, qrSize, qrSize);
       }
 
-      // 하단 안내문
-      doc.setTextColor(156, 163, 175);
-      doc.setFontSize(6);
-      if(fontOk) doc.setFont('Paperlogy', 'normal');
-      doc.text('QR 스캔 시 운행정보 자동입력', x + cardW/2, y + cardH - 3, { align: 'center' });
+      // 하단 안내문 (KSA 디자인가이드 Main Green 적용, 시인성 확보를 위해 확대/볼드)
+      doc.setTextColor(16, 151, 92); // KSA Main Green #10975c
+      doc.setFontSize(7.5);
+      if(fontOk) doc.setFont('Paperlogy', 'bold');
+      doc.text('QR 스캔 시 운행정보 입력 페이지 이동', x + cardW/2, y + cardH - 3, { align: 'center' });
 
       col++;
       if(col >= cols){ col = 0; row++; }
