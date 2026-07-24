@@ -752,7 +752,7 @@
     </div>
     <div class="section-body" id="personalUseWrap">
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
-        <input class="search-box" id="personalSearchBox" placeholder="운행자·차량번호·지역구분 검색…" oninput="renderPersonalUseList()" style="max-width:280px;">
+        <input class="search-box" id="personalSearchBox" placeholder="운행자 이름 검색…" oninput="renderPersonalUseList()" style="max-width:280px;">
         <div id="personalUseSummaryBar" style="font-size:12.5px;color:var(--ink);"></div>
       </div>
       <div id="personalUseList"></div>
@@ -1642,6 +1642,10 @@ function driverSummaryMap(){
 function renderDriverSummary(){
   const map=driverSummaryMap();
   const q=(document.getElementById('driverSearchBox')?.value||'').trim();
+  if(!q){
+    document.getElementById('driverSummary').innerHTML=`<div style="text-align:center;padding:24px;color:var(--muted);font-size:13px;">운행자별 전체 현황은 엑셀 내보내기에서 확인 가능.</div>`;
+    return;
+  }
   let names=Object.keys(map).filter(n=>n.includes(q));
   names.sort((a,b)=>map[b].count-map[a].count||a.localeCompare(b));
   const rows=names.map(name=>{
@@ -1658,7 +1662,7 @@ function renderDriverSummary(){
       <td class="mono" style="color:var(--muted);">${m.lastDate||'-'}</td>
     </tr>`;
   }).join('');
-  document.getElementById('driverSummary').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>운행자</th><th>운행건수</th><th>총주행거리</th><th>총주유비</th><th>개인사용건수</th><th>이용차량</th><th>최근운행일</th></tr></thead><tbody>${rows||`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
+  document.getElementById('driverSummary').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>운행자</th><th>운행건수</th><th>총주행거리</th><th>총주유비</th><th>개인사용건수</th><th>이용차량</th><th>최근운행일</th></tr></thead><tbody>${rows||`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">검색 결과가 없습니다</td></tr>`}</tbody></table></div>`;
 }
 
 // 전체 차량의 운행기록 중 개인사용(isPersonal) 건만 모아서 반환
@@ -1675,8 +1679,12 @@ function personalUseTrips(){
 
 function renderPersonalUseList(){
   const q=(document.getElementById('personalSearchBox')?.value||'').trim();
-  let list=personalUseTrips();
-  if(q) list=list.filter(t=>(t.user||'').includes(q)||t.plate.includes(q)||(t.branch||'').includes(q));
+  if(!q){
+    document.getElementById('personalUseSummaryBar').innerHTML='';
+    document.getElementById('personalUseList').innerHTML=`<div style="text-align:center;padding:24px;color:var(--muted);font-size:13px;">개인사용 전체 현황은 엑셀 내보내기에서 확인 가능.</div>`;
+    return;
+  }
+  let list=personalUseTrips().filter(t=>(t.user||'').includes(q));
   const totalDist=list.reduce((s,t)=>s+(Number(t.distance)||0),0);
   const totalFuel=list.reduce((s,t)=>s+(Number(t.fuel)||0),0);
   const rows=list.map(t=>`<tr>
@@ -1690,7 +1698,7 @@ function renderPersonalUseList(){
     <td style="color:var(--muted);">${t.submitter||''}</td>
   </tr>`).join('');
   document.getElementById('personalUseSummaryBar').innerHTML=list.length?`총 <b>${list.length}건</b> · 주행거리 <b>${totalDist.toLocaleString()}km</b> · 총주유비 <b>${totalFuel.toLocaleString()}원</b>`:'';
-  document.getElementById('personalUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>주행거리</th><th>주유비</th><th>행선지</th><th>제출자</th></tr></thead><tbody>${rows||`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted);">개인사용 기록이 없습니다</td></tr>`}</tbody></table></div>`;
+  document.getElementById('personalUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>주행거리</th><th>주유비</th><th>행선지</th><th>제출자</th></tr></thead><tbody>${rows||`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted);">검색 결과가 없습니다</td></tr>`}</tbody></table></div>`;
 }
 
 function vcardHtml(p){
@@ -2923,7 +2931,11 @@ function addTripRow(prefillStart = null){
         </div>
       </div>
       <div class="form-field">
-        <label>비고 (선택)</label>
+        <label style="display:flex;align-items:center;justify-content:space-between;">
+          <span>비고</span>
+          <span class="tr-note-optional" style="font-size:11px;color:var(--muted);font-weight:400;">(선택)</span>
+          <span class="tr-note-required" style="display:none;color:var(--bad);font-size:12px;font-weight:600;">* 필수 (점검요망 사유)</span>
+        </label>
         <input type="text" class="tr-note" placeholder="특이사항" oninput="scheduleDraft()">
       </div>
     </div>`;
@@ -2979,6 +2991,17 @@ function setStatus(btn, val){
   const toggle = btn.closest('.status-toggle');
   toggle.querySelectorAll('.status-btn').forEach(b=>{b.className='status-btn';});
   btn.className = val==='정상' ? 'status-btn active-good' : 'status-btn active-bad';
+  // 점검요망 선택 시 비고를 필수 입력으로 표시 (개인사용→주유비 필수 표시와 동일한 패턴)
+  const card = btn.closest('.trip-card');
+  if(card){
+    const isBad = val==='점검요망';
+    const reqSpan = card.querySelector('.tr-note-required');
+    const optSpan = card.querySelector('.tr-note-optional');
+    const noteInp = card.querySelector('.tr-note');
+    if(reqSpan) reqSpan.style.display = isBad ? 'inline' : 'none';
+    if(optSpan) optSpan.style.display = isBad ? 'none' : 'inline';
+    if(noteInp) noteInp.placeholder = isBad ? '점검요망 사유를 입력해 주세요' : '특이사항';
+  }
   scheduleDraft();
 }
 
@@ -3219,6 +3242,7 @@ async function submitDirectInput(){
     if(r.endOdo <= r.startOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리가 시작거리보다 작습니다.`); return; }
     if(!r.dest){ showUserFormErr(`${i+1}번 운행기록: 행선지를 입력해 주세요.`); return; }
     if(r.isPersonal && !r.fuel){ showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유비를 입력해 주세요.`); return; }
+    if(r.status==='점검요망' && !r.note){ showUserFormErr(`${i+1}번 운행기록: 점검요망 선택 시 비고(사유)를 입력해 주세요.`); return; }
     if(r.distance >= MAX_TRIP_DISTANCE_KM){ showUserFormErr(`${i+1}번 운행기록: 주행거리가 ${r.distance.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`); return; }
     if(r.fuel >= MAX_FUEL_AMOUNT){ showUserFormErr(`${i+1}번 운행기록: 주유비가 ${Number(r.fuel).toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`); return; }
   }
