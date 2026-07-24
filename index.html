@@ -266,14 +266,16 @@
   .month-controls{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
   .month-controls select{font-family:'Paperlogy';font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;}
   .month-table-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);}
-  .month-table{width:100%;border-collapse:collapse;font-size:12px;min-width:680px;table-layout:fixed;}
-  .month-table th{background:var(--paper);padding:8px 6px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;}
-  .month-table th:first-child{text-align:left;padding-left:12px;padding-right:6px;width:118px;}
-  .month-table td{padding:6px;text-align:center;border-bottom:1px solid var(--line);}
+  .month-table{width:100%;border-collapse:collapse;font-size:12px;min-width:760px;table-layout:fixed;}
+  .month-table th{background:var(--paper);padding:8px 4px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;}
+  .month-table th:first-child{text-align:left;padding-left:12px;padding-right:6px;width:168px;}
+  .month-table th:nth-child(n+2):nth-child(-n+13){width:34px;}
+  .month-table th:last-child{width:46px;}
+  .month-table td{padding:6px 3px;text-align:center;border-bottom:1px solid var(--line);}
   .month-table td:first-child{text-align:left;padding-left:12px;padding-right:6px;font-family:'Paperlogy';}
-  .plate-cell{display:flex;flex-direction:column;gap:1px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .plate-cell .plate-num{font-weight:600;overflow:hidden;text-overflow:ellipsis;}
-  .plate-cell .plate-model{font-size:10px;color:var(--muted);font-weight:400;overflow:hidden;text-overflow:ellipsis;}
+  .plate-cell{display:flex;flex-direction:row;align-items:baseline;gap:6px;line-height:1.25;white-space:nowrap;overflow:hidden;}
+  .plate-cell .plate-num{font-weight:600;font-size:13px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;}
+  .plate-cell .plate-model{font-size:12px;color:var(--muted);font-weight:500;overflow:hidden;text-overflow:ellipsis;}
   .month-branch-row td{background:var(--navy);color:#fff;font-weight:600;font-family:'Paperlogy';text-align:left;padding:7px 12px;}
   .month-cell{font-family:'Paperlogy';font-weight:600;border-radius:4px;}
   .m-good{background:var(--good-soft);color:var(--good);}
@@ -527,22 +529,26 @@
 
     /* 지역 요약 표: 좁으면 가로 스크롤로, 폰트/여백 축소 */
     .region-table{table-layout:fixed;}
-    .table-scroll .region-table{min-width:520px;}
-    .region-table th,.region-table td{padding:7px 8px;font-size:12px;}
-    .region-table th:nth-child(1),.region-table td:nth-child(1){width:19%;}
-    .region-table th:nth-child(2),.region-table td:nth-child(2){width:13%;}
-    .region-table th:nth-child(3),.region-table td:nth-child(3){width:16%;}
-    .region-table th:nth-child(4),.region-table td:nth-child(4){width:19%;}
-    .region-table th:nth-child(5),.region-table td:nth-child(5){width:17%;}
-    .region-table th:nth-child(6),.region-table td:nth-child(6){width:16%;}
+    .table-scroll .region-table{min-width:560px;}
+    .region-table th,.region-table td{padding:7px 6px;font-size:11.5px;}
+    .region-table th:nth-child(1),.region-table td:nth-child(1){width:132px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .region-table th:nth-child(2),.region-table td:nth-child(2){width:60px;}
+    .region-table th:nth-child(3),.region-table td:nth-child(3){width:80px;}
+    .region-table th:nth-child(4),.region-table td:nth-child(4){width:86px;}
+    .region-table th:nth-child(5),.region-table td:nth-child(5){width:86px;}
+    .region-table th:nth-child(6),.region-table td:nth-child(6){width:80px;}
     .region-table th .region-th-note{display:block;font-size:9px!important;margin-top:2px;white-space:normal;}
-    .util-bar{width:44px;}
+    .util-bar{width:40px;}
 
-    /* 월별 가동율 표 첫 컬럼: 차량번호+차종이 두 줄로 잘리지 않게 폭 확보 */
-    .month-table th:first-child{width:100px;}
+    /* 월별 가동율 표: 차량번호+차종을 한 줄로 표시 (좌우 스크롤로 확인), 월 컬럼은 폭을 줄여 확보 */
+    .month-table{min-width:640px;}
+    .month-table th:first-child{width:150px;}
     .month-table td:first-child{padding-left:10px;padding-right:4px;}
+    .month-table th:nth-child(n+2):nth-child(-n+13){width:28px;}
+    .month-table th:last-child{width:38px;}
+    .plate-cell{gap:5px;}
     .plate-cell .plate-num{font-size:12px;}
-    .plate-cell .plate-model{font-size:9px;}
+    .plate-cell .plate-model{font-size:11px;}
 
     .modal{padding:18px 16px;width:94vw;}
     .modal-head .plate-big{font-size:19px;}
@@ -1582,9 +1588,9 @@ function renderRegionSummary(){
     const sorted=tb.usageDates.slice().sort();
     const spanDays=sorted.length?Math.max(1,countBizDays(sorted[0],sorted[sorted.length-1])):1;
     const rate=tb.usageDates.length?Math.min(100,(bizUsed/spanDays)*100):0;
-    return `<tr><td><b>${branch}</b></td><td class="mono">${cars}대</td><td class="mono">${tb.count}건</td><td class="mono">${tb.dist.toLocaleString()}km</td><td class="mono">${tb.fuel.toLocaleString()}원</td><td>${tb.count>0?utilBar(rate):'<span style="color:var(--muted);font-size:12px;">–</span>'}</td></tr>`;
+    return `<tr><td title="${branch}"><b>${branch}</b></td><td class="mono">${cars}대</td><td class="mono">${tb.count}건</td><td class="mono">${tb.dist.toLocaleString()}km</td><td class="mono">${tb.fuel.toLocaleString()}원</td><td>${tb.count>0?utilBar(rate):'<span style="color:var(--muted);font-size:12px;">–</span>'}</td></tr>`;
   }).join('');
-  document.getElementById('regionSummary').innerHTML=`<div class="table-scroll"><table class="region-table"><thead><tr><th>지역구분</th><th>현재 차량수</th><th>운행건수<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (당시소속 기준)</span></th><th>총주행거리</th><th>총주유비</th><th>가동율</th></tr></thead><tbody>${rows||`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted);">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
+  document.getElementById('regionSummary').innerHTML=`<div class="table-scroll"><table class="region-table"><thead><tr><th>지역구분</th><th>차량대수</th><th>운행건수<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (당시소속 기준)</span></th><th>총주행거리</th><th>총주유비</th><th>가동율</th></tr></thead><tbody>${rows||`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted);">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
 }
 
 function vcardHtml(p){
