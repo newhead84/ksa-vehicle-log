@@ -729,19 +729,20 @@
   </div>
 </div>
 <!-- 제출 확인 팝업 -->
-<div id="submitConfirmOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:400;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeSubmitConfirm()">
+<div id="submitConfirmOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:400;align-items:flex-end;justify-content:center;" onclick="if(event.target===this && !document.getElementById('submitConfirmOkBtn')?.disabled)closeSubmitConfirm()">
   <div style="background:#fff;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;box-shadow:0 -8px 40px rgba(0,0,0,.2);">
     <div style="background:linear-gradient(135deg,var(--navy),var(--navy-2));padding:20px 20px 16px;border-radius:24px 24px 0 0;">
       <div style="font-size:11px;color:rgba(255,255,255,.6);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">제출 전 확인</div>
       <div style="font-size:18px;font-weight:700;color:#fff;">입력 내용을 확인해 주세요</div>
     </div>
     <div id="submitConfirmBody" style="padding:16px 20px 8px;"></div>
+    <div id="submitConfirmErr" style="display:none;margin:0 20px 8px;padding:10px 12px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:10px;font-size:12.5px;color:#B91C1C;line-height:1.5;"></div>
     <div style="display:flex;gap:10px;padding:12px 20px 32px;">
-      <button onclick="closeSubmitConfirm()"
+      <button id="submitConfirmCancelBtn" onclick="closeSubmitConfirm()"
         style="flex:1;padding:15px;border:1.5px solid var(--line);border-radius:14px;background:#fff;font-size:15px;font-weight:600;color:var(--muted);cursor:pointer;font-family:'Paperlogy',sans-serif;">
         ✏ 수정
       </button>
-      <button onclick="confirmAndSubmit()"
+      <button id="submitConfirmOkBtn" onclick="confirmAndSubmit()"
         style="flex:2;padding:15px;border:none;border-radius:14px;background:var(--navy);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:'Paperlogy',sans-serif;">
         제출 확인 →
       </button>
@@ -895,13 +896,27 @@ const MAX_FUEL_AMOUNT      = 150000;
 const STORAGE_KEY  = 'fleet-data';
 
 // Firebase Realtime Database REST API 헬퍼
+// 모바일 데이터/약한 신호 환경에서 fetch가 응답 없이 무한 대기하는 것을 막기 위해
+// 타임아웃(기본 15초)을 걸어, 일정 시간 내 응답이 없으면 명확한 오류로 처리합니다.
+async function fbFetchWithTimeout(url, options, timeoutMs=15000){
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), timeoutMs);
+  try{
+    return await fetch(url, {...options, signal: controller.signal});
+  }catch(e){
+    if(e.name === 'AbortError') throw new Error('네트워크 응답 시간 초과(15초) — 통신 상태를 확인해 주세요.');
+    throw new Error('네트워크 오류 — 인터넷 연결을 확인해 주세요.');
+  }finally{
+    clearTimeout(timer);
+  }
+}
 async function fbGet(path){
-  const r = await fetch(`${FIREBASE_URL}/${path}.json`);
+  const r = await fbFetchWithTimeout(`${FIREBASE_URL}/${path}.json`);
   if(!r.ok) throw new Error(`Firebase 읽기 실패 (${r.status})`);
   return r.json();
 }
 async function fbSet(path, value){
-  const r = await fetch(`${FIREBASE_URL}/${path}.json`, {
+  const r = await fbFetchWithTimeout(`${FIREBASE_URL}/${path}.json`, {
     method:'PUT', headers:{'Content-Type':'application/json'},
     body: JSON.stringify(value)
   });
@@ -2885,6 +2900,37 @@ let _pendingSubmitData = null;
 function closeSubmitConfirm(){
   document.getElementById('submitConfirmOverlay').style.display = 'none';
   _pendingSubmitData = null;
+  setSubmitConfirmBusy(false);
+  const errEl = document.getElementById('submitConfirmErr');
+  if(errEl){ errEl.style.display = 'none'; errEl.textContent = ''; }
+}
+
+// 제출 확인 팝업의 버튼 상태를 전환합니다.
+// busy=true 이면 두 버튼을 비활성화하고 "제출 확인" 버튼에 처리 중임을 표시해,
+// 응답이 늦게 오는 모바일 환경에서 사용자가 "안 눌리네" 하고 여러 번 탭하는 것을 막습니다.
+function setSubmitConfirmBusy(busy){
+  const okBtn = document.getElementById('submitConfirmOkBtn');
+  const cancelBtn = document.getElementById('submitConfirmCancelBtn');
+  if(!okBtn || !cancelBtn) return;
+  if(busy){
+    okBtn.disabled = true; cancelBtn.disabled = true;
+    okBtn.dataset.origLabel = okBtn.dataset.origLabel || okBtn.textContent;
+    okBtn.textContent = '⏳ 제출 처리 중…';
+    okBtn.style.opacity = '0.7'; okBtn.style.cursor = 'default';
+    cancelBtn.style.opacity = '0.5'; cancelBtn.style.cursor = 'default';
+  }else{
+    okBtn.disabled = false; cancelBtn.disabled = false;
+    if(okBtn.dataset.origLabel) okBtn.textContent = okBtn.dataset.origLabel;
+    okBtn.style.opacity = ''; okBtn.style.cursor = 'pointer';
+    cancelBtn.style.opacity = ''; cancelBtn.style.cursor = 'pointer';
+  }
+}
+
+function showSubmitConfirmErr(msg){
+  const errEl = document.getElementById('submitConfirmErr');
+  if(!errEl) return;
+  errEl.textContent = msg;
+  errEl.style.display = 'block';
 }
 
 function showSubmitConfirm(submitter, plate, rows){
@@ -2938,10 +2984,25 @@ function showSubmitConfirm(submitter, plate, rows){
 
 async function confirmAndSubmit(){
   if(!_pendingSubmitData) return;
-  // 데이터 먼저 저장 후 팝업 닫기
   const {submitter, plate, rows} = _pendingSubmitData;
-  closeSubmitConfirm();
-  await doSubmit(submitter, plate, rows);
+  // 팝업은 처리 완료(성공) 후에 닫습니다. 실패 시에는 팝업을 유지한 채 오류를 보여주고
+  // 재시도할 수 있게 합니다. (기존에는 탭 즉시 팝업이 닫혀, 응답이 늦거나 실패해도
+  // 사용자가 아무 반응이 없는 것처럼 느끼는 문제가 있었습니다.)
+  const errEl = document.getElementById('submitConfirmErr');
+  if(errEl){ errEl.style.display = 'none'; errEl.textContent = ''; }
+  setSubmitConfirmBusy(true);
+  try{
+    const ok = await doSubmit(submitter, plate, rows);
+    if(ok){
+      closeSubmitConfirm();
+    }else{
+      setSubmitConfirmBusy(false);
+      showSubmitConfirmErr('⚠ 저장에 실패했습니다. 통신 상태를 확인한 후 "제출 확인"을 다시 눌러주세요.');
+    }
+  }catch(e){
+    setSubmitConfirmBusy(false);
+    showSubmitConfirmErr(`⚠ 오류가 발생했습니다: ${e.message || e}`);
+  }
 }
 
 async function submitDirectInput(){
@@ -3020,8 +3081,7 @@ async function doSubmit(submitter, plate, rows){
 
   const saved = await saveData();
   if(!saved){
-    showUserFormErr('⚠ 서버 저장에 실패했습니다. 방금 입력한 내용은 화면에 남아있으니, 인터넷 연결을 확인한 후 "제출하기"를 다시 눌러주세요.');
-    return;
+    return false;
   }
   await clearDraft();
 
@@ -3037,6 +3097,7 @@ async function doSubmit(submitter, plate, rows){
   sessionSubmits.push({plate,submitter,count:added,skipped,range:rangeMsg,time:new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})});
   renderSubmitLog(true);
   if(added>0) showSubmitSuccess(plate,added,rangeMsg);
+  return true;
 }
 
 // ── 임시저장 ─────────────────────────────────────────────────────────
