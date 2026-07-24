@@ -474,6 +474,7 @@
 <body>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <!-- ===== 역할 선택 오버레이 ===== -->
 <div id="roleOverlay">
@@ -636,6 +637,7 @@
       </div>
       <button id="inactiveToggleBtn" class="reset-btn" style="font-size:12px;flex-shrink:0;">운용중지 포함</button>
       <button class="reset-btn" onclick="openAddVehicleModal()" style="border-color:var(--navy);color:var(--navy);font-size:12px;flex-shrink:0;">+ 차량 추가</button>
+      <button class="reset-btn" onclick="printAllQrCodes()" style="border-color:#17593d;color:#17593d;font-size:12px;flex-shrink:0;">📄 QR 일괄 PDF 다운로드</button>
       <input class="search-box" id="searchBox" placeholder="차량번호 또는 지역본부 검색…" oninput="renderVehicles()" style="flex:1;min-width:140px;">
     </div>
     <div class="section-body" id="vehicleAreaWrap">
@@ -1608,13 +1610,16 @@ function printQr(){
   const win = window.open('','_blank');
   win.document.write(`<!DOCTYPE html><html><head><title>QR - ${plate}</title>
     <style>
-      body{font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fff;}
+      @font-face{font-family:'Paperlogy';font-weight:600;src:url('${APP_URL}fonts/Paperlogy-6SemiBold.ttf') format('truetype');}
+      @font-face{font-family:'Paperlogy';font-weight:700;src:url('${APP_URL}fonts/Paperlogy-7Bold.ttf') format('truetype');}
+      @font-face{font-family:'Paperlogy';font-weight:400;src:url('${APP_URL}fonts/Paperlogy-4Regular.ttf') format('truetype');}
+      body{font-family:'Paperlogy','Apple SD Gothic Neo','Malgun Gothic',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fff;}
       .card{border:2px solid #17593d;border-radius:16px;padding:28px 32px;text-align:center;width:260px;}
-      .logo{font-size:13px;font-weight:700;color:#17593d;letter-spacing:.1em;margin-bottom:4px;}
-      .plate{font-size:22px;font-weight:700;color:#1a1f2b;margin:8px 0 2px;}
-      .branch{font-size:12px;color:#6b7280;margin-bottom:16px;}
+      .logo{font-family:'Paperlogy',sans-serif;font-weight:700;font-size:13px;color:#17593d;letter-spacing:.1em;margin-bottom:4px;}
+      .plate{font-family:'Paperlogy',sans-serif;font-weight:700;font-size:22px;color:#1a1f2b;margin:8px 0 2px;}
+      .branch{font-family:'Paperlogy',sans-serif;font-weight:400;font-size:12px;color:#6b7280;margin-bottom:16px;}
       img{width:180px;height:180px;}
-      .hint{font-size:11px;color:#9ca3af;margin-top:12px;}
+      .hint{font-family:'Paperlogy',sans-serif;font-weight:400;font-size:11px;color:#9ca3af;margin-top:12px;}
     </style></head><body>
     <div class="card">
       <div class="logo">KSA 공용차량</div>
@@ -1626,6 +1631,203 @@ function printQr(){
     <script>window.onload=()=>window.print();<\/script>
   </body></html>`);
   win.document.close();
+}
+
+// 화면에 표시 중인(검색/운용중지 필터 반영) 차량 전체의 QR 코드를,
+// 인쇄 대신 A4 가로 방향·한 페이지에 6열 카드 배치의 PDF 파일로 일괄 생성해 다운로드합니다.
+// (일부 환경에서 인쇄 드라이버/팝업이 동작하지 않는 문제를 피하기 위해 인쇄창 방식 대신 PDF 다운로드 방식을 사용합니다.)
+let _paperlogyFontCache = null; // { regular: base64, bold: base64 } 캐시
+
+function printAllQrCodes(){
+  try{
+    const q = (document.getElementById('searchBox')?.value || '').trim();
+    let plates = Object.keys(data.vehicles).filter(p => p.includes(q) || (data.vehicles[p].branch||'').includes(q));
+    if(!showInactive) plates = plates.filter(p => data.vehicles[p].active !== false);
+    plates = plates.sort((a,b) => {
+      const ba = data.vehicles[a].branch || '', bb = data.vehicles[b].branch || '';
+      const cmp = compareByOrg(ba, bb);
+      return cmp !== 0 ? cmp : a.localeCompare(b);
+    });
+
+    if(plates.length === 0){ showAdminToast('PDF로 만들 차량이 없습니다. 검색어나 필터를 확인해 주세요.', 'bad'); return; }
+
+    // 네이티브 confirm()이 일부 브라우저/웹뷰 환경에서 차단되어 아무 반응이 없는
+    // 것처럼 보이는 문제를 피하기 위해, 앱 내부 커스텀 확인창을 사용합니다.
+    showBulkPrintConfirm(plates.length, () => generateBulkQrPdf(plates));
+  }catch(err){
+    console.error('printAllQrCodes 오류:', err);
+    showAdminToast('QR 일괄 PDF 준비 중 오류가 발생했습니다: ' + err.message, 'bad');
+  }
+}
+
+function showBulkPrintConfirm(count, onConfirm){
+  const existing = document.getElementById('bulkPrintConfirmOverlay');
+  if(existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'bulkPrintConfirmOverlay';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;';
+  div.innerHTML = `
+    <div style="background:#fff;border-radius:16px;max-width:360px;width:100%;padding:22px 22px 18px;font-family:'Paperlogy',sans-serif;">
+      <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px;">QR 일괄 PDF 다운로드</div>
+      <div style="font-size:13.5px;color:var(--ink);line-height:1.5;margin-bottom:18px;">총 <b>${count}대</b> 차량의 QR코드를 A4 용지(가로, 6개씩) 배치의 PDF 파일로 생성합니다.<br>계속하시겠습니까?</div>
+      <div style="display:flex;gap:8px;">
+        <button id="bulkPrintCancelBtn" style="flex:1;padding:12px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:'Paperlogy',sans-serif;">취소</button>
+        <button id="bulkPrintOkBtn" style="flex:1;padding:12px;border:none;border-radius:10px;background:var(--navy);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Paperlogy',sans-serif;">PDF 생성</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  document.getElementById('bulkPrintCancelBtn').onclick = () => div.remove();
+  document.getElementById('bulkPrintOkBtn').onclick = () => { div.remove(); onConfirm(); };
+}
+
+// 원격지 TTF 폰트 파일을 fetch 하여 base64 문자열로 변환 (jsPDF에 임베드하기 위함)
+async function fetchFontAsBase64(url){
+  const res = await fetch(url);
+  if(!res.ok) throw new Error(`폰트 파일을 불러오지 못했습니다 (${res.status}): ${url}`);
+  const buf = await res.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const chunk = 0x8000;
+  for(let i = 0; i < bytes.length; i += chunk){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+// Paperlogy 폰트(Regular/SemiBold)를 최초 1회만 불러와 캐시
+async function ensurePaperlogyFontLoaded(){
+  if(_paperlogyFontCache) return _paperlogyFontCache;
+  const [regular, bold] = await Promise.all([
+    fetchFontAsBase64(`${APP_URL}fonts/Paperlogy-4Regular.ttf`),
+    fetchFontAsBase64(`${APP_URL}fonts/Paperlogy-6SemiBold.ttf`)
+  ]);
+  _paperlogyFontCache = { regular, bold };
+  return _paperlogyFontCache;
+}
+
+async function generateBulkQrPdf(plates){
+  try{
+    showAdminToast(`PDF 생성을 시작합니다 · ${plates.length}대 (잠시만 기다려 주세요)`, 'good');
+
+    if(!window.jspdf || !window.jspdf.jsPDF){ showAdminToast('PDF 생성 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.', 'bad'); return; }
+    if(!window.QRCode){ showAdminToast('QR 코드 생성 라이브러리를 불러오지 못했습니다.', 'bad'); return; }
+
+    // 1) Paperlogy 폰트를 PDF에 임베드 (실패해도 기본 폰트로 계속 진행)
+    let fontOk = true;
+    let fonts = null;
+    try{
+      fonts = await ensurePaperlogyFontLoaded();
+    }catch(fontErr){
+      fontOk = false;
+      console.warn('Paperlogy 폰트 임베드 실패, 기본 폰트로 대체합니다:', fontErr);
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+    if(fontOk && fonts){
+      doc.addFileToVFS('Paperlogy-Regular.ttf', fonts.regular);
+      doc.addFont('Paperlogy-Regular.ttf', 'Paperlogy', 'normal');
+      doc.addFileToVFS('Paperlogy-SemiBold.ttf', fonts.bold);
+      doc.addFont('Paperlogy-SemiBold.ttf', 'Paperlogy', 'bold');
+      doc.setFont('Paperlogy', 'normal');
+    }else{
+      doc.setFont('helvetica', 'normal');
+    }
+
+    // 2) 레이아웃 상수 (A4 가로: 297 x 210mm)
+    const pageW = 297, pageH = 210;
+    const margin = 8;
+    const cols = 6, rows = 3; // 페이지당 6 x 3 = 18개
+    const gapX = 4, gapY = 6;
+    const usableW = pageW - margin*2;
+    const usableH = pageH - margin*2;
+    const cardW = (usableW - gapX*(cols-1)) / cols;
+    const cardH = (usableH - gapY*(rows-1)) / rows;
+    const qrSize = Math.min(cardW - 8, cardH * 0.55);
+
+    // 3) 화면에 보이지 않는 임시 영역에서 QR 코드를 하나씩 캔버스로 생성
+    const tempWrap = document.createElement('div');
+    tempWrap.style.cssText = 'position:fixed;left:-9999px;top:-9999px;';
+    document.body.appendChild(tempWrap);
+
+    let col = 0, row = 0, pageStarted = false;
+    for(let i = 0; i < plates.length; i++){
+      const plate = plates[i];
+      const v = data.vehicles[plate] || {};
+      const branch = v.branch || FLEET_REGISTRY.find(r=>r.plate===plate)?.branch || '';
+      const model = modelShort(v.model || FLEET_REGISTRY.find(r=>r.plate===plate)?.model || '');
+      const url = `${APP_URL}?plate=${encodeURIComponent(plate)}`;
+
+      tempWrap.innerHTML = '';
+      new QRCode(tempWrap, {
+        text: url, width: 240, height: 240,
+        colorDark: '#17593d', colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      const canvas = tempWrap.querySelector('canvas');
+      const qrImg = canvas ? canvas.toDataURL('image/png') : null;
+
+      if(col === 0 && row === 0){
+        if(pageStarted) doc.addPage();
+        pageStarted = true;
+      }
+
+      const x = margin + col * (cardW + gapX);
+      const y = margin + row * (cardH + gapY);
+
+      // 카드 테두리
+      doc.setDrawColor(23, 89, 61); // #17593d
+      doc.setLineWidth(0.4);
+      doc.roundedRect(x, y, cardW, cardH, 2, 2, 'S');
+
+      // 로고
+      doc.setTextColor(23, 89, 61);
+      doc.setFontSize(7);
+      if(fontOk) doc.setFont('Paperlogy', 'bold');
+      doc.text('KSA 공용차량', x + cardW/2, y + 5.5, { align: 'center' });
+
+      // 차량번호 + 모델
+      doc.setTextColor(26, 31, 43);
+      doc.setFontSize(11);
+      if(fontOk) doc.setFont('Paperlogy', 'bold');
+      const plateLabel = model ? `${plate} · ${model}` : plate;
+      doc.text(plateLabel, x + cardW/2, y + 10.5, { align: 'center', maxWidth: cardW - 4 });
+
+      // 지역본부
+      doc.setTextColor(107, 114, 128);
+      doc.setFontSize(7);
+      if(fontOk) doc.setFont('Paperlogy', 'normal');
+      doc.text(branch, x + cardW/2, y + 15, { align: 'center', maxWidth: cardW - 4 });
+
+      // QR 이미지
+      if(qrImg){
+        const qx = x + (cardW - qrSize)/2;
+        const qy = y + 17;
+        doc.addImage(qrImg, 'PNG', qx, qy, qrSize, qrSize);
+      }
+
+      // 하단 안내문
+      doc.setTextColor(156, 163, 175);
+      doc.setFontSize(6);
+      if(fontOk) doc.setFont('Paperlogy', 'normal');
+      doc.text('QR 스캔 시 운행정보 자동입력', x + cardW/2, y + cardH - 3, { align: 'center' });
+
+      col++;
+      if(col >= cols){ col = 0; row++; }
+      if(row >= rows){ row = 0; }
+    }
+
+    document.body.removeChild(tempWrap);
+
+    const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    doc.save(`QR_일괄인쇄_${plates.length}대_${dateStr}.pdf`);
+
+    showAdminToast(`QR 일괄 PDF 다운로드 완료 · ${plates.length}대${fontOk ? '' : ' (Paperlogy 폰트 임베드 실패로 기본 폰트 사용)'}`, fontOk ? 'good' : 'bad');
+  }catch(err){
+    console.error('generateBulkQrPdf 오류:', err);
+    showAdminToast('QR 일괄 PDF 생성 중 오류가 발생했습니다: ' + err.message, 'bad');
+  }
 }
 
 function downloadQr(){
