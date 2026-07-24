@@ -31,7 +31,7 @@ jobs:
           PRICE: ${{ steps.fetch.outputs.price }}
         run: |
           set -e
-          UPDATED_AT=$(date -u +"%Y-%m-%d %H:%M UTC")
+          UPDATED_AT=$(TZ='Asia/Seoul' date +"%Y-%m-%d %H:%M KST")
           BODY=$(jq -n --arg price "$PRICE" --arg updatedAt "$UPDATED_AT" --arg source "opinet-B027" \
             '{price: ($price|tonumber), updatedAt: $updatedAt, source: $source}')
           echo "Writing: $BODY"
