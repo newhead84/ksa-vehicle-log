@@ -270,7 +270,10 @@
   .month-table th{background:var(--paper);padding:8px 6px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;}
   .month-table th:first-child{text-align:left;padding-left:12px;padding-right:6px;width:118px;}
   .month-table td{padding:6px;text-align:center;border-bottom:1px solid var(--line);}
-  .month-table td:first-child{text-align:left;padding-left:12px;padding-right:6px;font-family:'Paperlogy';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .month-table td:first-child{text-align:left;padding-left:12px;padding-right:6px;font-family:'Paperlogy';}
+  .plate-cell{display:flex;flex-direction:column;gap:1px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .plate-cell .plate-num{font-weight:600;overflow:hidden;text-overflow:ellipsis;}
+  .plate-cell .plate-model{font-size:10px;color:var(--muted);font-weight:400;overflow:hidden;text-overflow:ellipsis;}
   .month-branch-row td{background:var(--navy);color:#fff;font-weight:600;font-family:'Paperlogy';text-align:left;padding:7px 12px;}
   .month-cell{font-family:'Paperlogy';font-weight:600;border-radius:4px;}
   .m-good{background:var(--good-soft);color:var(--good);}
@@ -495,12 +498,12 @@
     .admin-topbar{margin-bottom:16px;gap:10px;}
     .admin-topbar h1{font-size:19px;}
     .admin-topbar .sub{font-size:12px;}
+    .admin-topbar .sub-row #lastSyncLabel{font-size:11px;}
     .admin-badge{font-size:10px;padding:2px 7px;margin-left:6px;}
 
     /* 버튼 그룹: 한 줄로 밀어내지 않고 자연스럽게 줄바꿈 + 버튼 자체도 축소 */
     .admin-topbar-actions{gap:6px;width:100%;}
     .admin-topbar-actions .reset-btn{font-size:11px;padding:6px 9px;}
-    .admin-topbar-actions #lastSyncLabel{width:100%;order:-1;margin-bottom:2px;}
 
     /* 통계 카드: 숫자가 계속 늘어나는 카드(총거리/주유비)는 한 줄 전체를 쓰고,
        작은 값(관리차량/운행건수)만 절반씩 나란히 배치 */
@@ -523,11 +526,23 @@
     .vehicle-grid{grid-template-columns:1fr;gap:10px;}
 
     /* 지역 요약 표: 좁으면 가로 스크롤로, 폰트/여백 축소 */
+    .region-table{table-layout:fixed;}
+    .table-scroll .region-table{min-width:520px;}
     .region-table th,.region-table td{padding:7px 8px;font-size:12px;}
+    .region-table th:nth-child(1),.region-table td:nth-child(1){width:19%;}
+    .region-table th:nth-child(2),.region-table td:nth-child(2){width:13%;}
+    .region-table th:nth-child(3),.region-table td:nth-child(3){width:16%;}
+    .region-table th:nth-child(4),.region-table td:nth-child(4){width:19%;}
+    .region-table th:nth-child(5),.region-table td:nth-child(5){width:17%;}
+    .region-table th:nth-child(6),.region-table td:nth-child(6){width:16%;}
+    .region-table th .region-th-note{display:block;font-size:9px!important;margin-top:2px;white-space:normal;}
     .util-bar{width:44px;}
 
-    /* 월별 가동율 표 첫 컬럼 폭 축소 */
-    .month-table th:first-child{width:88px;}
+    /* 월별 가동율 표 첫 컬럼: 차량번호+차종이 두 줄로 잘리지 않게 폭 확보 */
+    .month-table th:first-child{width:100px;}
+    .month-table td:first-child{padding-left:10px;padding-right:4px;}
+    .plate-cell .plate-num{font-size:12px;}
+    .plate-cell .plate-model{font-size:9px;}
 
     .modal{padding:18px 16px;width:94vw;}
     .modal-head .plate-big{font-size:19px;}
@@ -606,10 +621,13 @@
     <div>
       <div class="brand-eyebrow">회원홍보자산실 · 차량관리</div>
       <h1>KSA 업무용 차량 운행정보 관리 <span class="admin-badge">관리자</span></h1>
-      <div class="sub" id="dateSub"></div>
+      <div class="sub-row" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        <div class="sub" id="dateSub"></div>
+        <span class="sub-dot" style="color:var(--line);">·</span>
+        <span id="lastSyncLabel" style="font-size:13px;color:var(--muted);"></span>
+      </div>
     </div>
     <div class="admin-topbar-actions">
-      <span id="lastSyncLabel" style="font-size:11px;color:var(--muted);"></span>
       <button class="reset-btn" id="refreshBtn" onclick="adminRefresh()" style="border-color:var(--accent);color:var(--accent);">⟳ 새로고침</button>
       <button class="reset-btn" onclick="exportToExcel()" style="border-color:var(--good);color:var(--good);">엑셀 내보내기</button>
       <button class="reset-btn" onclick="triggerManualMonthlyUpload()" style="border-color:#7C3AED;color:#7C3AED;">📊 엑셀 업로드</button>
@@ -1084,7 +1102,7 @@ function tryAdminLogin(){
     document.getElementById('submitLog').style.display = 'none';
     document.getElementById('userInputSection').style.display = 'none';
 
-    document.getElementById('dateSub').textContent = 'KSA 업무용 차량 운행정보 관리 · 회원홍보자산실 · ' + todayStr() + ' 기준';
+    document.getElementById('dateSub').textContent = todayStr() + ' 기준';
     pushAppState('admin');
     startAdminPolling();
   } else {
@@ -1508,7 +1526,7 @@ function renderMonthly(year){
       const monthly=monthlyUtilForPlate(p,monthlyYear);
       const avg=hasAnyTrip?monthly.reduce((s,m)=>s+m.rate,0)/12:0;
       const modelName=modelShort(data.vehicles[p]?.model||'');
-      rowsHtml+=`<tr><td>${p}<span style="font-size:10px;color:var(--muted);margin-left:5px;font-weight:400;">${modelName}</span></td>${monthly.map(m=>monthCellHtml(m.rate,hasAnyTrip)).join('')}<td class="month-cell month-avg ${hasAnyTrip?(avg>=60?'m-good':avg>=30?'m-mid':'m-bad'):'m-none'}">${hasAnyTrip?avg.toFixed(0)+'%':'–'}</td></tr>`;
+      rowsHtml+=`<tr><td><div class="plate-cell"><span class="plate-num">${p}</span><span class="plate-model">${modelName}</span></div></td>${monthly.map(m=>monthCellHtml(m.rate,hasAnyTrip)).join('')}<td class="month-cell month-avg ${hasAnyTrip?(avg>=60?'m-good':avg>=30?'m-mid':'m-bad'):'m-none'}">${hasAnyTrip?avg.toFixed(0)+'%':'–'}</td></tr>`;
     });
   });
   document.getElementById('monthlyArea').innerHTML=`<div class="month-table-wrap"><table class="month-table"><thead><tr><th>차량번호</th>${monthLabels.map(l=>`<th>${l}</th>`).join('')}<th>연평균</th></tr></thead><tbody>${rowsHtml||`<tr><td colspan="14" class="muted" style="text-align:center;padding:20px;">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
@@ -1566,7 +1584,7 @@ function renderRegionSummary(){
     const rate=tb.usageDates.length?Math.min(100,(bizUsed/spanDays)*100):0;
     return `<tr><td><b>${branch}</b></td><td class="mono">${cars}대</td><td class="mono">${tb.count}건</td><td class="mono">${tb.dist.toLocaleString()}km</td><td class="mono">${tb.fuel.toLocaleString()}원</td><td>${tb.count>0?utilBar(rate):'<span style="color:var(--muted);font-size:12px;">–</span>'}</td></tr>`;
   }).join('');
-  document.getElementById('regionSummary').innerHTML=`<div class="table-scroll"><table class="region-table"><thead><tr><th>지역구분</th><th>현재 차량수</th><th>운행건수<span style="font-size:10px;color:var(--muted);font-weight:400;"> (당시소속 기준)</span></th><th>총주행거리</th><th>총주유비</th><th>가동율</th></tr></thead><tbody>${rows||`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted);">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
+  document.getElementById('regionSummary').innerHTML=`<div class="table-scroll"><table class="region-table"><thead><tr><th>지역구분</th><th>현재 차량수</th><th>운행건수<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (당시소속 기준)</span></th><th>총주행거리</th><th>총주유비</th><th>가동율</th></tr></thead><tbody>${rows||`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted);">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
 }
 
 function vcardHtml(p){
@@ -2780,12 +2798,9 @@ function addTripRow(prefillStart = null){
           </div>
         </div>
       </div>
-      <div class="form-field" id="noteWrap-${id}">
-        <label>비고 <span id="noteReqTag-${id}" style="display:none;color:var(--bad);font-weight:700;">* 필수</span><span id="noteOptTag-${id}" style="color:var(--muted);font-weight:400;">(선택)</span></label>
-        <input type="text" class="tr-note" id="noteInput-${id}" placeholder="특이사항" oninput="scheduleDraft()">
-        <div id="noteGuide-${id}" style="display:none;margin-top:6px;font-size:12.5px;color:var(--bad);background:var(--bad-soft);border-radius:8px;padding:8px 10px;line-height:1.5;">
-          ⚠ 점검요망 선택 시, 비고란에 <b>구체적인 점검 필요 내용</b>을 반드시 입력해 주세요.<br>예) 엔진 소음, 타이어 마모, 경고등 점등, 브레이크 이상 등
-        </div>
+      <div class="form-field">
+        <label>비고 (선택)</label>
+        <input type="text" class="tr-note" placeholder="특이사항" oninput="scheduleDraft()">
       </div>
     </div>`;
   document.getElementById('tripRows').appendChild(card);
@@ -2840,25 +2855,6 @@ function setStatus(btn, val){
   const toggle = btn.closest('.status-toggle');
   toggle.querySelectorAll('.status-btn').forEach(b=>{b.className='status-btn';});
   btn.className = val==='정상' ? 'status-btn active-good' : 'status-btn active-bad';
-
-  // 점검요망 선택 시 비고란에 구체적인 내용을 적도록 안내 표시
-  const card = btn.closest('.trip-card');
-  const id = card ? card.id : '';
-  const guide = document.getElementById('noteGuide-'+id);
-  const reqTag = document.getElementById('noteReqTag-'+id);
-  const optTag = document.getElementById('noteOptTag-'+id);
-  const noteInp = document.getElementById('noteInput-'+id);
-  if(guide){
-    const isBad = val==='점검요망';
-    guide.style.display = isBad ? 'block' : 'none';
-    if(reqTag) reqTag.style.display = isBad ? 'inline' : 'none';
-    if(optTag) optTag.style.display = isBad ? 'none' : 'inline';
-    if(noteInp){
-      noteInp.style.borderColor = isBad ? 'var(--bad)' : '';
-      noteInp.placeholder = isBad ? '점검이 필요한 내용을 구체적으로 입력해 주세요' : '특이사항';
-      if(isBad) noteInp.focus();
-    }
-  }
   scheduleDraft();
 }
 
@@ -3099,7 +3095,6 @@ async function submitDirectInput(){
     if(r.endOdo <= r.startOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리가 시작거리보다 작습니다.`); return; }
     if(!r.dest){ showUserFormErr(`${i+1}번 운행기록: 행선지를 입력해 주세요.`); return; }
     if(r.isPersonal && !r.fuel){ showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유비를 입력해 주세요.`); return; }
-    if(r.status==='점검요망' && !r.note){ showUserFormErr(`${i+1}번 운행기록: 점검요망으로 선택하셨습니다. 비고란에 어떤 부분이 이상한지 구체적으로 입력해 주세요.`); return; }
     if(r.distance >= MAX_TRIP_DISTANCE_KM){ showUserFormErr(`${i+1}번 운행기록: 주행거리가 ${r.distance.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`); return; }
     if(r.fuel >= MAX_FUEL_AMOUNT){ showUserFormErr(`${i+1}번 운행기록: 주유비가 ${Number(r.fuel).toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`); return; }
   }
