@@ -531,6 +531,8 @@
       <span id="lastSyncLabel" style="font-size:11px;color:var(--muted);"></span>
       <button class="reset-btn" id="refreshBtn" onclick="adminRefresh()" style="border-color:var(--accent);color:var(--accent);">⟳ 새로고침</button>
       <button class="reset-btn" onclick="exportToExcel()" style="border-color:var(--good);color:var(--good);">엑셀 내보내기</button>
+      <button class="reset-btn" onclick="triggerManualMonthlyUpload()" style="border-color:#7C3AED;color:#7C3AED;">📊 엑셀 업로드</button>
+      <input type="file" id="manualMonthlyInput" accept=".xlsx,.xls" style="display:none;" onchange="handleManualMonthlyUpload(this)">
       <button class="reset-btn" onclick="backupData()" style="border-color:var(--navy);color:var(--navy);">💾 데이터 백업</button>
       <button class="reset-btn" onclick="document.getElementById('restoreInput').click()" style="border-color:var(--accent);color:var(--accent);">📂 데이터 복원</button>
       <input type="file" id="restoreInput" accept=".json" style="display:none;" onchange="restoreData(this)">
@@ -1145,20 +1147,37 @@ function utilBar(r){
 function monthRangeIso(y,m){ return{startIso:iso(new Date(y,m-1,1)),endIso:iso(new Date(y,m,0))}; }
 function bizDaysInMonth(y,m){ const{startIso,endIso}=monthRangeIso(y,m); return countBizDays(startIso,endIso); }
 function monthlyUtilForPlate(plate,year){
-  const trips=(data.vehicles[plate]||{}).trips||[];
+  const v=data.vehicles[plate]||{};
+  const trips=v.trips||[];
   const allDates=trips.flatMap(t=>t.usageDates||[]);
+  const manual=(v.manualMonthly&&v.manualMonthly[year])||{};
   const out=[];
   for(let m=1;m<=12;m++){
+    const mm=manual[m];
+    if(mm){
+      out.push({month:m,used:null,total:null,rate:Number(mm.rate)||0,distance:Number(mm.distance)||0,manual:true});
+      continue;
+    }
     const ym=`${year}-${String(m).padStart(2,'0')}`;
     const used=new Set(allDates.filter(d=>d.startsWith(ym)&&isBizDay(new Date(d+'T00:00:00')))).size;
     const total=bizDaysInMonth(year,m);
-    out.push({month:m,used,total,rate:total>0?Math.min(100,(used/total)*100):0});
+    const distance=trips.filter(t=>(t.isoDate||'').startsWith(ym)).reduce((s,t)=>s+(Number(t.distance)||0),0);
+    out.push({month:m,used,total,rate:total>0?Math.min(100,(used/total)*100):0,distance,manual:false});
   }
   return out;
 }
+function hasMonthlyDataFor(plate,year){
+  const v=data.vehicles[plate]||{};
+  const trips=v.trips||[];
+  const manual=(v.manualMonthly&&v.manualMonthly[year])||{};
+  return trips.length>0 || Object.keys(manual).length>0;
+}
 function availableYears(){
   const years=new Set();
-  Object.values(data.vehicles).forEach(v=>(v.trips||[]).forEach(t=>(t.usageDates||[]).forEach(d=>years.add(d.slice(0,4)))));
+  Object.values(data.vehicles).forEach(v=>{
+    (v.trips||[]).forEach(t=>(t.usageDates||[]).forEach(d=>years.add(d.slice(0,4))));
+    if(v.manualMonthly) Object.keys(v.manualMonthly).forEach(y=>years.add(String(y)));
+  });
   years.add(String(new Date().getFullYear()));
   return Array.from(years).sort();
 }
@@ -1296,8 +1315,7 @@ function renderMonthly(year){
     });
     rowsHtml+=`<tr class="month-branch-row"><td colspan="14">${branch}</td></tr>`;
     ps.forEach(p=>{
-      const trips=data.vehicles[p].trips||[];
-      const hasAnyTrip=trips.length>0;
+      const hasAnyTrip=hasMonthlyDataFor(p,monthlyYear);
       const monthly=monthlyUtilForPlate(p,monthlyYear);
       const avg=hasAnyTrip?monthly.reduce((s,m)=>s+m.rate,0)/12:0;
       const modelName=modelShort(data.vehicles[p]?.model||'');
@@ -1323,13 +1341,14 @@ function setViewMode(mode){
 function vehicleStatsOf(plate){
   const v=data.vehicles[plate];
   const trips=v.trips||[];
-  const totalDist=trips.reduce((s,t)=>s+(Number(t.distance)||0),0);
+  const manualDist=Object.values(v.manualMonthly||{}).reduce((s,yearObj)=>s+Object.values(yearObj).reduce((s2,mm)=>s2+(Number(mm.distance)||0),0),0);
+  const totalDist=trips.reduce((s,t)=>s+(Number(t.distance)||0),0)+manualDist;
   const totalFuel=trips.reduce((s,t)=>s+(Number(t.fuel)||0),0);
   const issues=trips.filter(t=>t.status&&t.status!=='정상').length;
   const sortedByDate=trips.slice().sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||''));
   const lastDate=sortedByDate.length?sortedByDate[sortedByDate.length-1].date:'-';
   const util=calcUtilization(trips);
-  return{v,trips,totalDist,totalFuel,issues,lastDate,util};
+  return{v,trips,totalDist,manualDist,totalFuel,issues,lastDate,util};
 }
 
 function renderRegionSummary(){
@@ -1857,15 +1876,22 @@ function exportToExcel(){
   const ws2=XLSX.utils.json_to_sheet(tripRows);
   ws2['!cols']=[{wch:12},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10},{wch:12},{wch:10},{wch:10},{wch:20},{wch:10},{wch:10},{wch:20}];
   const year=monthlyYear||new Date().getFullYear();
-  const monthCols=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   const monthlyRows=plates.map(p=>{
-    const trips=data.vehicles[p].trips||[];const hasAnyTrip=trips.length>0;
-    const monthly=monthlyUtilForPlate(p,year);const avg=hasAnyTrip?monthly.reduce((s,m)=>s+m.rate,0)/12:0;
+    const hasAnyData=hasMonthlyDataFor(p,year);
+    const monthly=monthlyUtilForPlate(p,year);
+    const avg=hasAnyData?monthly.reduce((s,m)=>s+m.rate,0)/12:0;
+    const yearTotalDist=monthly.reduce((s,m)=>s+(Number(m.distance)||0),0);
     const row={'차량번호':p,'차종':modelShort(data.vehicles[p]?.model||''),'지역구분':data.vehicles[p].branch||''};
-    monthly.forEach((m,i)=>{row[monthCols[i]]=hasAnyTrip?Number(m.rate.toFixed(1)):'';}); row['연평균(%)'] = hasAnyTrip ? Number(avg.toFixed(1)) : ''; return row;
+    monthly.forEach(m=>{
+      row[`${m.month}월가동율(%)`]=hasAnyData?Number(m.rate.toFixed(1)):'';
+      row[`${m.month}월거리(km)`]=hasAnyData?Number((m.distance||0).toFixed(0)):'';
+    });
+    row['연평균가동율(%)'] = hasAnyData ? Number(avg.toFixed(1)) : '';
+    row['연간총거리(km)'] = hasAnyData ? Number(yearTotalDist.toFixed(0)) : '';
+    return row;
   });
   const ws3=XLSX.utils.json_to_sheet(monthlyRows);
-  ws3['!cols']=[{wch:12},{wch:16}].concat(monthCols.map(()=>({wch:8}))).concat([{wch:10}]);
+  ws3['!cols']=[{wch:12},{wch:16},{wch:16}].concat(Array(24).fill({wch:12})).concat([{wch:12},{wch:12}]);
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws1,'차량현황');
   XLSX.utils.book_append_sheet(wb,ws2,'전체운행기록');
@@ -1873,7 +1899,86 @@ function exportToExcel(){
   XLSX.writeFile(wb,`차량운행관리_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
-// 업로드 / OCR 섹션 제거됨
+// ============================================================
+// 1~7월 수기기록 엑셀 업로드 (가동율 + 사용거리 → manualMonthly로 반영)
+// ============================================================
+let pendingManualYear=null;
+
+function triggerManualMonthlyUpload(){
+  const existing=document.getElementById('manualYearBanner');
+  if(existing) existing.remove();
+  const div=document.createElement('div');
+  div.id='manualYearBanner';
+  div.style.cssText='background:#F5F3FF;border:1px solid #7C3AED;border-radius:12px;padding:16px 20px;margin-bottom:18px;';
+  div.innerHTML=`
+    <div style="font-size:13px;font-weight:700;color:#7C3AED;margin-bottom:8px;">📊 엑셀 업로드 — 반영할 연도 선택</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input id="manualYearInput" type="number" value="${new Date().getFullYear()}" style="width:100px;border:1.5px solid #7C3AED;border-radius:8px;padding:9px 10px;font-family:'Paperlogy';font-size:14px;text-align:center;">
+      <button class="btn btn-primary" onclick="confirmManualYearAndPickFile()">파일 선택 →</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('manualYearBanner').remove()">취소</button>
+    </div>`;
+  document.getElementById('statStrip').before(div);
+  document.getElementById('manualYearInput')?.focus();
+}
+
+function confirmManualYearAndPickFile(){
+  const yearInput=document.getElementById('manualYearInput')?.value||'';
+  const year=String(yearInput).trim();
+  if(!/^\d{4}$/.test(year)){ showAdminToast('연도는 4자리 숫자로 입력해 주세요. (예: 2025)','bad'); return; }
+  pendingManualYear=year;
+  document.getElementById('manualYearBanner')?.remove();
+  document.getElementById('manualMonthlyInput').click();
+}
+
+async function handleManualMonthlyUpload(input){
+  const file=input.files[0];
+  input.value='';
+  if(!file || !pendingManualYear){ pendingManualYear=null; return; }
+  const year=pendingManualYear;
+  pendingManualYear=null;
+  if(!window.XLSX){ showAdminToast('엑셀 라이브러리를 불러오지 못했습니다.','bad'); return; }
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    let rows=null;
+    for(const sheetName of wb.SheetNames){
+      const json=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{defval:''});
+      if(json.length && Object.keys(json[0]).some(k=>String(k).includes('차량번호'))){ rows=json; break; }
+    }
+    if(!rows) throw new Error('"차량번호" 열을 찾을 수 없습니다. 제공된 템플릿 형식을 확인해 주세요.');
+
+    await refreshDataFromStorage();
+    let monthsFilled=0, vehiclesTouched=new Set(), unmatched=[];
+    rows.forEach(r=>{
+      const plate=String(r['차량번호']||'').trim();
+      if(!plate) return;
+      if(!data.vehicles[plate]){
+        if(!REGISTRY_MAP[plate]){ unmatched.push(plate); return; }
+        data.vehicles[plate]={model:REGISTRY_MAP[plate].model,branch:REGISTRY_MAP[plate].branch,originalBranch:REGISTRY_MAP[plate].branch,active:true,trips:[]};
+      }
+      const v=data.vehicles[plate];
+      for(let m=1;m<=7;m++){
+        const rateKey1=`${m}월가동율(%)`, rateKey2=`${m}월`;
+        const distKey=`${m}월거리(km)`;
+        let rateVal=r[rateKey1];
+        if(rateVal===undefined||rateVal==='') rateVal=r[rateKey2];
+        if(rateVal===undefined||rateVal===''||rateVal===null) continue;
+        const distVal=r[distKey];
+        if(!v.manualMonthly) v.manualMonthly={};
+        if(!v.manualMonthly[year]) v.manualMonthly[year]={};
+        v.manualMonthly[year][m]={rate:Number(rateVal)||0,distance:Number(distVal)||0};
+        monthsFilled++; vehiclesTouched.add(plate);
+      }
+    });
+    if(monthsFilled===0) throw new Error('반영할 1~7월 데이터를 찾지 못했습니다. 값이 비어있지 않은지 확인해 주세요.');
+    await saveData();
+    renderAll();
+    showAdminToast(`수기기록 반영 완료 · ${year}년 · 차량 ${vehiclesTouched.size}대 · ${monthsFilled}개 월 데이터${unmatched.length?` (미등록 차량번호 ${unmatched.length}건은 제외됨)`:''}`,'good');
+  }catch(e){
+    showAdminToast('업로드 오류: '+e.message,'bad');
+  }
+}
+
 
 function parseFuelAmount(val){
   if(val===null||val===undefined||val==='') return 0;
