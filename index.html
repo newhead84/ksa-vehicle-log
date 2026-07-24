@@ -116,6 +116,27 @@
   }
   .login-err{color:var(--bad);font-size:13px;margin-top:8px;display:none;}
 
+  /* ===== 데스크탑 홈화면: 여백 축소 + 로고/버튼 확대 (모바일은 영향 없음) ===== */
+  @media (min-width:900px){
+    .role-logo-area{padding-top:max(70px, calc(var(--safe-top) + 60px));}
+    .role-logo-icon{font-size:68px;margin-bottom:16px;}
+    .role-logo-title{font-size:40px;margin-bottom:10px;}
+    .role-logo-sub{font-size:17px;}
+    .role-box{
+      max-width:640px;
+      border-radius:40px;
+      padding:48px 56px max(48px, var(--safe-bottom));
+    }
+    .role-eyebrow{font-size:13px;margin-bottom:12px;}
+    .role-title{font-size:30px;margin-bottom:8px;}
+    .role-sub{font-size:16px;margin-bottom:34px;}
+    .role-btns{gap:14px;}
+    .btn-role-user{padding:22px;font-size:19px;border-radius:16px;}
+    .btn-role-admin{padding:19px;font-size:17px;border-radius:16px;}
+    .admin-login-wrap input{padding:17px 14px;font-size:17px;}
+    .btn-login{padding:17px;font-size:16px;}
+  }
+
   /* ===== Main wrapper ===== */
   #mainWrap{display:none;padding:28px 32px 80px;}
 
