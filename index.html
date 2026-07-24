@@ -554,6 +554,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 
 <!-- ===== 역할 선택 오버레이 ===== -->
 <div id="roleOverlay">
@@ -890,6 +891,25 @@
 const FIREBASE_URL = 'https://ksa-vehicle-log-default-rtdb.asia-southeast1.firebasedatabase.app';
 const ADMIN_PW     = 'ksa2026';
 const APP_URL      = 'https://newhead84.github.io/ksa-vehicle-log/'; // ← QR에 사용할 앱 URL
+// ============================================================
+// ★ 점검요망 이메일 알림 설정 (EmailJS) ★
+// ------------------------------------------------------------
+// 1. https://www.emailjs.com 가입 (무료 플랜: 월 200통)
+// 2. [Email Services] 에서 Gmail 등 메일 계정 연결 → Service ID 확인
+// 3. [Email Templates] 에서 템플릿 생성 → Template ID 확인
+//    템플릿 본문에 아래 변수를 사용해 원하는 형식으로 작성하세요:
+//    {{plate}} {{branch}} {{submitter}} {{status}} {{detail}} {{submitted_at}} {{to_email}}
+// 4. [Account] > General 에서 Public Key 확인
+// 5. 아래 4개 값을 실제 값으로 교체
+//    (교체하지 않으면(=YOUR_ 로 시작하면) 알림 기능은 자동으로 비활성화되어 조용히 무시됩니다)
+// ============================================================
+const EMAILJS_PUBLIC_KEY  = 'FKYkua9Eho5keKczQ';
+const EMAILJS_SERVICE_ID  = 'service_g6e8xin';
+const EMAILJS_TEMPLATE_ID = 'template_iuxxjc5';
+const ADMIN_EMAIL         = 'newhead@ksa.or.kr'; // 알림 받을 관리자 이메일 (여러 명이면 템플릿에서 콤마로 처리)
+if(window.emailjs && EMAILJS_PUBLIC_KEY && !EMAILJS_PUBLIC_KEY.startsWith('YOUR_')){
+  emailjs.init({publicKey: EMAILJS_PUBLIC_KEY});
+}
 // ============================================================
 // ★ 개인사용 주유비 검증 기준값 ★
 // 네이버지도 유류비 계산 방식(4등급 연비 휘발유 기준)을 참고한 예상 최소 유류비 산정에 사용됩니다.
@@ -3079,6 +3099,31 @@ async function submitDirectInput(){
   showSubmitConfirm(submitter, plate, rows);
 }
 
+// 점검요망으로 제출된 운행기록이 있으면 관리자에게 이메일 알림 발송 (EmailJS)
+// - 정상 제출 흐름을 막지 않도록 실패해도 조용히 콘솔에만 기록합니다.
+async function notifyMaintenanceNeeded(plate, branch, submitter, rows){
+  const badRows = (rows||[]).filter(r=>r.status && r.status!=='정상');
+  if(!badRows.length) return;
+  if(!window.emailjs || !EMAILJS_PUBLIC_KEY || EMAILJS_PUBLIC_KEY.startsWith('YOUR_')){
+    console.warn('[점검요망 알림] EmailJS 설정이 완료되지 않아 이메일을 발송하지 않았습니다. (index.html 상단 EMAILJS_* 값을 설정하세요)');
+    return;
+  }
+  const detail = badRows.map(r=>`- ${r.dateFrom||''}${r.dateTo&&r.dateTo!==r.dateFrom?'~'+r.dateTo:''} / 행선지: ${r.dest||'-'} / 상태: ${r.status} / 비고: ${r.note||'(없음)'}`).join('\n');
+  try{
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: ADMIN_EMAIL,
+      plate,
+      branch: branch||'',
+      submitter,
+      status: badRows.map(r=>r.status).join(', '),
+      detail,
+      submitted_at: new Date().toLocaleString('ko-KR')
+    });
+  }catch(e){
+    console.error('[점검요망 알림] 이메일 발송 실패:', e);
+  }
+}
+
 async function doSubmit(submitter, plate, rows){
   // isoDate 계산 + trip 포맷 변환
   await refreshDataFromStorage();
@@ -3120,6 +3165,9 @@ async function doSubmit(submitter, plate, rows){
     return false;
   }
   await clearDraft();
+
+  // 점검요망 상태로 제출된 건이 있으면 관리자에게 이메일 알림 (실패해도 제출 자체는 정상 처리됨)
+  notifyMaintenanceNeeded(plate, branchAtTime, submitter, rows);
 
   document.getElementById('tripRows').innerHTML='';
   document.getElementById('userPlateSelect').value='';
