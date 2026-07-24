@@ -1201,6 +1201,16 @@ const KR_HOLIDAYS = new Set([
   '2028-12-25',                                           // 크리스마스
 ]);
 function iso(d){ return d.toISOString().slice(0,10); }
+// 로컬(한국) 기준 오늘 날짜를 YYYY-MM-DD로 반환합니다.
+// iso()는 UTC 기준이라 자정~오전 9시 사이에는 하루 전 날짜가 나올 수 있어,
+// 운행기간 기본값처럼 "오늘"이 명확해야 하는 곳에는 이 함수를 사용합니다.
+function todayLocalISO(){
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
 function isWeekend(d){ const w=d.getDay(); return w===0||w===6; }
 function isHoliday(d){ return KR_HOLIDAYS.has(iso(d)); }
 function isBizDay(d){ return !isWeekend(d)&&!isHoliday(d); }
@@ -2618,6 +2628,7 @@ function onDateFromChange(inp, id){
 function addTripRow(prefillStart = null){
   const id = 'row' + (++rowCounter);
   const rows = document.querySelectorAll('.trip-card');
+  const todayStr = todayLocalISO();
 
   // 이전 행의 종료거리를 시작거리로 자동채움
   if(prefillStart === null && rows.length > 0){
@@ -2639,9 +2650,9 @@ function addTripRow(prefillStart = null){
         <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;">
           <div>
             <input type="text" inputmode="numeric" class="tr-date-from"
-              placeholder="YYYY-MM-DD" maxlength="10"
+              placeholder="YYYY-MM-DD" maxlength="10" value="${todayStr}"
               oninput="autoFormatDate(this,'${id}')"
-              style="border:1.5px solid var(--line);border-radius:12px;padding:12px 10px;font-size:14px;background:#fff;width:100%;text-align:center;font-family:'Paperlogy',sans-serif;display:block;">
+              style="border:1.5px solid var(--good);border-radius:12px;padding:12px 10px;font-size:14px;background:#fff;width:100%;text-align:center;font-family:'Paperlogy',sans-serif;display:block;">
             <label style="display:flex;align-items:center;justify-content:center;gap:5px;margin-top:6px;cursor:pointer;font-size:12px;color:var(--muted);">
               <input type="date" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;" onchange="syncFromPicker(this,'${id}','from')">
               📅 달력 선택
@@ -2650,9 +2661,9 @@ function addTripRow(prefillStart = null){
           <span style="color:var(--muted);font-size:14px;font-weight:700;text-align:center;">~</span>
           <div>
             <input type="text" inputmode="numeric" class="tr-date-to"
-              placeholder="YYYY-MM-DD" maxlength="10"
+              placeholder="YYYY-MM-DD" maxlength="10" value="${todayStr}"
               oninput="autoFormatDate(this,'${id}')"
-              style="border:1.5px solid var(--line);border-radius:12px;padding:12px 10px;font-size:14px;background:#fff;width:100%;text-align:center;font-family:'Paperlogy',sans-serif;display:block;">
+              style="border:1.5px solid var(--good);border-radius:12px;padding:12px 10px;font-size:14px;background:#fff;width:100%;text-align:center;font-family:'Paperlogy',sans-serif;display:block;">
             <label style="display:flex;align-items:center;justify-content:center;gap:5px;margin-top:6px;cursor:pointer;font-size:12px;color:var(--muted);">
               <input type="date" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;" onchange="syncFromPicker(this,'${id}','to')">
               📅 달력 선택
