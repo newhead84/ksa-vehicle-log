@@ -1351,6 +1351,7 @@ async function loadData(){
     else{
       if(!data.vehicles[v.plate].model) data.vehicles[v.plate].model=v.model;
       if(data.vehicles[v.plate].active===undefined) data.vehicles[v.plate].active=true;
+      if(!Array.isArray(data.vehicles[v.plate].trips)) data.vehicles[v.plate].trips=[];
     }
   });
   if(currentRole==='admin') renderAll();
@@ -1403,6 +1404,7 @@ async function refreshDataFromStorage(){
     else{
       if(!data.vehicles[v.plate].model) data.vehicles[v.plate].model=v.model;
       if(data.vehicles[v.plate].active===undefined) data.vehicles[v.plate].active=true;
+      if(!Array.isArray(data.vehicles[v.plate].trips)) data.vehicles[v.plate].trips=[];
     }
   });
 }
@@ -3048,6 +3050,7 @@ async function doSubmit(submitter, plate, rows){
   // isoDate 계산 + trip 포맷 변환
   await refreshDataFromStorage();
   if(!data.vehicles[plate]) data.vehicles[plate]={model:REGISTRY_MAP[plate]?.model||'',branch:REGISTRY_MAP[plate]?.branch||'미배정',originalBranch:REGISTRY_MAP[plate]?.branch||'미배정',active:true,trips:[]};
+  if(!Array.isArray(data.vehicles[plate].trips)) data.vehicles[plate].trips=[];
   const branchAtTime = data.vehicles[plate].branch;
 
   const existingKeys = new Set((data.vehicles[plate].trips||[]).map(t=>`${t.isoDate}|${t.startOdo}|${t.endOdo}`));
