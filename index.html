@@ -22,6 +22,9 @@
 
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -811,6 +814,27 @@ const FIREBASE_URL = 'https://ksa-vehicle-log-default-rtdb.asia-southeast1.fireb
 const ADMIN_PW     = 'ksa2026';
 const APP_URL      = 'https://newhead84.github.io/ksa-vehicle-log/'; // ← QR에 사용할 앱 URL
 // ============================================================
+// ★ 개인사용 주유비 검증 기준값 ★
+// 네이버지도 유류비 계산 방식(4등급 연비 휘발유 기준)을 참고한 예상 최소 유류비 산정에 사용됩니다.
+// 공용차량은 전 차종 휘발유로 고정 운영되므로 유종 구분 없이 휘발유 단가만 사용합니다.
+// FUEL_EFF_KMPL       : 4등급 휘발유 승용차 평균 연비(km/L) — 필요 시 이 값만 수정
+// FUEL_PRICE_PER_L    : 리터당 휘발유 가격(원) — 기본값(폴백). 아래 FUEL_PRICE_NODE 자동 갱신값이
+//                       있으면 그 값이 우선 적용되고, 갱신값을 못 불러올 때만 이 기본값이 사용됩니다.
+// FUEL_PRICE_NODE     : 오피넷 전국 평균 휘발유가(B027)를 GitHub Actions가 매일 자동으로 써주는
+//                       Firebase 경로. 총무 담당자가 수동으로 값을 바꿀 필요가 없습니다.
+//                       (설정 방법은 프로젝트에 첨부된 setup-fuel-price-autosync.md 참고)
+const FUEL_EFF_KMPL     = 10;
+const FUEL_PRICE_PER_L  = 1880; // 자동 갱신 실패 시 사용되는 폴백 기본값
+const FUEL_PRICE_NODE   = 'fuel-price';
+// ============================================================
+// ★ 운행정보 입력값 오류 차단 기준값 (초과 시 저장 자체를 막습니다) ★
+// MAX_TRIP_DISTANCE_KM : 1회 운행기록의 주행거리(종료거리-시작거리) 상한. 종료거리 오타로 인한
+//                        비정상적인 거리 입력을 차단합니다. (예: 1,000 이상이면 오류)
+// MAX_FUEL_AMOUNT       : 1회 운행기록의 주유비 상한. 공용차량 1회 주유 한도를 넘는 금액을
+//                        오타/오입력으로 걸러냅니다. (예: 150,000원 이상이면 오류)
+const MAX_TRIP_DISTANCE_KM = 1000;
+const MAX_FUEL_AMOUNT      = 150000;
+// ============================================================
 
 const STORAGE_KEY  = 'fleet-data';
 
@@ -827,6 +851,34 @@ async function fbSet(path, value){
   });
   if(!r.ok) throw new Error(`Firebase 쓰기 실패 (${r.status})`);
   return r.json();
+}
+
+// 오피넷 자동 갱신 휘발유 단가 (기본값은 FUEL_PRICE_PER_L 폴백)
+let currentFuelPricePerL = FUEL_PRICE_PER_L;
+let fuelPriceUpdatedAt = null;
+let fuelPriceIsLive = false;
+
+// GitHub Actions가 매일 Firebase(${FUEL_PRICE_NODE})에 기록해두는 오피넷 전국 평균 휘발유가를 읽어와 반영
+async function syncFuelPriceFromOpinet(){
+  try{
+    const res = await fbGet(FUEL_PRICE_NODE);
+    if(res && Number(res.price) > 0){
+      currentFuelPricePerL = Number(res.price);
+      fuelPriceUpdatedAt = res.updatedAt || null;
+      fuelPriceIsLive = true;
+    }
+  }catch(e){
+    // 갱신값을 못 가져오면 폴백 기본값(FUEL_PRICE_PER_L) 그대로 사용
+  }
+  refreshAllFuelPriceNotes();
+}
+
+function refreshAllFuelPriceNotes(){
+  document.querySelectorAll('[id^="fuelrefprice-"]').forEach(el=>{
+    el.textContent = fuelPriceIsLive
+      ? `기준 휘발유 단가: ${currentFuelPricePerL.toLocaleString()}원/L (오피넷 자동 갱신${fuelPriceUpdatedAt?', '+fuelPriceUpdatedAt+' 기준':''})`
+      : `기준 휘발유 단가: ${currentFuelPricePerL.toLocaleString()}원/L (기본값 적용 중 — 자동 갱신 미연결)`;
+  });
 }
 
 let data = { vehicles: {} };
@@ -1191,14 +1243,17 @@ function monthCellHtml(rate,hasAnyTrip){
 }
 
 
-// Firebase 미설정 경고
+// Firebase 미설정/연결 실패 경고
 function showFirebaseWarning(msg){
+  console.error('[KSA 차량관리] Firebase 연결 문제:', msg||'FIREBASE_URL 미설정');
   const existing=document.getElementById('firebaseWarnBanner');
-  if(existing) return;
+  if(existing) existing.remove();
   const div=document.createElement('div');
   div.id='firebaseWarnBanner';
-  div.style.cssText='background:#FEF3C7;border:1px solid #D97706;border-radius:12px;padding:14px 18px;margin-bottom:18px;font-size:13px;color:#92400E;';
-  div.innerHTML=`<b>⚠ Firebase 미설정</b><br>${msg||'FIREBASE_URL을 실제 Firebase Realtime Database URL로 교체해 주세요.'}<br><span style="font-size:11px;opacity:.8;">파일 상단 const FIREBASE_URL = '...' 부분을 수정하세요.</span>`;
+  div.style.cssText='background:#FEE2E2;border:2px solid var(--bad);border-radius:12px;padding:14px 18px;margin-bottom:18px;font-size:13px;color:#991B1B;font-weight:600;';
+  div.innerHTML=msg
+    ? `<b>⚠ 데이터 동기화 실패</b><br>${msg}<br><span style="font-size:11.5px;font-weight:400;opacity:.9;">지금 화면에 보이는 데이터는 최신이 아닐 수 있습니다. 사내망 방화벽이 firebasedatabase.app 접속을 막고 있지 않은지, 또는 브라우저 캐시가 오래되지 않았는지(Ctrl+Shift+R 새로고침) 확인해 주세요.</span>`
+    : `<b>⚠ Firebase 미설정</b><br>FIREBASE_URL을 실제 Firebase Realtime Database URL로 교체해 주세요.<br><span style="font-size:11px;font-weight:400;opacity:.8;">파일 상단 const FIREBASE_URL = '...' 부분을 수정하세요.</span>`;
   const wrap=document.getElementById('mainWrap');
   if(wrap) wrap.prepend(div);
 }
@@ -1215,6 +1270,7 @@ async function loadData(){
     try{
       const res = await fbGet(STORAGE_KEY);
       if(res && typeof res === 'object') data = res;
+      document.getElementById('firebaseWarnBanner')?.remove();
     }catch(e){
       showFirebaseWarning(`Firebase 연결 실패: ${e.message}`);
     }
@@ -1927,6 +1983,26 @@ function toggleEditMode(plate){
 async function saveTripEdits(plate){
   const table=document.getElementById('tripTable-'+plate);
   if(!table||!data.vehicles[plate]) return;
+
+  // 저장 전 입력값 검증 (오타로 인한 비정상 거리/금액 차단)
+  for(const tr of table.querySelectorAll('tbody tr')){
+    const startInp=tr.querySelector('[data-f="startOdo"]');
+    const endInp=tr.querySelector('[data-f="endOdo"]');
+    const fuelInp=tr.querySelector('[data-f="fuel"]');
+    const s=Number(startInp?.value)||0;
+    const e=Number(endInp?.value)||0;
+    const dist=Math.max(0, e-s);
+    const fuel=fuelInp?parseFuelAmount(fuelInp.value):0;
+    if(dist>=MAX_TRIP_DISTANCE_KM){
+      showAdminToast(`저장 실패: 주행거리가 ${dist.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`,'bad');
+      return;
+    }
+    if(fuel>=MAX_FUEL_AMOUNT){
+      showAdminToast(`저장 실패: 주유비가 ${fuel.toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`,'bad');
+      return;
+    }
+  }
+
   // 편집 전 시점의 정렬본 키 목록 수집
   const oldTrips=data.vehicles[plate].trips.slice().sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||''));
   const rowKeys=[];
@@ -2227,6 +2303,12 @@ function parseFuelAmount(val){
   return digits?Number(digits):0;
 }
 function extractPlateFromName(name){ const m=name.match(/(\d{2,3}[가-힣]\d{4})/); return m?m[1]:''; }
+
+// 주행거리 대비 예상 최소 유류비 (네이버지도 방식: 4등급 연비 휘발유 기준, 오피넷 자동 갱신 단가 사용)
+function estimateMinFuelCost(distanceKm){
+  const d = Number(distanceKm)||0;
+  return Math.round((d / FUEL_EFF_KMPL) * currentFuelPricePerL);
+}
 function fileToBase64(file){ return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);}); }
 
 
@@ -2492,11 +2574,11 @@ function addTripRow(prefillStart = null){
       <div class="form-row-2">
         <div class="form-field">
           <label>시작거리 (km)</label>
-          <input type="number" class="tr-start${prefillStart!==null?' auto-filled':''}" value="${prefillStart!==null?prefillStart:''}" placeholder="0" oninput="calcRowDist('${id}');scheduleDraft()">
+          <input type="number" class="tr-start${prefillStart!==null?' auto-filled':''}" value="${prefillStart!==null?prefillStart:''}" placeholder="0" oninput="calcRowDist('${id}');checkFuelVsDistance('${id}');scheduleDraft()">
         </div>
         <div class="form-field">
           <label>종료거리 (km)</label>
-          <input type="number" class="tr-end" placeholder="0" oninput="calcRowDist('${id}');autoFillNextRow('${id}');scheduleDraft()">
+          <input type="number" class="tr-end" placeholder="0" oninput="calcRowDist('${id}');autoFillNextRow('${id}');checkFuelVsDistance('${id}');scheduleDraft()">
         </div>
       </div>
       <div class="dist-badge"><span class="dist-label">주행거리</span><span id="dist-${id}">–</span><span class="dist-unit">km</span></div>
@@ -2526,6 +2608,7 @@ function addTripRow(prefillStart = null){
         </label>
         <div class="personal-notice" id="personal-${id}" style="display:none;background:#EFF6FF;border:1px solid #3B82F6;border-radius:10px;padding:10px 12px;margin-top:4px;font-size:12.5px;color:#1D4ED8;line-height:1.6;">
           📌 주말·공휴일 운행 시 운행거리에 해당하는 주유비는 <b>본인이 직접 부담</b>해야 합니다.
+          <div id="fuelrefprice-${id}" style="margin-top:6px;font-size:11px;color:#1D4ED8;opacity:.8;"></div>
         </div>
       </div>
       <div class="check-field">
@@ -2536,7 +2619,8 @@ function addTripRow(prefillStart = null){
           <span class="tr-fuel-required" style="display:none;color:var(--bad);font-size:12px;margin-left:4px;">* 필수</span>
         </label>
         <div class="fuel-amt" id="fuel-${id}">
-          <input type="text" inputmode="numeric" class="tr-fuel check-sub-input" placeholder="주유금액 입력 (원)" oninput="formatFuelInput(this);scheduleDraft()">
+          <input type="text" inputmode="numeric" class="tr-fuel check-sub-input" placeholder="주유금액 입력 (원)" oninput="formatFuelInput(this);checkFuelVsDistance('${id}');scheduleDraft()">
+          <div id="fuelwarn-${id}" style="display:none;margin-top:6px;font-size:12px;color:var(--bad);background:var(--bad-soft);border-radius:8px;padding:8px 10px;line-height:1.5;"></div>
         </div>
       </div>
       <div class="check-field">
@@ -2630,6 +2714,7 @@ function toggleDaeCha(chk, id){
 function togglePersonalUse(chk, id){
   const notice = document.getElementById('personal-'+id);
   if(notice) notice.style.display = chk.checked ? 'block' : 'none';
+  if(chk.checked) refreshAllFuelPriceNotes();
   // 개인사용 체크 시 주유비 필수 표시
   const card = document.getElementById(id);
   const req = card?.querySelector('.tr-fuel-required');
@@ -2642,6 +2727,7 @@ function togglePersonalUse(chk, id){
       toggleFuelField(fuelChk, id);
     }
   }
+  checkFuelVsDistance(id);
   scheduleDraft();
 }
 
@@ -2664,7 +2750,31 @@ function formatFuelInput(inp){
 function toggleFuelField(chk, id){
   const fuel = document.getElementById('fuel-'+id);
   if(fuel) fuel.style.display = chk.checked ? 'block' : 'none';
+  checkFuelVsDistance(id);
   scheduleDraft();
+}
+
+// 개인사용 건의 주유비가 주행거리 대비 예상 최소 금액에 못 미치면 실시간 경고 표시
+function checkFuelVsDistance(id){
+  const card = document.getElementById(id);
+  const warn = document.getElementById('fuelwarn-'+id);
+  if(!card || !warn) return;
+  const isPersonal = card.querySelector('.tr-personal-chk')?.checked || false;
+  const hasFuel = card.querySelector('.tr-fuel-chk')?.checked || false;
+  if(!isPersonal || !hasFuel){ warn.style.display='none'; return; }
+  const s = Number(card.querySelector('.tr-start')?.value)||0;
+  const e = Number(card.querySelector('.tr-end')?.value)||0;
+  const dist = Math.max(0, e-s);
+  const fuelRaw = card.querySelector('.tr-fuel')?.value.replace(/,/g,'') || '';
+  const fuel = parseFuelAmount(fuelRaw);
+  if(dist<=0 || !fuel){ warn.style.display='none'; return; }
+  const minCost = estimateMinFuelCost(dist);
+  if(fuel < minCost){
+    warn.textContent = `⚠ 주행 ${dist.toLocaleString()}km 기준 예상 최소 유류비는 약 ${minCost.toLocaleString()}원입니다. 입력하신 금액(${fuel.toLocaleString()}원)이 이보다 적습니다. 금액을 확인해 주세요.`;
+    warn.style.display='block';
+  } else {
+    warn.style.display='none';
+  }
 }
 
 function collectRows(){
@@ -2778,13 +2888,21 @@ async function submitDirectInput(){
     if(r.endOdo <= r.startOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리가 시작거리보다 작습니다.`); return; }
     if(!r.dest){ showUserFormErr(`${i+1}번 운행기록: 행선지를 입력해 주세요.`); return; }
     if(r.isPersonal && !r.fuel){ showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유비를 입력해 주세요.`); return; }
+    if(r.distance >= MAX_TRIP_DISTANCE_KM){ showUserFormErr(`${i+1}번 운행기록: 주행거리가 ${r.distance.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`); return; }
+    if(r.fuel >= MAX_FUEL_AMOUNT){ showUserFormErr(`${i+1}번 운행기록: 주유비가 ${Number(r.fuel).toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`); return; }
   }
 
-  // 주행거리 1000km 이상 행 체크
-  const longRows = rows.map((r,i)=>({i, dist: Math.max(0,(Number(r.endOdo)||0)-(Number(r.startOdo)||0))})).filter(x=>x.dist>=1000);
-  if(longRows.length > 0){
-    const msg = longRows.map(x=>`운행 #${x.i+1}: ${x.dist.toLocaleString()} km`).join(', ');
-    if(!confirm(`⚠️ 주행거리가 1,000km 이상인 기록이 있습니다.\n\n${msg}\n\n입력값이 맞는지 확인해 주세요.\n계속 진행하시겠습니까?`)) return;
+  // 개인사용 건: 주행거리 대비 주유비 과소 입력 경고 (네이버지도 방식, 4등급 연비 휘발유 기준)
+  const underpaidRows = rows
+    .map((r,i)=>({i, r, dist: Math.max(0,(Number(r.endOdo)||0)-(Number(r.startOdo)||0))}))
+    .filter(x=>x.r.isPersonal)
+    .map(x=>({...x, minCost: estimateMinFuelCost(x.dist)}))
+    .filter(x=>(Number(x.r.fuel)||0) < x.minCost);
+  if(underpaidRows.length > 0){
+    const msg = underpaidRows.map(x=>
+      `운행 #${x.i+1}: 주행 ${x.dist.toLocaleString()}km → 예상 최소 유류비 약 ${x.minCost.toLocaleString()}원 / 입력액 ${Number(x.r.fuel||0).toLocaleString()}원`
+    ).join('\n');
+    if(!confirm(`⚠️ 개인사용 주유비가 주행거리 대비 예상 금액(4등급 연비 휘발유 기준)보다 적게 입력되었습니다.\n\n${msg}\n\n입력하신 주유비가 맞는지 확인해 주세요.\n계속 진행하시겠습니까?`)) return;
   }
 
   // 검증 통과 → 팝업 표시
@@ -3128,6 +3246,28 @@ function recalcUeDist(inp){
 
 async function saveUserEdits(name){
   const rows=document.querySelectorAll('#userEditBody [data-plate]');
+  const err=document.getElementById('userEditErr');
+
+  // 저장 전 입력값 검증 (오타로 인한 비정상 거리/금액 차단)
+  for(const tr of rows){
+    const startInp=tr.querySelector('[data-f="startOdo"]');
+    const endInp=tr.querySelector('[data-f="endOdo"]');
+    const fuelInp=tr.querySelector('[data-f="fuel"]');
+    const s=Number(startInp?.value)||0;
+    const e=Number(endInp?.value)||0;
+    const dist=Math.max(0, e-s);
+    const fuel=fuelInp?parseFuelAmount(fuelInp.value):0;
+    if(dist>=MAX_TRIP_DISTANCE_KM){
+      if(err){ err.textContent=`저장 실패: 주행거리가 ${dist.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`; err.style.display='block'; }
+      return;
+    }
+    if(fuel>=MAX_FUEL_AMOUNT){
+      if(err){ err.textContent=`저장 실패: 주유비가 ${fuel.toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`; err.style.display='block'; }
+      return;
+    }
+  }
+  if(err) err.style.display='none';
+
   // 저장 직전 최신 데이터 재조회 후 키 기반 매칭 (동시 수정 유실 방지)
   await refreshDataFromStorage();
   rows.forEach(tr=>{
@@ -3160,6 +3300,8 @@ function closeUserEdit(){
 
 // 초기 제출 로그 렌더
 renderSubmitLog();
+// 오피넷 자동 갱신 휘발유 단가 동기화 (GitHub Actions가 Firebase에 매일 기록한 값)
+syncFuelPriceFromOpinet();
 </script>
 </body>
 </html>
