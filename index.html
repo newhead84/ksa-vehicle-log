@@ -2780,9 +2780,12 @@ function addTripRow(prefillStart = null){
           </div>
         </div>
       </div>
-      <div class="form-field">
-        <label>비고 (선택)</label>
-        <input type="text" class="tr-note" placeholder="특이사항" oninput="scheduleDraft()">
+      <div class="form-field" id="noteWrap-${id}">
+        <label>비고 <span id="noteReqTag-${id}" style="display:none;color:var(--bad);font-weight:700;">* 필수</span><span id="noteOptTag-${id}" style="color:var(--muted);font-weight:400;">(선택)</span></label>
+        <input type="text" class="tr-note" id="noteInput-${id}" placeholder="특이사항" oninput="scheduleDraft()">
+        <div id="noteGuide-${id}" style="display:none;margin-top:6px;font-size:12.5px;color:var(--bad);background:var(--bad-soft);border-radius:8px;padding:8px 10px;line-height:1.5;">
+          ⚠ 점검요망 선택 시, 비고란에 <b>구체적인 점검 필요 내용</b>을 반드시 입력해 주세요.<br>예) 엔진 소음, 타이어 마모, 경고등 점등, 브레이크 이상 등
+        </div>
       </div>
     </div>`;
   document.getElementById('tripRows').appendChild(card);
@@ -2837,6 +2840,25 @@ function setStatus(btn, val){
   const toggle = btn.closest('.status-toggle');
   toggle.querySelectorAll('.status-btn').forEach(b=>{b.className='status-btn';});
   btn.className = val==='정상' ? 'status-btn active-good' : 'status-btn active-bad';
+
+  // 점검요망 선택 시 비고란에 구체적인 내용을 적도록 안내 표시
+  const card = btn.closest('.trip-card');
+  const id = card ? card.id : '';
+  const guide = document.getElementById('noteGuide-'+id);
+  const reqTag = document.getElementById('noteReqTag-'+id);
+  const optTag = document.getElementById('noteOptTag-'+id);
+  const noteInp = document.getElementById('noteInput-'+id);
+  if(guide){
+    const isBad = val==='점검요망';
+    guide.style.display = isBad ? 'block' : 'none';
+    if(reqTag) reqTag.style.display = isBad ? 'inline' : 'none';
+    if(optTag) optTag.style.display = isBad ? 'none' : 'inline';
+    if(noteInp){
+      noteInp.style.borderColor = isBad ? 'var(--bad)' : '';
+      noteInp.placeholder = isBad ? '점검이 필요한 내용을 구체적으로 입력해 주세요' : '특이사항';
+      if(isBad) noteInp.focus();
+    }
+  }
   scheduleDraft();
 }
 
@@ -3077,6 +3099,7 @@ async function submitDirectInput(){
     if(r.endOdo <= r.startOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리가 시작거리보다 작습니다.`); return; }
     if(!r.dest){ showUserFormErr(`${i+1}번 운행기록: 행선지를 입력해 주세요.`); return; }
     if(r.isPersonal && !r.fuel){ showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유비를 입력해 주세요.`); return; }
+    if(r.status==='점검요망' && !r.note){ showUserFormErr(`${i+1}번 운행기록: 점검요망으로 선택하셨습니다. 비고란에 어떤 부분이 이상한지 구체적으로 입력해 주세요.`); return; }
     if(r.distance >= MAX_TRIP_DISTANCE_KM){ showUserFormErr(`${i+1}번 운행기록: 주행거리가 ${r.distance.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`); return; }
     if(r.fuel >= MAX_FUEL_AMOUNT){ showUserFormErr(`${i+1}번 운행기록: 주유비가 ${Number(r.fuel).toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`); return; }
   }
