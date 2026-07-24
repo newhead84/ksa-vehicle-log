@@ -1309,8 +1309,15 @@ function stopAdminPolling(){
 }
 
 async function saveData(){
-  try{ await fbSet(STORAGE_KEY, data); }
-  catch(e){ console.info('저장 실패:', e.message); }
+  try{
+    await fbSet(STORAGE_KEY, data);
+    document.getElementById('firebaseWarnBanner')?.remove();
+    return true;
+  }catch(e){
+    console.error('[KSA 차량관리] 저장 실패:', e.message);
+    showFirebaseWarning(`저장 실패: ${e.message} — 방금 입력/수정한 내용이 서버에 반영되지 않았습니다. 새로고침하거나 다른 기기에서 열면 사라진 것처럼 보이는 것이 정상이며, 실제로 저장이 안 된 상태입니다.`);
+    return false;
+  }
 }
 
 // 저장 직전 최신 데이터를 다시 읽어 병합 (동시 제출 데이터 유실 방지)
@@ -2035,7 +2042,11 @@ async function saveTripEdits(plate){
       target.isoDate=target.usageDates[0];
     }
   });
-  await saveData();
+  const saved = await saveData();
+  if(!saved){
+    showAdminToast('⚠ 저장 실패: 서버에 반영되지 않았습니다. 인터넷 연결을 확인한 후 다시 "저장"을 눌러주세요.','bad');
+    return; // 수정모드 유지 → 입력값 보존, 재시도 가능
+  }
   renderAll();
   toggleEditMode(plate);
   openVehicle(plate);
@@ -2045,7 +2056,8 @@ async function toggleVehicleActive(plate){
   const v=data.vehicles[plate];
   if(!v) return;
   v.active=v.active===false?true:false;
-  await saveData();
+  const saved = await saveData();
+  if(!saved){ v.active=v.active===false?true:false; showAdminToast('⚠ 저장 실패: 서버에 반영되지 않았습니다.','bad'); return; }
   renderAll();
   closeModal();
   openVehicle(plate);
@@ -2065,7 +2077,9 @@ async function deleteTrip(plate,idx){
     if(`${t.isoDate}|${t.startOdo}|${t.endOdo}|${t.submitter||''}`===key){removed=true;return false;}
     return true;
   });
-  await saveData();renderAll();openVehicle(plate);
+  const saved = await saveData();
+  if(!saved) showAdminToast('⚠ 저장 실패: 삭제가 서버에 반영되지 않았습니다.','bad');
+  renderAll();openVehicle(plate);
 }
 
 document.addEventListener('change',e=>{
@@ -2082,7 +2096,9 @@ async function changeBranch(plate){
   let newBranch=sel.value;
   if(newBranch==='__custom__'){newBranch=custom.value.trim();if(!newBranch){custom.style.borderColor='var(--bad)';custom.focus();return;}}
   data.vehicles[plate].branch=newBranch;
-  await saveData();renderAll();openVehicle(plate);
+  const saved = await saveData();
+  if(!saved) showAdminToast('⚠ 저장 실패: 지역구분 변경이 서버에 반영되지 않았습니다.','bad');
+  renderAll();openVehicle(plate);
 }
 
 // ============================================================
@@ -2282,7 +2298,8 @@ async function handleManualMonthlyUpload(input){
       }
     });
     if(monthsFilled===0) throw new Error('반영할 1~7월 데이터를 찾지 못했습니다. 값이 비어있지 않은지 확인해 주세요.');
-    await saveData();
+    const saved = await saveData();
+    if(!saved) throw new Error('서버 저장에 실패했습니다. 인터넷 연결을 확인한 후 다시 시도해 주세요.');
     renderAll();
     showAdminToast(`수기기록 반영 완료 · ${year}년 · 차량 ${vehiclesTouched.size}대 · ${monthsFilled}개 월 데이터${unmatched.length?` (미등록 차량번호 ${unmatched.length}건은 제외됨)`:''}`,'good');
   }catch(e){
@@ -2945,7 +2962,11 @@ async function doSubmit(submitter, plate, rows){
     added++;
   });
 
-  await saveData();
+  const saved = await saveData();
+  if(!saved){
+    showUserFormErr('⚠ 서버 저장에 실패했습니다. 방금 입력한 내용은 화면에 남아있으니, 인터넷 연결을 확인한 후 "제출하기"를 다시 눌러주세요.');
+    return;
+  }
   await clearDraft();
 
   document.getElementById('tripRows').innerHTML='';
@@ -3153,7 +3174,8 @@ async function confirmAddVehicle(){
     errEl.textContent=`'${plate}'는 이미 등록된 차량입니다.`;errEl.style.display='block';return;
   }
   data.vehicles[plate]={model,branch,originalBranch:branch,active:true,addedManually:true,addedAt:new Date().toISOString(),trips:data.vehicles[plate]?.trips||[]};
-  await saveData();
+  const saved = await saveData();
+  if(!saved){ errEl.textContent='⚠ 저장 실패: 서버에 반영되지 않았습니다. 인터넷 연결을 확인한 후 다시 시도해 주세요.'; errEl.style.display='block'; return; }
   renderAll();
   closeModal();
 }
@@ -3289,7 +3311,11 @@ async function saveUserEdits(name){
       t.isoDate=t.usageDates[0];
     }
   });
-  await saveData();
+  const saved = await saveData();
+  if(!saved){
+    if(err){ err.textContent='⚠ 서버 저장에 실패했습니다. 인터넷 연결을 확인한 후 다시 "수정 내용 저장"을 눌러주세요.'; err.style.display='block'; }
+    return;
+  }
   document.querySelectorAll('.ue-saved').forEach(el=>el.style.display='inline');
   setTimeout(()=>document.querySelectorAll('.ue-saved').forEach(el=>el.style.display='none'),3000);
 }
