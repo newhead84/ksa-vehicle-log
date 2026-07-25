@@ -729,9 +729,15 @@
     <div style="padding:14px 18px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <span style="font-size:13px;color:var(--muted);">조회할 제출자 이름</span>
       <input id="searchSubmitterInput" style="border:1px solid var(--line);border-radius:7px;padding:7px 11px;font-family:'Paperlogy';font-size:13px;width:140px;" placeholder="이름 입력">
+      <span style="font-size:13px;color:var(--muted);margin-left:4px;">조회기간</span>
+      <input type="date" id="searchDateFrom" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-family:'Paperlogy';font-size:13px;">
+      <span style="color:var(--muted);font-size:13px;">~</span>
+      <input type="date" id="searchDateTo" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-family:'Paperlogy';font-size:13px;">
+      <button class="btn btn-ghost" style="padding:8px 12px;font-size:12.5px;" onclick="clearUserEditDateRange()">기간 초기화</button>
       <button class="btn btn-primary" style="padding:8px 16px;font-size:13px;" onclick="loadUserEditable()">조회</button>
     </div>
     <div id="userEditErr" class="user-edit-err"></div>
+    <div id="userEditSummary" style="padding:0 18px;font-size:12.5px;color:var(--muted);"></div>
     <div id="userEditBody" style="padding:14px 18px;"></div>
   </div>
 
@@ -3194,6 +3200,10 @@ function togglePersonalUse(chk, id){
       fuelChk.checked = true;
       toggleFuelField(fuelChk, id);
     }
+    // 개인사용(주말·공휴일)과 출퇴근사용은 동시에 선택할 수 없음 → 출퇴근 선택 해제
+    card?.querySelectorAll('.commute-btn.active-commute').forEach(b=>b.classList.remove('active-commute'));
+    const commuteNotice = document.getElementById('commute-'+id);
+    if(commuteNotice) commuteNotice.style.display='none';
   }
   checkFuelVsDistance(id);
   scheduleDraft();
@@ -3211,6 +3221,12 @@ function setCommuteDirection(btn, id){
   }else{
     btn.classList.add('active-commute');
     if(notice) notice.style.display = 'block';
+    // 출퇴근사용과 개인사용(주말·공휴일)은 동시에 선택할 수 없음 → 개인사용 선택 해제
+    const personalChk = card.querySelector('.tr-personal-chk');
+    if(personalChk && personalChk.checked){
+      personalChk.checked = false;
+      togglePersonalUse(personalChk, id);
+    }
   }
   scheduleDraft();
 }
@@ -3732,6 +3748,15 @@ async function confirmAddVehicle(){
   closeModal();
 }
 
+// 조회기간 입력값 초기화 후 재조회
+function clearUserEditDateRange(){
+  const fromInp=document.getElementById('searchDateFrom');
+  const toInp=document.getElementById('searchDateTo');
+  if(fromInp) fromInp.value='';
+  if(toInp) toInp.value='';
+  if((document.getElementById('searchSubmitterInput').value||'').trim()) loadUserEditable();
+}
+
 // ============================================================
 // 사용자 제출 기록 수정
 // ============================================================
@@ -3739,20 +3764,42 @@ function loadUserEditable(){
   const name=(document.getElementById('searchSubmitterInput').value||'').trim();
   const err=document.getElementById('userEditErr');
   const body=document.getElementById('userEditBody');
-  if(!name){err.textContent='이름을 입력해 주세요.';err.style.display='block';return;}
+  const summary=document.getElementById('userEditSummary');
+  if(!name){err.textContent='이름을 입력해 주세요.';err.style.display='block';if(summary)summary.textContent='';return;}
+  const periodFrom=document.getElementById('searchDateFrom')?.value||'';
+  const periodTo=document.getElementById('searchDateTo')?.value||'';
+  if(periodFrom && periodTo && periodTo<periodFrom){
+    err.textContent='조회기간이 올바르지 않습니다. 종료일이 시작일보다 빠릅니다.';err.style.display='block';if(summary)summary.textContent='';return;
+  }
   err.style.display='none';
 
   // 이름 기준으로 내 제출 기록 검색
-  const found=[]; // [{plate, tripIdx, trip}]
+  let found=[]; // [{plate, tripIdx, trip}]
   Object.keys(data.vehicles).forEach(plate=>{
     (data.vehicles[plate].trips||[]).forEach((t,i)=>{
       if((t.submitter||'')=== name) found.push({plate,tripIdx:i,trip:t});
     });
   });
 
+  // 조회기간이 설정된 경우, 운행기간(시작일~종료일)이 조회기간과 겹치는 건만 표시
+  if(periodFrom || periodTo){
+    found=found.filter(f=>{
+      const tFrom=f.trip.isoDate||'';
+      const tTo=f.trip.dateTo||f.trip.isoDate||'';
+      if(periodFrom && tTo<periodFrom) return false;
+      if(periodTo && tFrom>periodTo) return false;
+      return true;
+    });
+  }
+
+  if(summary){
+    const periodLabel=(periodFrom||periodTo)?` · 조회기간 ${periodFrom||'제한없음'} ~ ${periodTo||'제한없음'}`:'';
+    summary.textContent=found.length?`총 ${found.length}건 조회됨${periodLabel}`:'';
+  }
+
   if(found.length===0){
     body.innerHTML=`<div class="empty-state" style="margin:0;">
-      <b>${name}</b>으로 제출된 기록이 없습니다.
+      <b>${name}</b>${(periodFrom||periodTo)?' · 해당 조회기간':''}으로 제출된 기록이 없습니다.
     </div>`;
     return;
   }
@@ -3778,9 +3825,14 @@ function loadUserEditable(){
       </div>
       <div style="padding:8px 0;">
         ${rows.map(f=>`<div data-plate="${f.plate}" data-idx="${f.tripIdx}" data-key="${f.trip.isoDate}|${f.trip.startOdo}|${f.trip.endOdo}|${f.trip.submitter||''}" style="border:1.5px solid var(--line);border-radius:12px;margin:0 12px 10px;padding:12px 14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <input class="ue-inp" value="${f.trip.date||''}" data-f="date" placeholder="날짜" style="font-size:14px;font-weight:600;color:var(--navy);border:1px solid var(--line);border-radius:8px;padding:6px 10px;width:110px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <span style="font-size:11px;font-weight:700;color:var(--muted);">운행기간</span>
             <span class="ue-saved" style="color:var(--good);font-size:11px;font-weight:600;display:none;">✓ 저장됨</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;margin-bottom:10px;">
+            <input type="text" inputmode="numeric" class="ue-date-from" value="${f.trip.isoDate||''}" maxlength="10" placeholder="YYYY-MM-DD" oninput="autoFormatUeDate(this)" style="border:1.5px solid var(--good);border-radius:8px;padding:9px 8px;font-size:13px;text-align:center;font-family:'Paperlogy',sans-serif;width:100%;">
+            <span style="color:var(--muted);font-size:13px;font-weight:700;">~</span>
+            <input type="text" inputmode="numeric" class="ue-date-to" value="${f.trip.dateTo||f.trip.isoDate||''}" maxlength="10" placeholder="YYYY-MM-DD" oninput="autoFormatUeDate(this)" style="border:1.5px solid var(--good);border-radius:8px;padding:9px 8px;font-size:13px;text-align:center;font-family:'Paperlogy',sans-serif;width:100%;">
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
             <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">시작거리</div>
@@ -3800,7 +3852,7 @@ function loadUserEditable(){
             <input class="ue-inp" value="${f.trip.note||''}" data-f="note" placeholder="특이사항" style="width:100%;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;"></div>
           <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:10px;">
             <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink);cursor:pointer;">
-              <input type="checkbox" class="ue-chk" data-f="isPersonal" ${f.trip.isPersonal?'checked':''}> 개인사용 <span style="font-size:11px;color:var(--muted);">(주말·공휴일)</span>
+              <input type="checkbox" class="ue-chk" data-f="isPersonal" ${f.trip.isPersonal?'checked':''} onchange="toggleUePersonal(this)"> 개인사용 <span style="font-size:11px;color:var(--muted);">(주말·공휴일)</span>
             </label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink);cursor:pointer;">
               <input type="checkbox" class="ue-chk ue-daecha-chk" data-f="isDaeCha" ${f.trip.isDaeCha?'checked':''} onchange="toggleUeDaeCha(this)"> 대차 운행
@@ -3842,13 +3894,51 @@ function toggleUeDaeCha(chk){
   if(field) field.style.display = chk.checked ? 'block' : 'none';
 }
 
+// 개인사용 체크 시 출퇴근 선택 자동 해제 (중복선택 방지)
+function toggleUePersonal(chk){
+  if(!chk.checked) return;
+  const row=chk.closest('[data-plate]');
+  row?.querySelectorAll('.ue-commute-btn.active-commute').forEach(b=>b.classList.remove('active-commute'));
+}
+
+// 날짜 텍스트 입력 자동 포맷: 숫자만 입력 → YYYY-MM-DD 자동 삽입 (내 제출기록 수정용)
+function autoFormatUeDate(inp){
+  const raw = inp.value.replace(/\D/g,'').slice(0,8);
+  let formatted = raw;
+  if(raw.length > 4) formatted = raw.slice(0,4)+'-'+raw.slice(4);
+  if(raw.length > 6) formatted = raw.slice(0,4)+'-'+raw.slice(4,6)+'-'+raw.slice(6);
+  inp.value = formatted;
+  if(formatted.length === 10){
+    const d = new Date(formatted+'T00:00:00');
+    inp.style.borderColor = isNaN(d) ? 'var(--bad)' : 'var(--good)';
+  } else {
+    inp.style.borderColor = 'var(--line)';
+  }
+  const row=inp.closest('[data-plate]');
+  if(!row) return;
+  const fromInp=row.querySelector('.ue-date-from');
+  const toInp=row.querySelector('.ue-date-to');
+  const fromVal=fromInp?.value||'';
+  const toVal=toInp?.value||'';
+  // 종료일이 시작일보다 이전이면 시작일로 맞춤
+  if(fromVal.length===10 && toVal.length===10 && toVal<fromVal){
+    toInp.value=fromVal;
+    toInp.style.borderColor='var(--good)';
+  }
+}
+
 // 출퇴근 출근/퇴근 구분 선택 — 다시 누르면 선택 해제
 function setUeCommuteDirection(btn){
   const row=btn.closest('[data-plate]');
   if(!row) return;
   const wasActive=btn.classList.contains('active-commute');
   row.querySelectorAll('.ue-commute-btn').forEach(b=>b.classList.remove('active-commute'));
-  if(!wasActive) btn.classList.add('active-commute');
+  if(!wasActive){
+    btn.classList.add('active-commute');
+    // 출퇴근사용과 개인사용(주말·공휴일)은 동시에 선택할 수 없음 → 개인사용 선택 해제
+    const personalChk=row.querySelector('[data-f="isPersonal"].ue-chk');
+    if(personalChk) personalChk.checked=false;
+  }
 }
 
 async function saveUserEdits(name){
@@ -3857,6 +3947,18 @@ async function saveUserEdits(name){
 
   // 저장 전 입력값 검증 (오타로 인한 비정상 거리/금액 차단)
   for(const tr of rows){
+    const fromInp=tr.querySelector('.ue-date-from');
+    const toInp=tr.querySelector('.ue-date-to');
+    const fromVal=fromInp?.value||'';
+    const toVal=toInp?.value||fromVal;
+    if(fromVal.length!==10 || isNaN(new Date(fromVal+'T00:00:00'))){
+      if(err){ err.textContent='저장 실패: 시작일자를 YYYY-MM-DD 형식으로 올바르게 입력해 주세요.'; err.style.display='block'; }
+      return;
+    }
+    if(toVal.length!==10 || isNaN(new Date(toVal+'T00:00:00'))){
+      if(err){ err.textContent='저장 실패: 종료일자를 YYYY-MM-DD 형식으로 올바르게 입력해 주세요.'; err.style.display='block'; }
+      return;
+    }
     const startInp=tr.querySelector('[data-f="startOdo"]');
     const endInp=tr.querySelector('[data-f="endOdo"]');
     const fuelInp=tr.querySelector('[data-f="fuel"]');
@@ -3903,12 +4005,27 @@ async function saveUserEdits(name){
     const activeCommuteBtn=tr.querySelector('.ue-commute-btn.active-commute');
     t.commuteDir = activeCommuteBtn ? activeCommuteBtn.dataset.dir : '';
     t.isCommute = !!t.commuteDir;
-    // isoDate 재계산
-    const dates=expandDateField(t.date);
-    if(dates.length){
-      const y=t.isoDate?Number(t.isoDate.slice(0,4)):new Date().getFullYear();
-      t.usageDates=dates.map(x=>iso(new Date(y,x.m-1,x.d)));
-      t.isoDate=t.usageDates[0];
+    // 개인사용/출퇴근사용은 동시 선택 불가 (안전망 — UI에서 이미 상호 배타 처리됨)
+    if(t.isPersonal && t.isCommute){ t.isCommute=false; t.commuteDir=''; }
+    // 시작일자·종료일자 입력값으로 date/isoDate/dateTo/usageDates 재구성
+    const fromInp=tr.querySelector('.ue-date-from');
+    const toInp=tr.querySelector('.ue-date-to');
+    const fromVal=fromInp?.value||t.isoDate||'';
+    const toVal=(toInp?.value||fromVal)||fromVal;
+    if(fromVal.length===10){
+      const dateTo = toVal.length===10 ? toVal : fromVal;
+      const allDates=[];
+      let d=new Date(fromVal+'T00:00:00');
+      const endD=new Date(dateTo+'T00:00:00');
+      if(!isNaN(d) && !isNaN(endD)){
+        while(d<=endD){ allDates.push(iso(d)); d=new Date(d.getTime()+86400000); }
+        const fm=Number(fromVal.slice(5,7)), fd=Number(fromVal.slice(8,10));
+        const td=Number(dateTo.slice(8,10));
+        t.date = fromVal===dateTo ? `${fm}/${fd}` : `${fm}/${fd}~${td}`;
+        t.isoDate = fromVal;
+        t.dateTo = dateTo;
+        t.usageDates = allDates;
+      }
     }
   });
   const saved = await saveData();
