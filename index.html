@@ -672,6 +672,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 
 <!-- ===== 역할 선택 오버레이 ===== -->
 <div id="roleOverlay">
@@ -1211,6 +1213,40 @@ function escapeHtml(str){
 
 const STORAGE_KEY  = 'fleet-data';
 
+// ============================================================
+// ★ Firebase Authentication (익명 로그인) ★
+// ------------------------------------------------------------
+// Realtime Database 보안 규칙을 ".write": "auth != null" 로 걸어두면,
+// REST API 요청에 유효한 로그인 토큰이 없는 외부 접근(URL을 직접 두드리는 봇/스캐너 등)은
+// 자동으로 차단됩니다. 화면에는 아무 로그인 UI도 뜨지 않고, 페이지가 열리면
+// 백그라운드에서 조용히 익명 토큰을 발급받아 모든 요청에 자동으로 붙입니다.
+// (Firebase 콘솔 → Authentication → Sign-in method → "익명" 활성화 필요)
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyAGS2iP6VVLpsdbxGgaE1V5eIu-IHWNrH8",
+  authDomain: "ksa-vehicle-log.firebaseapp.com",
+  databaseURL: FIREBASE_URL,
+  projectId: "ksa-vehicle-log"
+};
+firebase.initializeApp(firebaseConfig);
+
+let _authReadyResolve;
+const authReadyPromise = new Promise(res=>{ _authReadyResolve = res; });
+firebase.auth().onAuthStateChanged(user=>{
+  if(user) _authReadyResolve();
+});
+firebase.auth().signInAnonymously().catch(e=>{
+  console.error('[KSA 차량관리] 익명 인증 실패 — Firebase 콘솔에서 Authentication > 익명 로그인이 활성화되어 있는지 확인하세요.', e);
+});
+
+// 현재 유효한 인증 토큰을 반환 (SDK가 만료 전 자동 갱신하므로 매번 새로 요청)
+async function getAuthToken(){
+  await authReadyPromise;
+  const user = firebase.auth().currentUser;
+  if(!user) return null;
+  try{ return await user.getIdToken(); }catch(e){ return null; }
+}
+
 // Firebase Realtime Database REST API 헬퍼
 // 모바일 데이터/약한 신호 환경에서 fetch가 응답 없이 무한 대기하는 것을 막기 위해
 // 타임아웃(기본 15초)을 걸어, 일정 시간 내 응답이 없으면 명확한 오류로 처리합니다.
@@ -1227,12 +1263,16 @@ async function fbFetchWithTimeout(url, options, timeoutMs=15000){
   }
 }
 async function fbGet(path){
-  const r = await fbFetchWithTimeout(`${FIREBASE_URL}/${path}.json`);
+  const token = await getAuthToken();
+  const url = `${FIREBASE_URL}/${path}.json${token?`?auth=${token}`:''}`;
+  const r = await fbFetchWithTimeout(url);
   if(!r.ok) throw new Error(`Firebase 읽기 실패 (${r.status})`);
   return r.json();
 }
 async function fbSet(path, value){
-  const r = await fbFetchWithTimeout(`${FIREBASE_URL}/${path}.json`, {
+  const token = await getAuthToken();
+  const url = `${FIREBASE_URL}/${path}.json${token?`?auth=${token}`:''}`;
+  const r = await fbFetchWithTimeout(url, {
     method:'PUT', headers:{'Content-Type':'application/json'},
     body: JSON.stringify(value)
   });
