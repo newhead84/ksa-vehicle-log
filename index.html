@@ -2144,6 +2144,7 @@ function openVehicle(plate){
     ${remaining>0?`<div class="trip-loadmore-wrap"><button class="trip-loadmore-btn" onclick="loadMoreTrips('${plate}')">이전 기록 더보기 (${remaining}건 남음)</button></div>`:''}`;
     })()}`;
   document.getElementById('modalOverlay').classList.add('show');
+  lockBodyScroll();
 }
 // 이미지 전체화면 확대
 function openImgFullscreen(src){
@@ -2708,7 +2709,33 @@ async function toggleVehicleActive(plate){
   closeModal();
   openVehicle(plate);
 }
-function closeModal(){ document.getElementById('modalOverlay').classList.remove('show'); }
+// 모바일에서 팝업(모달)이 열려 있는 동안 뒷배경 화면이 스크롤되는 것을 막기 위한 스크롤 잠금 헬퍼.
+// 팝업 내용이 화면보다 짧아도(자체 스크롤이 필요 없어도) body가 고정되어 뒷배경이 밀리지 않습니다.
+let _bodyScrollLockY = 0;
+let _bodyScrollLockCount = 0;
+function lockBodyScroll(){
+  if(_bodyScrollLockCount === 0){
+    _bodyScrollLockY = window.scrollY || window.pageYOffset || 0;
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${_bodyScrollLockY}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+  }
+  _bodyScrollLockCount++;
+}
+function unlockBodyScroll(){
+  _bodyScrollLockCount = Math.max(0, _bodyScrollLockCount - 1);
+  if(_bodyScrollLockCount === 0){
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    document.body.style.width = '';
+    window.scrollTo(0, _bodyScrollLockY);
+  }
+}
+function closeModal(){ document.getElementById('modalOverlay').classList.remove('show'); unlockBodyScroll(); }
 async function deleteTrip(plate,idx){
   const trips=data.vehicles[plate].trips.slice().sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||''));
   const target=trips[idx];
@@ -3238,25 +3265,25 @@ function addTripRow(prefillStart = null){
       <div class="form-field">
         <label>운행기간</label>
         <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;">
-          <div>
+          <div style="position:relative;">
             <input type="text" inputmode="numeric" class="tr-date-from"
               placeholder="YYYY-MM-DD" maxlength="10" value="${todayStr}"
               oninput="autoFormatDate(this,'${id}')"
-              style="border:1.5px solid var(--good);border-radius:12px;padding:12px 10px;font-size:14px;background:#fff;width:100%;text-align:center;font-family:'Paperlogy',sans-serif;display:block;">
-            <label style="display:flex;align-items:center;justify-content:center;gap:5px;margin-top:6px;cursor:pointer;font-size:12px;color:var(--muted);">
+              style="border:1.5px solid var(--good);border-radius:12px;padding:12px 32px 12px 10px;font-size:14px;background:#fff;width:100%;text-align:center;font-family:'Paperlogy',sans-serif;display:block;box-sizing:border-box;">
+            <label style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;line-height:1;">
               <input type="date" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;" onchange="syncFromPicker(this,'${id}','from')">
-              📅 달력 선택
+              📅
             </label>
           </div>
           <span style="color:var(--muted);font-size:14px;font-weight:700;text-align:center;">~</span>
-          <div>
+          <div style="position:relative;">
             <input type="text" inputmode="numeric" class="tr-date-to"
               placeholder="YYYY-MM-DD" maxlength="10" value="${todayStr}"
               oninput="autoFormatDate(this,'${id}')"
-              style="border:1.5px solid var(--good);border-radius:12px;padding:12px 10px;font-size:14px;background:#fff;width:100%;text-align:center;font-family:'Paperlogy',sans-serif;display:block;">
-            <label style="display:flex;align-items:center;justify-content:center;gap:5px;margin-top:6px;cursor:pointer;font-size:12px;color:var(--muted);">
+              style="border:1.5px solid var(--good);border-radius:12px;padding:12px 32px 12px 10px;font-size:14px;background:#fff;width:100%;text-align:center;font-family:'Paperlogy',sans-serif;display:block;box-sizing:border-box;">
+            <label style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;line-height:1;">
               <input type="date" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;" onchange="syncFromPicker(this,'${id}','to')">
-              📅 달력 선택
+              📅
             </label>
           </div>
         </div>
@@ -3979,6 +4006,7 @@ function openAddVehicleModal(){
     document.getElementById('newBranchCustom').style.display=this.value==='__custom__'?'block':'none';
   });
   document.getElementById('modalOverlay').classList.add('show');
+  lockBodyScroll();
 }
 
 async function confirmAddVehicle(){
