@@ -2021,24 +2021,48 @@ function openVehicle(plate){
     <div class="trip-count-label">최신순 정렬 · 전체 ${displayList.length}건 중 ${visible.length}건 표시</div>
     <div class="trip-table-scroll">
     <table id="tripTable-${plate}" class="trip-table">
-      <thead><tr><th>일자</th><th>시작</th><th>종료</th><th>거리</th><th>제출자</th><th>사용자</th><th>행선지</th><th>주유비</th><th>상태</th><th>비고</th><th>대차번호</th><th></th></tr></thead>
+      <thead><tr><th>운행기간</th><th>시작</th><th>종료</th><th>거리(누계)</th><th>제출자</th><th>사용자</th><th>행선지</th><th>주유비</th><th>상태</th><th>구분</th><th>대차번호</th><th>비고</th><th></th></tr></thead>
       <tbody>
         ${visible.map(({t,i})=>`<tr data-trip-idx="${i}">
-          <td data-label="일자"><span class="trip-date-wrap">
+          <td data-label="운행기간"><span class="trip-date-wrap">
             ${t.isDaeCha?`<span class="trip-usage-tag" style="background:var(--accent);color:#fff;">대차</span>`:''}
             ${t.isPersonal?`<span class="trip-usage-tag tag-personal">개인</span>`:''}
             ${t.isCommute?`<span class="trip-usage-tag tag-commute">${t.commuteDir||'출퇴근'}</span>`:''}
             <span class="view-val">${t.date||''}</span>
-            <input class="edit-inp" value="${t.date||''}" data-f="date" placeholder="YYYY-MM-DD" title="YYYY-MM-DD 또는 3/15, 3/15~18 형식 모두 가능" style="display:none;width:80px;">
+            <span class="edit-inp" style="display:none;white-space:nowrap;">
+              <input type="text" inputmode="numeric" class="mono adm-date-from" value="${t.isoDate||''}" maxlength="10" placeholder="YYYY-MM-DD" title="시작일자 (YYYY-MM-DD)" oninput="autoFormatAdminDate(this)" style="width:86px;border:1.5px solid var(--good);border-radius:6px;padding:4px 5px;font-size:11.5px;text-align:center;">
+              <span style="color:var(--muted);font-size:11px;">~</span>
+              <input type="text" inputmode="numeric" class="mono adm-date-to" value="${t.dateTo||t.isoDate||''}" maxlength="10" placeholder="YYYY-MM-DD" title="종료일자 (YYYY-MM-DD, 기간이 아니면 시작일과 동일하게)" oninput="autoFormatAdminDate(this)" style="width:86px;border:1.5px solid var(--good);border-radius:6px;padding:4px 5px;font-size:11.5px;text-align:center;">
+            </span>
           </span></td>
           <td class="mono" data-label="시작"><span class="view-val">${t.startOdo??''}</span><input class="edit-inp mono" value="${t.startOdo??''}" data-f="startOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
           <td class="mono" data-label="종료"><span class="view-val">${t.endOdo??''}</span><input class="edit-inp mono" value="${t.endOdo??''}" data-f="endOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
-          <td class="mono" data-label="거리"><span class="view-val dist-view">${t.distance??''}</span><input class="edit-inp mono dist-inp" value="${t.distance??''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1"></td>
+          <td class="mono" data-label="거리(누계, 자동계산)"><span class="view-val dist-view">${t.distance??''}</span><input class="edit-inp mono dist-inp" value="${t.distance??''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1" title="종료거리-시작거리로 자동계산되며 직접 수정할 수 없습니다."></td>
           <td data-label="제출자" style="color:var(--accent);font-size:11px;">${escapeHtml(t.submitter||'')}</td>
           <td data-label="사용자"><span class="view-val">${escapeHtml(t.user||'')}</span><input class="edit-inp" value="${escapeHtml(t.user||'')}" data-f="user" style="display:none;width:60px;"></td>
           <td data-label="행선지"><span class="view-val">${escapeHtml(t.dest||'')}</span><input class="edit-inp" value="${escapeHtml(t.dest||'')}" data-f="dest" style="display:none;width:90px;"></td>
           <td class="mono" data-label="주유비"><span class="view-val">${t.fuel?Number(t.fuel).toLocaleString():''}</span><input class="edit-inp mono" value="${t.fuel?Number(t.fuel).toLocaleString():''}" data-f="fuel" oninput="formatFuelInput(this)" style="display:none;width:65px;"></td>
           <td class="${t.status&&t.status!=='정상'?'flag-bad-status':''}" data-label="상태"><span class="view-val">${escapeHtml(t.status||'')}</span><input class="edit-inp" value="${escapeHtml(t.status||'')}" data-f="status" style="display:none;width:60px;"></td>
+          <td data-label="구분">
+            <span class="view-val">${t.isPersonal?'개인사용(주말)':t.isCommute?(t.commuteDir||'출퇴근')+' 사용':t.isDaeCha?'대차 운행':'업무용'}</span>
+            <span class="edit-inp" style="display:none;">
+              <label class="check-label" style="gap:5px;padding:2px 0;">
+                <input type="checkbox" class="native-chk adm-personal-chk" ${t.isPersonal?'checked':''} onchange="toggleAdminPersonal(this)">
+                <span class="check-icon" style="width:16px;height:16px;"></span>
+                <span class="check-text" style="font-size:11px;white-space:nowrap;">개인사용(주말·공휴일)</span>
+              </label>
+              <label class="check-label" style="gap:5px;padding:2px 0;">
+                <input type="checkbox" class="native-chk adm-daecha-chk" ${t.isDaeCha?'checked':''}>
+                <span class="check-icon" style="width:16px;height:16px;"></span>
+                <span class="check-text" style="font-size:11px;white-space:nowrap;">대차 운행</span>
+              </label>
+              <div class="status-toggle" style="gap:4px;margin-top:2px;">
+                <button type="button" class="status-btn adm-commute-btn${t.commuteDir==='출근'?' active-commute':''}" style="padding:4px 8px;font-size:11px;" data-dir="출근" onclick="setAdminCommuteDirection(this)">🌅출근</button>
+                <button type="button" class="status-btn adm-commute-btn${t.commuteDir==='퇴근'?' active-commute':''}" style="padding:4px 8px;font-size:11px;" data-dir="퇴근" onclick="setAdminCommuteDirection(this)">🌆퇴근</button>
+              </div>
+            </span>
+          </td>
+          <td data-label="대차번호"><span class="view-val">${escapeHtml(t.daeChaPate||'')}</span><input class="edit-inp" value="${escapeHtml(t.daeChaPate||'')}" data-f="daeChaPate" placeholder="대차 차량번호" style="display:none;width:80px;"></td>
           <td data-label="비고"><span class="view-val">${escapeHtml(t.note||'')}</span><input class="edit-inp" value="${escapeHtml(t.note||'')}" data-f="note" style="display:none;width:80px;"></td>
           <td data-label="" class="trip-del-cell"><button class="trip-del" onclick="deleteTrip('${plate}',${i})">삭제</button></td>
         </tr>`).join('')}
@@ -2398,6 +2422,53 @@ function recalcModalDist(inp){
   if(distInp) distInp.value=Math.max(0,e-s);
 }
 
+// 관리자 수정모드: 날짜 텍스트 입력 자동 포맷 (숫자만 입력 → YYYY-MM-DD 자동 삽입)
+function autoFormatAdminDate(inp){
+  const raw = inp.value.replace(/\D/g,'').slice(0,8);
+  let formatted = raw;
+  if(raw.length > 4) formatted = raw.slice(0,4)+'-'+raw.slice(4);
+  if(raw.length > 6) formatted = raw.slice(0,4)+'-'+raw.slice(4,6)+'-'+raw.slice(6);
+  inp.value = formatted;
+  if(formatted.length === 10){
+    const d = new Date(formatted+'T00:00:00');
+    inp.style.borderColor = isNaN(d) ? 'var(--bad)' : 'var(--good)';
+  } else {
+    inp.style.borderColor = 'var(--line)';
+  }
+  const tr=inp.closest('tr');
+  if(!tr) return;
+  const fromInp=tr.querySelector('.adm-date-from');
+  const toInp=tr.querySelector('.adm-date-to');
+  const fromVal=fromInp?.value||'';
+  const toVal=toInp?.value||'';
+  // 종료일자가 시작일자보다 이전이면 시작일자로 맞춤
+  if(fromVal.length===10 && toVal.length===10 && toVal<fromVal){
+    toInp.value=fromVal;
+    toInp.style.borderColor='var(--good)';
+  }
+}
+
+// 관리자 수정모드: 개인사용 체크 시 출퇴근 선택 자동 해제 (중복선택 방지)
+function toggleAdminPersonal(chk){
+  if(!chk.checked) return;
+  const tr=chk.closest('tr');
+  tr?.querySelectorAll('.adm-commute-btn.active-commute').forEach(b=>b.classList.remove('active-commute'));
+}
+
+// 관리자 수정모드: 출퇴근 출근/퇴근 구분 선택 — 다시 누르면 선택 해제
+function setAdminCommuteDirection(btn){
+  const tr=btn.closest('tr');
+  if(!tr) return;
+  const wasActive=btn.classList.contains('active-commute');
+  tr.querySelectorAll('.adm-commute-btn').forEach(b=>b.classList.remove('active-commute'));
+  if(!wasActive){
+    btn.classList.add('active-commute');
+    // 출퇴근사용과 개인사용(주말·공휴일)은 동시에 선택할 수 없음 → 개인사용 선택 해제
+    const personalChk=tr.querySelector('.adm-personal-chk');
+    if(personalChk) personalChk.checked=false;
+  }
+}
+
 let editModeActive={};
 // 운행기록 필터(전체/업무용/개인사용/출퇴근) 및 표시 건수(더보기) 상태 — 차량번호별로 유지
 const TRIP_PAGE_SIZE=15;
@@ -2441,16 +2512,19 @@ async function saveTripEdits(plate){
   const table=document.getElementById('tripTable-'+plate);
   if(!table||!data.vehicles[plate]) return;
 
-  // 저장 전 입력값 검증 (오타로 인한 비정상 거리/금액 차단)
+  // 저장 전 입력값 검증 (오타로 인한 비정상 거리/금액/일자 차단)
   for(const tr of table.querySelectorAll('tbody tr')){
     const startInp=tr.querySelector('[data-f="startOdo"]');
     const endInp=tr.querySelector('[data-f="endOdo"]');
     const fuelInp=tr.querySelector('[data-f="fuel"]');
-    const dateInp=tr.querySelector('[data-f="date"]');
+    const fromInp=tr.querySelector('.adm-date-from');
+    const toInp=tr.querySelector('.adm-date-to');
     const s=Number(startInp?.value)||0;
     const e=Number(endInp?.value)||0;
     const dist=Math.max(0, e-s);
     const fuel=fuelInp?parseFuelAmount(fuelInp.value):0;
+    const fromVal=fromInp?.value||'';
+    const toVal=toInp?.value||fromVal;
     if(e<=s){
       showAdminToast(`저장 실패: 종료거리(${e.toLocaleString()})가 시작거리(${s.toLocaleString()})보다 작거나 같습니다. 값을 확인해 주세요.`,'bad');
       return;
@@ -2463,8 +2537,16 @@ async function saveTripEdits(plate){
       showAdminToast(`저장 실패: 주유비가 ${fuel.toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`,'bad');
       return;
     }
-    if(dateInp && !isValidTripDateField(dateInp.value)){
-      showAdminToast(`저장 실패: 일자 형식을 확인해 주세요. "YYYY-MM-DD" 또는 "3/15", "3/15~18" 형식으로 입력해 주세요. (입력값: ${dateInp.value||'(비어있음)'})`,'bad');
+    if(fromVal.length!==10 || isNaN(new Date(fromVal+'T00:00:00'))){
+      showAdminToast(`저장 실패: 시작일자를 YYYY-MM-DD 형식으로 올바르게 입력해 주세요. (입력값: ${fromVal||'(비어있음)'})`,'bad');
+      return;
+    }
+    if(toVal.length!==10 || isNaN(new Date(toVal+'T00:00:00'))){
+      showAdminToast(`저장 실패: 종료일자를 YYYY-MM-DD 형식으로 올바르게 입력해 주세요. (입력값: ${toVal||'(비어있음)'})`,'bad');
+      return;
+    }
+    if(toVal<fromVal){
+      showAdminToast('저장 실패: 종료일자가 시작일자보다 빠릅니다. 값을 확인해 주세요.','bad');
       return;
     }
   }
@@ -2493,14 +2575,37 @@ async function saveTripEdits(plate){
       else if(f==='fuel') target[f]=parseFuelAmount(inp.value);
       else target[f]=inp.value;
     });
-    // isoDate 재계산 (YYYY-MM-DD 입력과 기존 M/D 입력 모두 지원)
-    const fallbackYear=target.isoDate?Number(target.isoDate.slice(0,4)):new Date().getFullYear();
-    const parsed=parseTripDateField(target.date, fallbackYear);
-    if(parsed){
-      target.usageDates=parsed.usageDates;
-      target.isoDate=parsed.isoDate;
-      target.dateTo=parsed.dateTo;
-      target.date=parsed.display; // 표시용 원본 필드를 M/D 축약형으로 통일 저장
+    // 개인사용(주말·공휴일) / 대차운행 체크박스 반영
+    const personalChk=tr.querySelector('.adm-personal-chk');
+    if(personalChk) target.isPersonal = personalChk.checked;
+    const daechaChk=tr.querySelector('.adm-daecha-chk');
+    if(daechaChk) target.isDaeCha = daechaChk.checked;
+    if(!target.isDaeCha) target.daeChaPate='';
+    // 출퇴근 출근/퇴근 구분 반영 (가동율 미반영 대상)
+    const activeCommuteBtn=tr.querySelector('.adm-commute-btn.active-commute');
+    target.commuteDir = activeCommuteBtn ? activeCommuteBtn.dataset.dir : '';
+    target.isCommute = !!target.commuteDir;
+    // 개인사용/출퇴근사용은 동시 선택 불가 (안전망)
+    if(target.isPersonal && target.isCommute){ target.isCommute=false; target.commuteDir=''; }
+    // 시작일자·종료일자 입력값으로 date/isoDate/dateTo/usageDates 재구성
+    const fromInp=tr.querySelector('.adm-date-from');
+    const toInp=tr.querySelector('.adm-date-to');
+    const fromVal=fromInp?.value||target.isoDate||'';
+    const toVal=(toInp?.value||fromVal)||fromVal;
+    if(fromVal.length===10){
+      const dateTo = toVal.length===10 ? toVal : fromVal;
+      const allDates=[];
+      let d=new Date(fromVal+'T00:00:00');
+      const endD=new Date(dateTo+'T00:00:00');
+      if(!isNaN(d) && !isNaN(endD)){
+        while(d<=endD){ allDates.push(iso(d)); d=new Date(d.getTime()+86400000); }
+        const fm=Number(fromVal.slice(5,7)), fd=Number(fromVal.slice(8,10));
+        const td=Number(dateTo.slice(8,10));
+        target.date = fromVal===dateTo ? `${fm}/${fd}` : `${fm}/${fd}~${td}`;
+        target.isoDate = fromVal;
+        target.dateTo = dateTo;
+        target.usageDates = allDates;
+      }
     }
   });
   const saved = await saveData();
