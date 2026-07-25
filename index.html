@@ -413,6 +413,7 @@
   }
   .status-btn.active-good{border-color:var(--good);background:var(--good-soft);color:var(--good);}
   .status-btn.active-bad{border-color:var(--bad);background:var(--bad-soft);color:var(--bad);}
+  .status-btn.active-commute{border-color:#8B5CF6;background:#F5F3FF;color:#7C3AED;}
 
   /* 토글 스위치 스타일 체크박스 */
   .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-top:1px solid var(--line);}
@@ -1727,6 +1728,19 @@ function commuteUseTrips(){
   return list;
 }
 
+// 규정상 출퇴근 왕복거리 60km 초과 모니터링용: 운행자+일자 기준으로 출근/퇴근 거리를 합산
+const COMMUTE_ROUNDTRIP_LIMIT_KM = 60;
+function commuteDailyTotals(list){
+  const map={};
+  (list||[]).forEach(t=>{
+    const key=`${t.user||''}|${t.isoDate||''}`;
+    if(!map[key]) map[key]={total:0,dirs:new Set()};
+    map[key].total += Number(t.distance)||0;
+    if(t.commuteDir) map[key].dirs.add(t.commuteDir);
+  });
+  return map;
+}
+
 function renderCommuteUseList(){
   const q=(document.getElementById('commuteSearchBox')?.value||'').trim();
   if(!q){
@@ -1735,18 +1749,28 @@ function renderCommuteUseList(){
     return;
   }
   let list=commuteUseTrips().filter(t=>(t.user||'').includes(q));
-  const totalDist=list.reduce((s,t)=>s+(Number(t.commuteDist)||0),0);
-  const rows=list.map(t=>`<tr>
+  const totalDist=list.reduce((s,t)=>s+(Number(t.distance)||0),0);
+  const dailyTotals=commuteDailyTotals(list);
+  const overLimitDays=new Set(Object.keys(dailyTotals).filter(k=>dailyTotals[k].total>COMMUTE_ROUNDTRIP_LIMIT_KM));
+  const rows=list.map(t=>{
+    const key=`${t.user||''}|${t.isoDate||''}`;
+    const dayTotal=dailyTotals[key]?.total||0;
+    const isOver=overLimitDays.has(key);
+    return `<tr${isOver?' style="background:var(--bad-soft);"':''}>
     <td class="mono">${t.date||t.isoDate||''}</td>
     <td class="mono"><b>${t.plate}</b></td>
     <td>${t.branch||''}</td>
     <td>${t.user||''}</td>
-    <td class="mono">${(Number(t.commuteDist)||0).toLocaleString()}km</td>
+    <td>${t.commuteDir?`<span style="font-size:11px;font-weight:700;color:#7C3AED;">${t.commuteDir}</span>`:'-'}</td>
+    <td class="mono">${(Number(t.distance)||0).toLocaleString()}km</td>
+    <td class="mono">${dayTotal.toLocaleString()}km${isOver?' <span style="color:var(--bad);font-weight:700;">⚠초과</span>':''}</td>
     <td>${t.dest||''}</td>
     <td style="color:var(--muted);">${t.submitter||''}</td>
-  </tr>`).join('');
-  document.getElementById('commuteUseSummaryBar').innerHTML=list.length?`총 <b>${list.length}건</b> · 출퇴근거리 합계 <b>${totalDist.toLocaleString()}km</b>`:'';
-  document.getElementById('commuteUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>출퇴근거리</th><th>행선지</th><th>제출자</th></tr></thead><tbody>${rows||`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">검색 결과가 없습니다</td></tr>`}</tbody></table></div>`;
+  </tr>`;
+  }).join('');
+  const overCount=new Set(Array.from(overLimitDays).map(k=>k)).size;
+  document.getElementById('commuteUseSummaryBar').innerHTML=list.length?`총 <b>${list.length}건</b> · 출퇴근거리 합계 <b>${totalDist.toLocaleString()}km</b>${overCount>0?` · <span style="color:var(--bad);font-weight:700;">⚠ 왕복 ${COMMUTE_ROUNDTRIP_LIMIT_KM}km 초과 ${overCount}일</span>`:''}`:'';
+  document.getElementById('commuteUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>구분</th><th>주행거리</th><th>당일합계(왕복)</th><th>행선지</th><th>제출자</th></tr></thead><tbody>${rows||`<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">검색 결과가 없습니다</td></tr>`}</tbody></table></div>`;
 }
 
 function vcardHtml(p){
@@ -2507,7 +2531,7 @@ function exportToExcel(){
   const ws1=XLSX.utils.json_to_sheet(vehicleRows);
   ws1['!cols']=[{wch:12},{wch:28},{wch:16},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10}];
   const tripRows=[];
-  plates.forEach(p=>(data.vehicles[p].trips||[]).slice().sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||'')).forEach(t=>{tripRows.push({'차량번호':p,'지역구분':data.vehicles[p].branch||'','일자(원본)':t.date||'','인식된날짜':t.isoDate||'','시작거리':t.startOdo,'종료거리':t.endOdo,'주행거리(km)':t.distance,'제출자':t.submitter||'','운행자':t.user||'','행선지':t.dest||'','주유비(원)':t.fuel||0,'개인사용여부':t.isPersonal?'개인사용':'','출퇴근사용여부':t.isCommute?'출퇴근사용':'','출퇴근거리(km)':t.isCommute?(t.commuteDist||0):'','차량상태':t.status||'','비고':t.note||''});}));
+  plates.forEach(p=>(data.vehicles[p].trips||[]).slice().sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||'')).forEach(t=>{tripRows.push({'차량번호':p,'지역구분':data.vehicles[p].branch||'','일자(원본)':t.date||'','인식된날짜':t.isoDate||'','시작거리':t.startOdo,'종료거리':t.endOdo,'주행거리(km)':t.distance,'제출자':t.submitter||'','운행자':t.user||'','행선지':t.dest||'','주유비(원)':t.fuel||0,'개인사용여부':t.isPersonal?'개인사용':'','출퇴근사용여부':t.isCommute?(t.commuteDir||'출퇴근사용'):'','출퇴근거리(km)':t.isCommute?(t.distance||0):'','차량상태':t.status||'','비고':t.note||''});}));
   const ws2=XLSX.utils.json_to_sheet(tripRows);
   ws2['!cols']=[{wch:12},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10},{wch:12},{wch:10},{wch:10},{wch:20},{wch:10},{wch:10},{wch:12},{wch:14},{wch:10},{wch:20}];
   const year=monthlyYear||new Date().getFullYear();
@@ -2541,9 +2565,15 @@ function exportToExcel(){
   const ws5=XLSX.utils.json_to_sheet(personalRows);
   ws5['!cols']=[{wch:12},{wch:12},{wch:16},{wch:10},{wch:12},{wch:12},{wch:20},{wch:10},{wch:20}];
 
-  const commuteRows=commuteUseTrips().map(t=>({'일자':t.date||t.isoDate||'','차량번호':t.plate,'지역구분':t.branch||'','운행자':t.user||'','출퇴근거리(km)':t.commuteDist||0,'행선지':t.dest||'','제출자':t.submitter||'','비고':t.note||''}));
+  const commuteAllList=commuteUseTrips();
+  const commuteDaily=commuteDailyTotals(commuteAllList);
+  const commuteRows=commuteAllList.map(t=>{
+    const key=`${t.user||''}|${t.isoDate||''}`;
+    const dayTotal=commuteDaily[key]?.total||0;
+    return {'일자':t.date||t.isoDate||'','차량번호':t.plate,'지역구분':t.branch||'','운행자':t.user||'','구분':t.commuteDir||'','출퇴근거리(km)':t.distance||0,'당일합계(왕복,km)':dayTotal,'60km초과여부':dayTotal>COMMUTE_ROUNDTRIP_LIMIT_KM?'초과':'','행선지':t.dest||'','제출자':t.submitter||'','비고':t.note||''};
+  });
   const ws6=XLSX.utils.json_to_sheet(commuteRows);
-  ws6['!cols']=[{wch:12},{wch:12},{wch:16},{wch:10},{wch:14},{wch:20},{wch:10},{wch:20}];
+  ws6['!cols']=[{wch:12},{wch:12},{wch:16},{wch:10},{wch:8},{wch:14},{wch:16},{wch:12},{wch:20},{wch:10},{wch:20}];
 
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws1,'차량현황');
@@ -2959,16 +2989,17 @@ function addTripRow(prefillStart = null){
         </div>
       </div>
       <div class="check-field">
-        <label class="check-label">
-          <input type="checkbox" class="tr-commute-chk native-chk" onchange="toggleCommuteUse(this,'${id}')">
-          <span class="check-icon"></span>
+        <label class="check-label" style="cursor:default;">
+          <span class="check-icon" style="visibility:hidden;"></span>
           <span class="check-text">출퇴근 사용 <span style="font-size:12px;color:var(--muted);font-weight:400;">(단신부임자 급여공제 승인자)</span></span>
         </label>
-        <div class="commute-field" id="commute-${id}" style="display:none;margin-top:8px;">
-          <div style="background:#F5F3FF;border:1px solid #8B5CF6;border-radius:10px;padding:10px 12px;">
-            <div style="font-size:11px;font-weight:700;color:#7C3AED;margin-bottom:6px;">출퇴근 거리 (km) <span style="font-weight:400;">— 급여공제 대상, 가동율에는 반영되지 않습니다</span></div>
-            <input type="number" class="tr-commute-dist" placeholder="출퇴근 거리 입력" style="border:1.5px solid #8B5CF6;border-radius:7px;padding:10px 12px;font-family:'Paperlogy',sans-serif;font-size:14px;width:100%;background:#fff;" oninput="scheduleDraft()">
-          </div>
+        <div class="status-toggle" style="margin-top:8px;">
+          <button type="button" class="status-btn commute-btn" data-dir="출근" onclick="setCommuteDirection(this,'${id}')">🌅 출근</button>
+          <button type="button" class="status-btn commute-btn" data-dir="퇴근" onclick="setCommuteDirection(this,'${id}')">🌆 퇴근</button>
+        </div>
+        <div class="commute-notice" id="commute-${id}" style="display:none;background:#F5F3FF;border:1px solid #8B5CF6;border-radius:10px;padding:10px 12px;margin-top:8px;font-size:12.5px;color:#7C3AED;line-height:1.6;">
+          📌 위 시작·종료거리로 계산된 주행거리가 <b>출퇴근 거리</b>로 기록되며, 가동율에는 반영되지 않습니다.<br>
+          ⚠️ 규정상 출퇴근 <b>왕복 거리는 60km</b>를 초과할 수 없습니다. (동일자 출근+퇴근 합산 기준으로 모니터링됩니다)
         </div>
       </div>
       <div class="check-field">
@@ -3106,10 +3137,19 @@ function togglePersonalUse(chk, id){
   scheduleDraft();
 }
 
-// 출퇴근사용(단신부임자 급여공제) 체크 시 별도 출퇴근거리 입력란 노출
-function toggleCommuteUse(chk, id){
-  const field = document.getElementById('commute-'+id);
-  if(field) field.style.display = chk.checked ? 'block' : 'none';
+// 출퇴근사용(단신부임자 급여공제) 출근/퇴근 구분 선택 — 다시 누르면 선택 해제
+function setCommuteDirection(btn, id){
+  const card = document.getElementById(id);
+  if(!card) return;
+  const wasActive = btn.classList.contains('active-commute');
+  card.querySelectorAll('.commute-btn').forEach(b=>b.classList.remove('active-commute'));
+  const notice = document.getElementById('commute-'+id);
+  if(wasActive){
+    if(notice) notice.style.display = 'none';
+  }else{
+    btn.classList.add('active-commute');
+    if(notice) notice.style.display = 'block';
+  }
   scheduleDraft();
 }
 
@@ -3177,9 +3217,10 @@ function collectRows(){
     const note = card.querySelector('.tr-note').value.trim();
     const isDaeCha = card.querySelector('.tr-daecha-chk')?.checked || false;
     const daeChaPate = isDaeCha ? (card.querySelector('.tr-daecha-plate')?.value.trim()||'') : '';
-    const isCommute = card.querySelector('.tr-commute-chk')?.checked || false;
-    const commuteDist = isCommute ? (Number(card.querySelector('.tr-commute-dist')?.value)||0) : 0;
-    return {dateFrom, dateTo, startOdo, endOdo, distance: Math.max(0, endOdo-startOdo), dest, user, fuel, status, note, isDaeCha, daeChaPate, isPersonal, isCommute, commuteDist};
+    const commuteBtn = card.querySelector('.commute-btn.active-commute');
+    const commuteDir = commuteBtn ? commuteBtn.dataset.dir : '';
+    const isCommute = !!commuteDir;
+    return {dateFrom, dateTo, startOdo, endOdo, distance: Math.max(0, endOdo-startOdo), dest, user, fuel, status, note, isDaeCha, daeChaPate, isPersonal, isCommute, commuteDir};
   });
 }
 
@@ -3271,7 +3312,7 @@ function showSubmitConfirm(submitter, plate, rows){
       ${r.fuel?`<div style="margin-top:4px;font-size:12px;"><span style="color:var(--muted);">주유비</span> <b>${Number(r.fuel).toLocaleString()}원</b></div>`:''}
       ${r.isPersonal?'<div style="margin-top:4px;"><span style="background:#EFF6FF;color:#1D4ED8;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">개인사용</span></div>':''}
       ${r.isDaeCha?`<div style="margin-top:4px;"><span style="background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">대차 ${r.daeChaPate}</span></div>`:''}
-      ${r.isCommute?`<div style="margin-top:4px;"><span style="background:#F5F3FF;color:#7C3AED;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">출퇴근사용 ${(Number(r.commuteDist)||0).toLocaleString()}km</span></div>`:''}
+      ${r.isCommute?`<div style="margin-top:4px;"><span style="background:#F5F3FF;color:#7C3AED;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">${r.commuteDir||'출퇴근'}사용 ${dist.toLocaleString()}km</span></div>`:''}
     </div>`;
   });
 
@@ -3319,7 +3360,6 @@ async function submitDirectInput(){
     if(r.endOdo <= r.startOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리가 시작거리보다 작습니다.`); return; }
     if(!r.dest){ showUserFormErr(`${i+1}번 운행기록: 행선지를 입력해 주세요.`); return; }
     if(r.isPersonal && !r.fuel){ showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유비를 입력해 주세요.`); return; }
-    if(r.isCommute && !r.commuteDist){ showUserFormErr(`${i+1}번 운행기록: 출퇴근 사용 시 출퇴근 거리를 입력해 주세요.`); return; }
     if(r.status==='점검요망' && !r.note){ showUserFormErr(`${i+1}번 운행기록: 점검요망 선택 시 비고(사유)를 입력해 주세요.`); return; }
     if(r.distance >= MAX_TRIP_DISTANCE_KM){ showUserFormErr(`${i+1}번 운행기록: 주행거리가 ${r.distance.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`); return; }
     if(r.fuel >= MAX_FUEL_AMOUNT){ showUserFormErr(`${i+1}번 운행기록: 주유비가 ${Number(r.fuel).toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`); return; }
@@ -3399,7 +3439,7 @@ async function doSubmit(submitter, plate, rows){
       user:r.user, dest:r.dest, fuel:r.fuel, status:r.status, note:r.note,
       submitter, branchAtTime, imgKey:null, isPersonal:r.isPersonal||false,
       isDaeCha:r.isDaeCha||false, daeChaPate:r.daeChaPate||'',
-      isCommute:r.isCommute||false, commuteDist:r.commuteDist||0
+      isCommute:r.isCommute||false, commuteDir:r.commuteDir||''
     });
     addedDates.push(isoDate);
     added++;
@@ -3519,11 +3559,9 @@ async function restoreDraft(){
         const dp=card.querySelector('.tr-daecha-plate');
         if(dp) dp.value=r.daeChaPate||'';
       }
-      if(r.isCommute){
-        const cChk=card.querySelector('.tr-commute-chk');
-        if(cChk){cChk.checked=true;toggleCommuteUse(cChk,card.id);}
-        const cd=card.querySelector('.tr-commute-dist');
-        if(cd) cd.value=r.commuteDist||'';
+      if(r.isCommute && r.commuteDir){
+        const cBtn=card.querySelector(`.commute-btn[data-dir="${r.commuteDir}"]`);
+        if(cBtn) setCommuteDirection(cBtn, card.id);
       }
       calcRowDist(card.id);
     });
