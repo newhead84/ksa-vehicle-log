@@ -320,9 +320,32 @@
   .modal-stats b{display:block;font-family:'Paperlogy';font-size:18px;color:var(--ink);}
   .trip-del{color:var(--bad);cursor:pointer;background:none;border:none;font-size:11px;}
   .trip-table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
-  .trip-table{min-width:0;width:100%;table-layout:auto;}
+  /* 데스크탑 전용: 가로 스크롤 최소화를 위한 고정 표 레이아웃(모바일은 640px 이하 별도 규칙에서 카드형으로 전환됨) */
+  @media (min-width:641px){
+    .trip-table{min-width:0;width:100%;table-layout:fixed;font-size:11.5px;}
+    .trip-table th,.trip-table td{padding:5px 4px;overflow-wrap:break-word;word-break:break-word;}
+    .trip-table th:nth-child(1),.trip-table td:nth-child(1){width:18%;}
+    .trip-table th:nth-child(2),.trip-table td:nth-child(2){width:6%;}
+    .trip-table th:nth-child(3),.trip-table td:nth-child(3){width:6%;}
+    .trip-table th:nth-child(4),.trip-table td:nth-child(4){width:6%;}
+    .trip-table th:nth-child(5),.trip-table td:nth-child(5){width:10%;}
+    .trip-table th:nth-child(6),.trip-table td:nth-child(6){width:11%;}
+    .trip-table th:nth-child(7),.trip-table td:nth-child(7){width:6%;}
+    .trip-table th:nth-child(8),.trip-table td:nth-child(8){width:18%;}
+    .trip-table th:nth-child(9),.trip-table td:nth-child(9){width:7%;}
+    .trip-table th:nth-child(10),.trip-table td:nth-child(10){width:8%;}
+    .trip-table th:nth-child(11),.trip-table td:nth-child(11){width:4%;}
+    .trip-table td input.edit-inp{width:100%!important;max-width:100%!important;box-sizing:border-box;}
+    .trip-table td.trip-period .trip-date-wrap,
+    .trip-table td.trip-period .edit-inp{white-space:nowrap;}
+    .trip-table td.trip-period .adm-date-from,
+    .trip-table td.trip-period .adm-date-to{width:76px!important;box-sizing:border-box;}
+  }
   @media (min-width:1000px){
     .modal{width:min(1040px,90vw);}
+  }
+  @media (min-width:1300px){
+    .modal:has(.trip-table){width:min(1220px,92vw);}
   }
   .flag-bad-status{color:var(--bad);font-weight:600;}
 
@@ -608,11 +631,12 @@
     /* 운행기간: 라벨을 위, 기간 전체를 아래 배치해 프레임 밖으로 벗어나지 않도록 함 */
     .trip-table td.trip-period{flex-direction:column;align-items:stretch;gap:6px;}
     .trip-table td.trip-period::before{flex:0 0 auto;}
-    .trip-table td.trip-period .trip-date-wrap{margin-left:0;text-align:left;width:100%;display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;}
+    .trip-table td.trip-period .trip-date-wrap{margin-left:0;text-align:left;width:100%;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;}
     .trip-table td.trip-period .trip-date-wrap .view-val{text-align:left;}
-    .trip-table td.trip-period .edit-inp{max-width:100%!important;width:100%!important;display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;}
+    .trip-table td.trip-period .edit-inp{max-width:100%!important;width:100%!important;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;}
+    .trip-table td.trip-period .edit-inp>span{flex:0 0 auto;}
     .trip-table td.trip-period .adm-date-from,
-    .trip-table td.trip-period .adm-date-to{width:auto!important;flex:1 1 108px;min-width:96px;}
+    .trip-table td.trip-period .adm-date-to{width:auto!important;flex:1 1 0;min-width:0;font-size:11px!important;padding:4px 2px!important;}
 
     /* 시작/종료, 제출자/운행자, 행선지/주유비: 한 줄에 절반씩 배치 */
     .trip-table td.trip-merged{display:block;}
@@ -2056,7 +2080,7 @@ function openVehicle(plate){
     <div class="trip-count-label">최신순 정렬 · 전체 ${displayList.length}건 중 ${visible.length}건 표시</div>
     <div class="trip-table-scroll">
     <table id="tripTable-${plate}" class="trip-table">
-      <thead><tr><th>운행기간</th><th>시작/종료</th><th>거리(누계)</th><th>제출자/운행자</th><th>행선지/주유비</th><th>상태</th><th>구분</th><th>대차번호</th><th>비고</th><th></th></tr></thead>
+      <thead><tr><th>운행기간</th><th>시작거리</th><th>종료거리</th><th>거리(누계)</th><th>제출자/운행자</th><th>행선지/주유비</th><th>상태</th><th>구분</th><th>대차번호</th><th>비고</th><th></th></tr></thead>
       <tbody>
         ${visible.map(({t,i})=>`<tr data-trip-idx="${i}">
           <td class="trip-period" data-label="운행기간"><span class="trip-date-wrap">
@@ -2070,12 +2094,8 @@ function openVehicle(plate){
               <input type="text" inputmode="numeric" class="mono adm-date-to" value="${t.dateTo||t.isoDate||''}" maxlength="10" placeholder="YYYY-MM-DD" title="종료일자 (YYYY-MM-DD, 기간이 아니면 시작일과 동일하게)" oninput="autoFormatAdminDate(this)" style="width:86px;border:1.5px solid var(--good);border-radius:6px;padding:4px 5px;font-size:11.5px;text-align:center;">
             </span>
           </span></td>
-          <td class="mono trip-merged" data-label="">
-            <div class="trip-merged-row">
-              <div class="trip-half"><span class="trip-half-label">시작</span><span class="view-val">${t.startOdo??''}</span><input class="edit-inp mono" value="${t.startOdo??''}" data-f="startOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></div>
-              <div class="trip-half"><span class="trip-half-label">종료</span><span class="view-val">${t.endOdo??''}</span><input class="edit-inp mono" value="${t.endOdo??''}" data-f="endOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></div>
-            </div>
-          </td>
+          <td class="mono" data-label="시작거리"><span class="view-val">${t.startOdo??''}</span><input class="edit-inp mono" value="${t.startOdo??''}" data-f="startOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
+          <td class="mono" data-label="종료거리"><span class="view-val">${t.endOdo??''}</span><input class="edit-inp mono" value="${t.endOdo??''}" data-f="endOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
           <td class="mono" data-label="거리(누계, 자동계산)"><span class="view-val dist-view">${t.distance??''}</span><input class="edit-inp mono dist-inp" value="${t.distance??''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1" title="종료거리-시작거리로 자동계산되며 직접 수정할 수 없습니다."></td>
           <td class="trip-merged" data-label="">
             <div class="trip-merged-row">
