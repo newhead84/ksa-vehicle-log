@@ -726,15 +726,24 @@
       <h3>내 제출 기록 수정</h3>
       <button class="btn-exit" onclick="closeUserEdit()">✕ 닫기</button>
     </div>
-    <div style="padding:14px 18px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <span style="font-size:13px;color:var(--muted);">조회할 제출자 이름</span>
-      <input id="searchSubmitterInput" style="border:1px solid var(--line);border-radius:7px;padding:7px 11px;font-family:'Paperlogy';font-size:13px;width:140px;" placeholder="이름 입력">
-      <span style="font-size:13px;color:var(--muted);margin-left:4px;">조회기간</span>
-      <input type="date" id="searchDateFrom" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-family:'Paperlogy';font-size:13px;">
-      <span style="color:var(--muted);font-size:13px;">~</span>
-      <input type="date" id="searchDateTo" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-family:'Paperlogy';font-size:13px;">
-      <button class="btn btn-ghost" style="padding:8px 12px;font-size:12.5px;" onclick="clearUserEditDateRange()">기간 초기화</button>
-      <button class="btn btn-primary" style="padding:8px 16px;font-size:13px;" onclick="loadUserEditable()">조회</button>
+    <div style="padding:14px 18px 10px;border-bottom:1px solid var(--line);">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap;margin-bottom:12px;">
+        <div style="display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex-shrink:0;">
+          <button type="button" id="searchTypeDriverBtn" class="search-type-btn active" onclick="setUserEditSearchType('user',this)" style="border:none;background:var(--navy);color:#fff;padding:7px 9px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Paperlogy';white-space:nowrap;">운행자</button>
+          <button type="button" id="searchTypeSubmitterBtn" class="search-type-btn" onclick="setUserEditSearchType('submitter',this)" style="border:none;background:#fff;color:var(--muted);padding:7px 9px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Paperlogy';white-space:nowrap;">제출자</button>
+        </div>
+        <input id="searchSubmitterInput" type="text" style="border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-family:'Paperlogy';font-size:13px;flex:1;min-width:0;" placeholder="이름 입력">
+        <button class="btn btn-primary" style="padding:8px 12px;font-size:13px;flex-shrink:0;white-space:nowrap;" onclick="loadUserEditable()">조회</button>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:13px;color:var(--muted);white-space:nowrap;">조회기간</span>
+        <button class="btn btn-ghost" style="padding:8px 12px;font-size:12.5px;" onclick="clearUserEditDateRange()">기간 초기화</button>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <input type="date" id="searchDateFrom" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-family:'Paperlogy';font-size:13px;flex:1;">
+        <span style="color:var(--muted);font-size:13px;">~</span>
+        <input type="date" id="searchDateTo" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-family:'Paperlogy';font-size:13px;flex:1;">
+      </div>
     </div>
     <div id="userEditErr" class="user-edit-err"></div>
     <div id="userEditSummary" style="padding:0 18px;font-size:12.5px;color:var(--muted);"></div>
@@ -3814,6 +3823,22 @@ function clearUserEditDateRange(){
   if((document.getElementById('searchSubmitterInput').value||'').trim()) loadUserEditable();
 }
 
+// '내 제출 기록 수정' 조회 기준: 기본값 운행자(user), 버튼으로 제출자(submitter)와 전환
+let userEditSearchType='user';
+function setUserEditSearchType(type,btn){
+  userEditSearchType=type;
+  document.querySelectorAll('.search-type-btn').forEach(b=>{
+    b.classList.remove('active');
+    b.style.background='#fff';
+    b.style.color='var(--muted)';
+  });
+  btn.classList.add('active');
+  btn.style.background='var(--navy)';
+  btn.style.color='#fff';
+  const inp=document.getElementById('searchSubmitterInput');
+  if(inp) inp.placeholder = type==='submitter' ? '제출자 이름 입력' : '운행자 이름 입력';
+}
+
 // ============================================================
 // 사용자 제출 기록 수정
 // ============================================================
@@ -3830,11 +3855,12 @@ function loadUserEditable(){
   }
   err.style.display='none';
 
-  // 이름 기준으로 내 제출 기록 검색
+  // 이름 기준으로 내 제출 기록 검색 (조회기준: 운행자 또는 제출자, 상단 토글로 선택)
+  const field = userEditSearchType==='submitter' ? 'submitter' : 'user';
   let found=[]; // [{plate, tripIdx, trip}]
   Object.keys(data.vehicles).forEach(plate=>{
     (data.vehicles[plate].trips||[]).forEach((t,i)=>{
-      if((t.submitter||'')=== name) found.push({plate,tripIdx:i,trip:t});
+      if((t[field]||'')===name) found.push({plate,tripIdx:i,trip:t});
     });
   });
 
