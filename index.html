@@ -764,7 +764,7 @@
           <option value="">-- 차량번호를 선택하세요 --</option>
         </select>
       </div>
-      <div class="last-odo-hint" id="lastOdoHint">마지막 기록된 종료거리: <b id="lastOdoVal">–</b> km</div>
+      <div class="last-odo-hint" id="lastOdoHint">이전 종료거리: <b id="lastOdoVal">–</b> km</div>
     </div>
     <div class="form-err" id="userFormErr"></div>
     <div id="tripRows"></div>
@@ -3137,13 +3137,14 @@ function getLastEndOdo(plate){
   return Number(sorted[sorted.length - 1].endOdo) || null;
 }
 
-// 차량의 가장 최근 운행기록이 대차 운행이었는지 여부까지 함께 반환 (반납 후 원 차량 복귀 시 시작거리 재확인 안내용)
+// 차량의 가장 최근 운행기록이 대차 운행이었는지, 운행자가 누구였는지까지 함께 반환
+// (반납 후 원 차량 복귀 시 시작거리 재확인 안내 및 이전 운행자 표시용)
 function getLastTripMeta(plate){
   const trips = (data.vehicles[plate]?.trips || []);
-  if(!trips.length) return {endOdo:null, isDaeCha:false};
+  if(!trips.length) return {endOdo:null, isDaeCha:false, user:''};
   const sorted = trips.slice().sort((a,b) => (a.isoDate||'').localeCompare(b.isoDate||''));
   const last = sorted[sorted.length - 1];
-  return {endOdo: Number(last.endOdo) || null, isDaeCha: !!last.isDaeCha};
+  return {endOdo: Number(last.endOdo) || null, isDaeCha: !!last.isDaeCha, user: last.user||''};
 }
 
 function onVehicleSelect(){
@@ -3156,12 +3157,13 @@ function onVehicleSelect(){
 
   if(!plate){ hint.style.display='none'; addBtn.style.display='none'; bar.style.display='none'; return; }
 
-  const {endOdo:lastOdo, isDaeCha:lastWasDaeCha} = getLastTripMeta(plate);
+  const {endOdo:lastOdo, isDaeCha:lastWasDaeCha, user:lastUser} = getLastTripMeta(plate);
   if(lastOdo !== null){
     hint.style.display = 'block';
+    const userPart = lastUser ? ` <span style="margin-left:8px;color:var(--muted);">· 이전 운행자: <b>${escapeHtml(lastUser)}</b></span>` : '';
     hint.innerHTML = lastWasDaeCha
-      ? `⚠️ 마지막 기록된 종료거리: <b id="lastOdoVal">${lastOdo.toLocaleString()}</b> km <span style="color:var(--bad);font-weight:700;">(대차 운행 건 — 시작거리를 반드시 확인해주세요)</span>`
-      : `마지막 기록된 종료거리: <b id="lastOdoVal">${lastOdo.toLocaleString()}</b> km`;
+      ? `⚠️ 이전 종료거리: <b id="lastOdoVal">${lastOdo.toLocaleString()}</b> km${userPart} <span style="color:var(--bad);font-weight:700;">(대차 운행 건 — 시작거리를 반드시 확인해주세요)</span>`
+      : `이전 종료거리: <b id="lastOdoVal">${lastOdo.toLocaleString()}</b> km${userPart}`;
   } else {
     hint.style.display = 'none';
   }
@@ -3309,15 +3311,16 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
         <div class="form-field">
           <label>시작거리 (km)</label>
           <input type="number" class="tr-start${prefillStart!==null?(prefillWasDaeCha?' needs-recheck':' auto-filled'):''}" value="${prefillStart!==null?prefillStart:''}" placeholder="0"
-            oninput="this.classList.remove('auto-filled','needs-recheck');const h=document.getElementById('startHint-${id}');if(h)h.style.display='none';const w=document.getElementById('prevDaechaWarn-${id}');if(w)w.style.display='none';calcRowDist('${id}');checkFuelVsDistance('${id}');scheduleDraft()">
+            oninput="this.classList.remove('auto-filled','needs-recheck');const h=document.getElementById('startHint-${id}');if(h)h.style.display='none';const w=document.getElementById('prevDaechaWarn-${id}');if(w)w.style.display='none';const dn=document.getElementById('daechaNotice-${id}');if(dn)dn.style.display='none';calcRowDist('${id}');checkFuelVsDistance('${id}');scheduleDraft()">
           <div id="startHint-${id}" style="display:${prefillStart!==null && !prefillWasDaeCha?'block':'none'};font-size:11px;color:var(--muted);margin-top:5px;">🔒 이전 운행 종료거리 자동반영 · 필요 시 수정 가능</div>
           <div id="prevDaechaWarn-${id}" style="display:${prefillWasDaeCha?'block':'none'};font-size:12px;color:var(--bad);background:var(--bad-soft);border-radius:8px;padding:8px 10px;margin-top:6px;line-height:1.5;">⚠️ 이전 운행은 <b>대차 차량</b> 사용 건입니다. 대차를 반납했다면 시작거리가 실제와 다를 수 있으니 시작거리를 반드시 확인해주세요.</div>
         </div>
         <div class="form-field">
           <label>종료거리 (km)</label>
-          <input type="number" class="tr-end" placeholder="0" oninput="calcRowDist('${id}');autoFillNextRow('${id}');checkFuelVsDistance('${id}');scheduleDraft()">
+          <input type="number" class="tr-end" placeholder="0" oninput="const dn=document.getElementById('daechaNotice-${id}');if(dn)dn.style.display='none';calcRowDist('${id}');autoFillNextRow('${id}');checkFuelVsDistance('${id}');scheduleDraft()">
         </div>
       </div>
+      <div id="daechaNotice-${id}" style="display:none;font-size:12px;color:var(--bad);background:var(--bad-soft);border-radius:8px;padding:8px 10px;margin:8px 0 0;line-height:1.5;">⚠️ 대차 차량은 원 차량과 주행거리가 이어지지 않습니다. 위 <b>시작거리</b>를 반드시 확인해주세요.</div>
       <div class="dist-badge"><span class="dist-label">주행거리</span><span id="dist-${id}">–</span><span class="dist-unit">km</span></div>
       <div class="form-field">
         <label>행선지</label>
@@ -3381,9 +3384,6 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
           <span class="check-text">대차 운행 <span style="font-size:12px;color:var(--muted);font-weight:400;">(수리 중 대차 사용 시)</span></span>
         </label>
         <div class="daecha-field" id="daecha-${id}" style="display:none;margin-top:8px;">
-          <div style="background:var(--bad-soft);border:1px solid var(--bad);border-radius:9px;padding:10px 12px;margin-bottom:8px;font-size:12px;color:var(--bad);line-height:1.6;">
-            ⚠️ 대차 차량은 원 차량과 주행거리가 이어지지 않습니다. 위 <b>시작거리</b>를 반드시 확인해주세요.
-          </div>
           <div style="background:var(--accent-soft);border:1px solid var(--accent);border-radius:9px;padding:10px 12px;">
             <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px;">대차 차량번호 <span style="color:var(--bad);">*필수</span></div>
             <input type="text" class="tr-daecha-plate" placeholder="대차 차량번호 입력(필수)" style="border:1.5px solid var(--accent);border-radius:7px;padding:10px 12px;font-family:'Paperlogy';font-size:14px;width:100%;background:#fff;" oninput="scheduleDraft()">
@@ -3476,6 +3476,7 @@ function toggleDaeCha(chk, id){
   field.style.display = chk.checked ? 'block' : 'none';
   const card = document.getElementById(id);
   const prevWarn = card?.querySelector('[id^="prevDaechaWarn-"]');
+  const daechaNotice = card?.querySelector('[id^="daechaNotice-"]');
   // 대차 시 시작거리 자동채움 해제 (다른 차량이므로) + 사용자가 직접 재입력하도록 강조 표시
   if(chk.checked){
     const startInp = card?.querySelector('.tr-start');
@@ -3484,15 +3485,18 @@ function toggleDaeCha(chk, id){
       startInp.value='';
       startInp.classList.remove('auto-filled');
       startInp.classList.add('needs-recheck');
-      startInp.focus();
     }
     if(hint) hint.style.display='none';
     // 이번 건 자체를 대차로 표시했으므로, 위쪽의 '이전 운행이 대차였다' 경고는 중복이라 숨김 (아래 대차 안내로 대체)
     if(prevWarn) prevWarn.style.display='none';
+    if(daechaNotice) daechaNotice.style.display='block';
     calcRowDist(id);
-  } else if(card?.dataset.prevDaecha === '1'){
-    // 대차 체크를 다시 해제했는데 이전 운행이 대차였던 경우라면 재확인 경고를 다시 표시
-    if(prevWarn) prevWarn.style.display='block';
+  } else {
+    if(daechaNotice) daechaNotice.style.display='none';
+    if(card?.dataset.prevDaecha === '1'){
+      // 대차 체크를 다시 해제했는데 이전 운행이 대차였던 경우라면 재확인 경고를 다시 표시
+      if(prevWarn) prevWarn.style.display='block';
+    }
   }
   scheduleDraft();
 }
@@ -3528,8 +3532,14 @@ function setCommuteDirection(btn, id){
   const wasActive = btn.classList.contains('active-commute');
   card.querySelectorAll('.commute-btn').forEach(b=>b.classList.remove('active-commute'));
   const notice = document.getElementById('commute-'+id);
+  const destInp = card.querySelector('.tr-dest');
   if(wasActive){
     if(notice) notice.style.display = 'none';
+    // 출퇴근 해제 시 자동으로 채워졌던 행선지를 원래 입력값으로 복원
+    if(destInp && destInp.dataset.destAutoFilled === 'true'){
+      destInp.value = destInp.dataset.beforeCommute || '';
+      destInp.dataset.destAutoFilled = 'false';
+    }
   }else{
     btn.classList.add('active-commute');
     if(notice) notice.style.display = 'block';
@@ -3539,9 +3549,12 @@ function setCommuteDirection(btn, id){
       personalChk.checked = false;
       togglePersonalUse(personalChk, id);
     }
-    // 출근/퇴근 선택 시 행선지를 자동으로 표기
-    const destInp = card.querySelector('.tr-dest');
-    if(destInp) destInp.value = btn.dataset.dir;
+    // 출근/퇴근 선택 시 행선지를 자동으로 표기 (기존 입력값은 저장해 두었다가 해제 시 복원)
+    if(destInp){
+      if(destInp.dataset.destAutoFilled !== 'true') destInp.dataset.beforeCommute = destInp.value;
+      destInp.value = btn.dataset.dir;
+      destInp.dataset.destAutoFilled = 'true';
+    }
   }
   scheduleDraft();
 }
@@ -3966,13 +3979,14 @@ async function restoreDraft(){
 
 async function onVehicleSelectAsync(plate){
   document.getElementById('userPlateSelect').value = plate;
-  const {endOdo:lastOdo, isDaeCha:lastWasDaeCha} = getLastTripMeta(plate);
+  const {endOdo:lastOdo, isDaeCha:lastWasDaeCha, user:lastUser} = getLastTripMeta(plate);
   const hint = document.getElementById('lastOdoHint');
   if(lastOdo!==null){
     hint.style.display='block';
+    const userPart = lastUser ? ` <span style="margin-left:8px;color:var(--muted);">· 이전 운행자: <b>${escapeHtml(lastUser)}</b></span>` : '';
     hint.innerHTML = lastWasDaeCha
-      ? `⚠️ 마지막 기록된 종료거리: <b id="lastOdoVal">${lastOdo.toLocaleString()}</b> km <span style="color:var(--bad);font-weight:700;">(대차 운행 건 — 시작거리를 반드시 확인해주세요)</span>`
-      : `마지막 기록된 종료거리: <b id="lastOdoVal">${lastOdo.toLocaleString()}</b> km`;
+      ? `⚠️ 이전 종료거리: <b id="lastOdoVal">${lastOdo.toLocaleString()}</b> km${userPart} <span style="color:var(--bad);font-weight:700;">(대차 운행 건 — 시작거리를 반드시 확인해주세요)</span>`
+      : `이전 종료거리: <b id="lastOdoVal">${lastOdo.toLocaleString()}</b> km${userPart}`;
   }
   else hint.style.display='none';
   document.getElementById('addRowBtn').style.display='block';
@@ -4278,14 +4292,24 @@ function setUeCommuteDirection(btn){
   if(!row) return;
   const wasActive=btn.classList.contains('active-commute');
   row.querySelectorAll('.ue-commute-btn').forEach(b=>b.classList.remove('active-commute'));
-  if(!wasActive){
+  const destInp=row.querySelector('.ue-inp[data-f="dest"]');
+  if(wasActive){
+    // 출퇴근 해제 시 자동으로 채워졌던 행선지를 원래 입력값으로 복원
+    if(destInp && destInp.dataset.destAutoFilled === 'true'){
+      destInp.value = destInp.dataset.beforeCommute || '';
+      destInp.dataset.destAutoFilled = 'false';
+    }
+  }else{
     btn.classList.add('active-commute');
     // 출퇴근사용과 개인사용(주말·공휴일)은 동시에 선택할 수 없음 → 개인사용 선택 해제
     const personalChk=row.querySelector('[data-f="isPersonal"].ue-chk');
     if(personalChk) personalChk.checked=false;
-    // 출근/퇴근 선택 시 행선지를 자동으로 표기
-    const destInp=row.querySelector('.ue-inp[data-f="dest"]');
-    if(destInp) destInp.value = btn.dataset.dir;
+    // 출근/퇴근 선택 시 행선지를 자동으로 표기 (기존 입력값은 저장해 두었다가 해제 시 복원)
+    if(destInp){
+      if(destInp.dataset.destAutoFilled !== 'true') destInp.dataset.beforeCommute = destInp.value;
+      destInp.value = btn.dataset.dir;
+      destInp.dataset.destAutoFilled = 'true';
+    }
   }
 }
 
