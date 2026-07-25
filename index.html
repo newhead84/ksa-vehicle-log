@@ -762,17 +762,17 @@
     </div>
 
     <div class="section-head">
-      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>운행자별 사용 현황</h2>
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>운행자별 사용 현황</h2>
     </div>
-    <div class="section-body" id="driverSummaryWrap">
+    <div class="section-body collapsed" id="driverSummaryWrap">
       <input class="search-box" id="driverSearchBox" placeholder="운행자 이름 검색…" oninput="renderDriverSummary()" style="margin-bottom:12px;max-width:280px;">
       <div id="driverSummary"></div>
     </div>
 
     <div class="section-head">
-      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>개인사용 현황</h2>
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>개인사용 현황</h2>
     </div>
-    <div class="section-body" id="personalUseWrap">
+    <div class="section-body collapsed" id="personalUseWrap">
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
         <input class="search-box" id="personalSearchBox" placeholder="운행자 이름 검색…" oninput="renderPersonalUseList()" style="max-width:280px;">
         <div id="personalUseSummaryBar" style="font-size:12.5px;color:var(--ink);"></div>
@@ -781,9 +781,9 @@
     </div>
 
     <div class="section-head">
-      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>출퇴근사용 현황 <span style="font-size:11px;color:var(--muted);font-weight:400;">(단신부임자 급여공제, 가동율 미반영)</span></h2>
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>출퇴근사용 현황 <span style="font-size:11px;color:var(--muted);font-weight:400;">(단신부임자 급여공제, 가동율 미반영)</span></h2>
     </div>
-    <div class="section-body" id="commuteUseWrap">
+    <div class="section-body collapsed" id="commuteUseWrap">
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
         <input class="search-box" id="commuteSearchBox" placeholder="운행자 이름 검색…" oninput="renderCommuteUseList()" style="max-width:280px;">
         <div id="commuteUseSummaryBar" style="font-size:12.5px;color:var(--ink);"></div>
@@ -3227,6 +3227,9 @@ function setCommuteDirection(btn, id){
       personalChk.checked = false;
       togglePersonalUse(personalChk, id);
     }
+    // 출근/퇴근 선택 시 행선지를 자동으로 표기
+    const destInp = card.querySelector('.tr-dest');
+    if(destInp) destInp.value = btn.dataset.dir;
   }
   scheduleDraft();
 }
@@ -3386,8 +3389,10 @@ function showSubmitConfirm(submitter, plate, rows){
         <div><span style="color:var(--muted);">주행거리</span> <b style="color:var(--good);">${dist.toLocaleString()} km</b></div>
         <div><span style="color:var(--muted);">운전자</span> <b>${r.user||'-'}</b></div>
       </div>
-      <div style="margin-top:6px;font-size:12px;color:var(--ink);"><span style="color:var(--muted);">행선지</span> <b>${r.dest||'-'}</b></div>
-      ${r.fuel?`<div style="margin-top:4px;font-size:12px;"><span style="color:var(--muted);">주유비</span> <b>${Number(r.fuel).toLocaleString()}원</b></div>`:''}
+      <div style="margin-top:6px;display:grid;grid-template-columns:${r.fuel?'1fr 1fr':'1fr'};gap:6px;font-size:12px;">
+        <div><span style="color:var(--muted);">행선지</span> <b style="color:var(--ink);">${r.dest||'-'}</b></div>
+        ${r.fuel?`<div><span style="color:var(--muted);">주유비</span> <b>${Number(r.fuel).toLocaleString()}원</b></div>`:''}
+      </div>
       ${r.isPersonal?'<div style="margin-top:4px;"><span style="background:#EFF6FF;color:#1D4ED8;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">개인사용</span></div>':''}
       ${r.isDaeCha?`<div style="margin-top:4px;"><span style="background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">대차 ${r.daeChaPate}</span></div>`:''}
       ${r.isCommute?`<div style="margin-top:4px;"><span style="background:#F5F3FF;color:#7C3AED;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">${r.commuteDir||'출퇴근'}사용 ${dist.toLocaleString()}km</span></div>`:''}
@@ -3851,11 +3856,15 @@ function loadUserEditable(){
           <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">비고</div>
             <input class="ue-inp" value="${f.trip.note||''}" data-f="note" placeholder="특이사항" style="width:100%;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;"></div>
           <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:10px;">
-            <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink);cursor:pointer;">
-              <input type="checkbox" class="ue-chk" data-f="isPersonal" ${f.trip.isPersonal?'checked':''} onchange="toggleUePersonal(this)"> 개인사용 <span style="font-size:11px;color:var(--muted);">(주말·공휴일)</span>
+            <label class="check-label" style="padding:2px 0;gap:6px;">
+              <input type="checkbox" class="ue-chk native-chk" data-f="isPersonal" ${f.trip.isPersonal?'checked':''} onchange="toggleUePersonal(this)">
+              <span class="check-icon" style="width:20px;height:20px;"></span>
+              <span class="check-text" style="font-size:12.5px;font-weight:600;">개인사용 <span style="font-size:11px;color:var(--muted);font-weight:400;">(주말·공휴일)</span></span>
             </label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink);cursor:pointer;">
-              <input type="checkbox" class="ue-chk ue-daecha-chk" data-f="isDaeCha" ${f.trip.isDaeCha?'checked':''} onchange="toggleUeDaeCha(this)"> 대차 운행
+            <label class="check-label" style="padding:2px 0;gap:6px;">
+              <input type="checkbox" class="ue-chk ue-daecha-chk native-chk" data-f="isDaeCha" ${f.trip.isDaeCha?'checked':''} onchange="toggleUeDaeCha(this)">
+              <span class="check-icon" style="width:20px;height:20px;"></span>
+              <span class="check-text" style="font-size:12.5px;font-weight:600;">대차 운행</span>
             </label>
           </div>
           <div class="ue-daecha-field" style="${f.trip.isDaeCha?'':'display:none;'}margin-top:8px;">
@@ -3938,6 +3947,9 @@ function setUeCommuteDirection(btn){
     // 출퇴근사용과 개인사용(주말·공휴일)은 동시에 선택할 수 없음 → 개인사용 선택 해제
     const personalChk=row.querySelector('[data-f="isPersonal"].ue-chk');
     if(personalChk) personalChk.checked=false;
+    // 출근/퇴근 선택 시 행선지를 자동으로 표기
+    const destInp=row.querySelector('.ue-inp[data-f="dest"]');
+    if(destInp) destInp.value = btn.dataset.dir;
   }
 }
 
