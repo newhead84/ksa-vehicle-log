@@ -320,7 +320,10 @@
   .modal-stats b{display:block;font-family:'Paperlogy';font-size:18px;color:var(--ink);}
   .trip-del{color:var(--bad);cursor:pointer;background:none;border:none;font-size:11px;}
   .trip-table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
-  .trip-table{min-width:720px;}
+  .trip-table{min-width:0;width:100%;table-layout:auto;}
+  @media (min-width:1000px){
+    .modal{width:min(1040px,90vw);}
+  }
   .flag-bad-status{color:var(--bad);font-weight:600;}
 
   /* ===== 운행기록 필터 탭 + 더보기(페이지네이션) ===== */
@@ -337,6 +340,16 @@
   .trip-usage-tag{display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:3px;vertical-align:middle;white-space:nowrap;}
   .trip-usage-tag.tag-personal{background:#EFF6FF;color:#1D4ED8;}
   .trip-usage-tag.tag-commute{background:#F5F3FF;color:#7C3AED;}
+
+  /* 운행기록 표: 두 항목을 한 줄에 절반씩 배치하는 공용 레이아웃 */
+  .trip-merged-row{display:flex;gap:12px;width:100%;}
+  .trip-merged-row .trip-half{flex:1 1 50%;min-width:0;}
+  .trip-merged-row .trip-half-label{display:none;} /* 데스크탑: 헤더(예:시작/종료)에 이미 표시되므로 중복 라벨 숨김 */
+  .trip-split-btns{display:flex;gap:6px;flex-wrap:nowrap;}
+  .trip-split-btns .status-btn{flex:1 1 0;padding:4px 6px!important;font-size:10.5px!important;white-space:nowrap;}
+  .trip-split-chks{display:flex;gap:10px;flex-wrap:nowrap;}
+  .trip-split-chks .check-label{gap:4px!important;padding:2px 0!important;}
+  .trip-split-chks .check-text{font-size:10.5px!important;white-space:nowrap;}
   .branch-edit{display:flex;gap:8px;align-items:center;margin:4px 0 16px;padding:10px 12px;background:var(--paper);border-radius:10px;}
   .branch-edit select, .branch-edit input{font-family:'Paperlogy';font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:6px;}
   .branch-edit .orig{font-size:11px;color:var(--muted);}
@@ -591,6 +604,28 @@
     .trip-table td .view-val{text-align:right;word-break:break-word;}
     .trip-table td .edit-inp{width:auto!important;max-width:62%;flex:0 1 auto;text-align:right;}
     .trip-table td .trip-date-wrap{margin-left:auto;text-align:right;}
+
+    /* 운행기간: 라벨을 위, 기간 전체를 아래 배치해 프레임 밖으로 벗어나지 않도록 함 */
+    .trip-table td.trip-period{flex-direction:column;align-items:stretch;gap:6px;}
+    .trip-table td.trip-period::before{flex:0 0 auto;}
+    .trip-table td.trip-period .trip-date-wrap{margin-left:0;text-align:left;width:100%;display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;}
+    .trip-table td.trip-period .trip-date-wrap .view-val{text-align:left;}
+    .trip-table td.trip-period .edit-inp{max-width:100%!important;width:100%!important;display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;}
+    .trip-table td.trip-period .adm-date-from,
+    .trip-table td.trip-period .adm-date-to{width:auto!important;flex:1 1 108px;min-width:96px;}
+
+    /* 시작/종료, 제출자/운행자, 행선지/주유비: 한 줄에 절반씩 배치 */
+    .trip-table td.trip-merged{display:block;}
+    .trip-table td.trip-merged::before{content:none;}
+    .trip-merged-row .trip-half{display:flex;align-items:center;justify-content:space-between;gap:6px;}
+    .trip-merged-row .trip-half-label{display:inline-block;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.02em;flex:0 0 auto;}
+    .trip-merged-row .trip-half .view-val{text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto;min-width:0;}
+    .trip-merged-row .trip-half .edit-inp{width:auto!important;max-width:100%!important;flex:1 1 auto;min-width:0;text-align:right;}
+
+    /* 구분: 체크박스·출퇴근 버튼을 각각 한 줄로 배치 (내부 trip-split-chks/trip-split-btns가 각각 flex row) */
+    .trip-table td.trip-usage-cell .edit-inp{max-width:100%!important;width:100%;}
+    .trip-table td.trip-usage-cell .trip-split-chks,
+    .trip-table td.trip-usage-cell .trip-split-btns{margin-top:4px;}
   }
 
 </style>
@@ -2021,44 +2056,58 @@ function openVehicle(plate){
     <div class="trip-count-label">최신순 정렬 · 전체 ${displayList.length}건 중 ${visible.length}건 표시</div>
     <div class="trip-table-scroll">
     <table id="tripTable-${plate}" class="trip-table">
-      <thead><tr><th>운행기간</th><th>시작</th><th>종료</th><th>거리(누계)</th><th>제출자</th><th>사용자</th><th>행선지</th><th>주유비</th><th>상태</th><th>구분</th><th>대차번호</th><th>비고</th><th></th></tr></thead>
+      <thead><tr><th>운행기간</th><th>시작/종료</th><th>거리(누계)</th><th>제출자/운행자</th><th>행선지/주유비</th><th>상태</th><th>구분</th><th>대차번호</th><th>비고</th><th></th></tr></thead>
       <tbody>
         ${visible.map(({t,i})=>`<tr data-trip-idx="${i}">
-          <td data-label="운행기간"><span class="trip-date-wrap">
+          <td class="trip-period" data-label="운행기간"><span class="trip-date-wrap">
             ${t.isDaeCha?`<span class="trip-usage-tag" style="background:var(--accent);color:#fff;">대차</span>`:''}
             ${t.isPersonal?`<span class="trip-usage-tag tag-personal">개인</span>`:''}
             ${t.isCommute?`<span class="trip-usage-tag tag-commute">${t.commuteDir||'출퇴근'}</span>`:''}
             <span class="view-val">${t.date||''}</span>
-            <span class="edit-inp" style="display:none;white-space:nowrap;">
+            <span class="edit-inp" style="display:none;">
               <input type="text" inputmode="numeric" class="mono adm-date-from" value="${t.isoDate||''}" maxlength="10" placeholder="YYYY-MM-DD" title="시작일자 (YYYY-MM-DD)" oninput="autoFormatAdminDate(this)" style="width:86px;border:1.5px solid var(--good);border-radius:6px;padding:4px 5px;font-size:11.5px;text-align:center;">
               <span style="color:var(--muted);font-size:11px;">~</span>
               <input type="text" inputmode="numeric" class="mono adm-date-to" value="${t.dateTo||t.isoDate||''}" maxlength="10" placeholder="YYYY-MM-DD" title="종료일자 (YYYY-MM-DD, 기간이 아니면 시작일과 동일하게)" oninput="autoFormatAdminDate(this)" style="width:86px;border:1.5px solid var(--good);border-radius:6px;padding:4px 5px;font-size:11.5px;text-align:center;">
             </span>
           </span></td>
-          <td class="mono" data-label="시작"><span class="view-val">${t.startOdo??''}</span><input class="edit-inp mono" value="${t.startOdo??''}" data-f="startOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
-          <td class="mono" data-label="종료"><span class="view-val">${t.endOdo??''}</span><input class="edit-inp mono" value="${t.endOdo??''}" data-f="endOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
+          <td class="mono trip-merged" data-label="">
+            <div class="trip-merged-row">
+              <div class="trip-half"><span class="trip-half-label">시작</span><span class="view-val">${t.startOdo??''}</span><input class="edit-inp mono" value="${t.startOdo??''}" data-f="startOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></div>
+              <div class="trip-half"><span class="trip-half-label">종료</span><span class="view-val">${t.endOdo??''}</span><input class="edit-inp mono" value="${t.endOdo??''}" data-f="endOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></div>
+            </div>
+          </td>
           <td class="mono" data-label="거리(누계, 자동계산)"><span class="view-val dist-view">${t.distance??''}</span><input class="edit-inp mono dist-inp" value="${t.distance??''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1" title="종료거리-시작거리로 자동계산되며 직접 수정할 수 없습니다."></td>
-          <td data-label="제출자" style="color:var(--accent);font-size:11px;">${escapeHtml(t.submitter||'')}</td>
-          <td data-label="사용자"><span class="view-val">${escapeHtml(t.user||'')}</span><input class="edit-inp" value="${escapeHtml(t.user||'')}" data-f="user" style="display:none;width:60px;"></td>
-          <td data-label="행선지"><span class="view-val">${escapeHtml(t.dest||'')}</span><input class="edit-inp" value="${escapeHtml(t.dest||'')}" data-f="dest" style="display:none;width:90px;"></td>
-          <td class="mono" data-label="주유비"><span class="view-val">${t.fuel?Number(t.fuel).toLocaleString():''}</span><input class="edit-inp mono" value="${t.fuel?Number(t.fuel).toLocaleString():''}" data-f="fuel" oninput="formatFuelInput(this)" style="display:none;width:65px;"></td>
+          <td class="trip-merged" data-label="">
+            <div class="trip-merged-row">
+              <div class="trip-half"><span class="trip-half-label">제출자</span><span class="view-val" style="color:var(--accent);font-size:11px;">${escapeHtml(t.submitter||'')}</span></div>
+              <div class="trip-half"><span class="trip-half-label">운행자</span><span class="view-val">${escapeHtml(t.user||'')}</span><input class="edit-inp" value="${escapeHtml(t.user||'')}" data-f="user" style="display:none;width:60px;"></div>
+            </div>
+          </td>
+          <td class="trip-merged" data-label="">
+            <div class="trip-merged-row">
+              <div class="trip-half"><span class="trip-half-label">행선지</span><span class="view-val">${escapeHtml(t.dest||'')}</span><input class="edit-inp" value="${escapeHtml(t.dest||'')}" data-f="dest" style="display:none;width:90px;"></div>
+              <div class="trip-half"><span class="trip-half-label">주유비</span><span class="view-val mono">${t.fuel?Number(t.fuel).toLocaleString():''}</span><input class="edit-inp mono" value="${t.fuel?Number(t.fuel).toLocaleString():''}" data-f="fuel" oninput="formatFuelInput(this)" style="display:none;width:65px;"></div>
+            </div>
+          </td>
           <td class="${t.status&&t.status!=='정상'?'flag-bad-status':''}" data-label="상태"><span class="view-val">${escapeHtml(t.status||'')}</span><input class="edit-inp" value="${escapeHtml(t.status||'')}" data-f="status" style="display:none;width:60px;"></td>
-          <td data-label="구분">
+          <td class="trip-usage-cell" data-label="구분">
             <span class="view-val">${t.isPersonal?'개인사용(주말)':t.isCommute?(t.commuteDir||'출퇴근')+' 사용':t.isDaeCha?'대차 운행':'업무용'}</span>
             <span class="edit-inp" style="display:none;">
-              <label class="check-label" style="gap:5px;padding:2px 0;">
-                <input type="checkbox" class="native-chk adm-personal-chk" ${t.isPersonal?'checked':''} onchange="toggleAdminPersonal(this)">
-                <span class="check-icon" style="width:16px;height:16px;"></span>
-                <span class="check-text" style="font-size:11px;white-space:nowrap;">개인사용(주말·공휴일)</span>
-              </label>
-              <label class="check-label" style="gap:5px;padding:2px 0;">
-                <input type="checkbox" class="native-chk adm-daecha-chk" ${t.isDaeCha?'checked':''}>
-                <span class="check-icon" style="width:16px;height:16px;"></span>
-                <span class="check-text" style="font-size:11px;white-space:nowrap;">대차 운행</span>
-              </label>
-              <div class="status-toggle" style="gap:4px;margin-top:2px;">
-                <button type="button" class="status-btn adm-commute-btn${t.commuteDir==='출근'?' active-commute':''}" style="padding:4px 8px;font-size:11px;" data-dir="출근" onclick="setAdminCommuteDirection(this)">🌅출근</button>
-                <button type="button" class="status-btn adm-commute-btn${t.commuteDir==='퇴근'?' active-commute':''}" style="padding:4px 8px;font-size:11px;" data-dir="퇴근" onclick="setAdminCommuteDirection(this)">🌆퇴근</button>
+              <div class="trip-split-chks">
+                <label class="check-label">
+                  <input type="checkbox" class="native-chk adm-personal-chk" ${t.isPersonal?'checked':''} onchange="toggleAdminPersonal(this)">
+                  <span class="check-icon" style="width:16px;height:16px;"></span>
+                  <span class="check-text">개인사용(주말·공휴일)</span>
+                </label>
+                <label class="check-label">
+                  <input type="checkbox" class="native-chk adm-daecha-chk" ${t.isDaeCha?'checked':''}>
+                  <span class="check-icon" style="width:16px;height:16px;"></span>
+                  <span class="check-text">대차 운행</span>
+                </label>
+              </div>
+              <div class="status-toggle trip-split-btns">
+                <button type="button" class="status-btn adm-commute-btn${t.commuteDir==='출근'?' active-commute':''}" data-dir="출근" onclick="setAdminCommuteDirection(this)">🌅출근</button>
+                <button type="button" class="status-btn adm-commute-btn${t.commuteDir==='퇴근'?' active-commute':''}" data-dir="퇴근" onclick="setAdminCommuteDirection(this)">🌆퇴근</button>
               </div>
             </span>
           </td>
