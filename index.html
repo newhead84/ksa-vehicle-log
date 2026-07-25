@@ -323,25 +323,29 @@
   /* 데스크탑 전용: 가로 스크롤 최소화를 위한 고정 표 레이아웃(모바일은 640px 이하 별도 규칙에서 카드형으로 전환됨) */
   @media (min-width:641px){
     .trip-table{min-width:0;width:100%;table-layout:fixed;font-size:11.5px;}
-    .trip-table th,.trip-table td{padding:5px 4px;overflow-wrap:break-word;word-break:break-word;}
-    .trip-table th:nth-child(1),.trip-table td:nth-child(1){width:18%;}
+    .trip-table th,.trip-table td{padding:5px 3px;overflow-wrap:break-word;word-break:break-word;}
+    .trip-table th:nth-child(1),.trip-table td:nth-child(1){width:15%;}
     .trip-table th:nth-child(2),.trip-table td:nth-child(2){width:6%;}
     .trip-table th:nth-child(3),.trip-table td:nth-child(3){width:6%;}
     .trip-table th:nth-child(4),.trip-table td:nth-child(4){width:6%;}
-    .trip-table th:nth-child(5),.trip-table td:nth-child(5){width:10%;}
-    .trip-table th:nth-child(6),.trip-table td:nth-child(6){width:11%;}
-    .trip-table th:nth-child(7),.trip-table td:nth-child(7){width:6%;}
-    .trip-table th:nth-child(8),.trip-table td:nth-child(8){width:18%;}
-    .trip-table th:nth-child(9),.trip-table td:nth-child(9){width:7%;}
-    .trip-table th:nth-child(10),.trip-table td:nth-child(10){width:8%;}
-    .trip-table th:nth-child(11),.trip-table td:nth-child(11){width:4%;}
+    .trip-table th:nth-child(5),.trip-table td:nth-child(5){width:6%;}
+    .trip-table th:nth-child(6),.trip-table td:nth-child(6){width:7%;}
+    .trip-table th:nth-child(7),.trip-table td:nth-child(7){width:9%;}
+    .trip-table th:nth-child(8),.trip-table td:nth-child(8){width:7%;}
+    .trip-table th:nth-child(9),.trip-table td:nth-child(9){width:5%;}
+    .trip-table th:nth-child(10),.trip-table td:nth-child(10){width:15%;}
+    .trip-table th:nth-child(11),.trip-table td:nth-child(11){width:6%;}
+    .trip-table th:nth-child(12),.trip-table td:nth-child(12){width:7%;}
+    .trip-table th:nth-child(13),.trip-table td:nth-child(13){width:4%;}
     .trip-table td input.edit-inp{width:100%!important;max-width:100%!important;box-sizing:border-box;}
+    /* 운행기간 수정영역: JS가 inline-block으로 강제 지정하는 것을 !important로 덮어써서 항상 flex 한 줄 배치가 되도록 함 */
     .trip-table td.trip-period .trip-date-wrap,
-    .trip-table td.trip-period .edit-inp{white-space:nowrap;}
+    .trip-table td.trip-period .edit-inp{white-space:nowrap;display:flex!important;align-items:center;gap:3px;}
     .trip-table td.trip-period .adm-date-from,
-    .trip-table td.trip-period .adm-date-to{width:76px!important;box-sizing:border-box;}
+    .trip-table td.trip-period .adm-date-to{width:auto!important;flex:1 1 0;min-width:0;font-size:11px!important;padding:4px 2px!important;box-sizing:border-box;}
   }
   @media (min-width:1000px){
+
     .modal{width:min(1040px,90vw);}
   }
   @media (min-width:1300px){
@@ -631,12 +635,12 @@
     /* 운행기간: 라벨을 위, 기간 전체를 아래 배치해 프레임 밖으로 벗어나지 않도록 함 */
     .trip-table td.trip-period{flex-direction:column;align-items:stretch;gap:6px;}
     .trip-table td.trip-period::before{flex:0 0 auto;}
-    .trip-table td.trip-period .trip-date-wrap{margin-left:0;text-align:left;width:100%;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;}
+    .trip-table td.trip-period .trip-date-wrap{margin-left:0;text-align:left;width:100%;display:flex!important;align-items:center;flex-wrap:nowrap;gap:3px;}
     .trip-table td.trip-period .trip-date-wrap .view-val{text-align:left;}
-    .trip-table td.trip-period .edit-inp{max-width:100%!important;width:100%!important;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;}
-    .trip-table td.trip-period .edit-inp>span{flex:0 0 auto;}
+    .trip-table td.trip-period .edit-inp{max-width:100%!important;width:100%!important;display:flex!important;align-items:center;flex-wrap:nowrap;gap:3px;}
+    .trip-table td.trip-period .edit-inp>span{flex:0 0 auto;font-size:10px;}
     .trip-table td.trip-period .adm-date-from,
-    .trip-table td.trip-period .adm-date-to{width:auto!important;flex:1 1 0;min-width:0;font-size:11px!important;padding:4px 2px!important;}
+    .trip-table td.trip-period .adm-date-to{width:auto!important;flex:1 1 0;min-width:0;font-size:10px!important;padding:3px 1px!important;box-sizing:border-box;}
 
     /* 시작/종료, 제출자/운행자, 행선지/주유비: 한 줄에 절반씩 배치 */
     .trip-table td.trip-merged{display:block;}
@@ -2080,7 +2084,7 @@ function openVehicle(plate){
     <div class="trip-count-label">최신순 정렬 · 전체 ${displayList.length}건 중 ${visible.length}건 표시</div>
     <div class="trip-table-scroll">
     <table id="tripTable-${plate}" class="trip-table">
-      <thead><tr><th>운행기간</th><th>시작거리</th><th>종료거리</th><th>거리(누계)</th><th>제출자/운행자</th><th>행선지/주유비</th><th>상태</th><th>구분</th><th>대차번호</th><th>비고</th><th></th></tr></thead>
+      <thead><tr><th>운행기간</th><th>시작거리</th><th>종료거리</th><th>거리(누계)</th><th>제출자</th><th>운행자</th><th>행선지</th><th>주유비</th><th>상태</th><th>구분</th><th>대차번호</th><th>비고</th><th></th></tr></thead>
       <tbody>
         ${visible.map(({t,i})=>`<tr data-trip-idx="${i}">
           <td class="trip-period" data-label="운행기간"><span class="trip-date-wrap">
@@ -2097,18 +2101,10 @@ function openVehicle(plate){
           <td class="mono" data-label="시작거리"><span class="view-val">${t.startOdo??''}</span><input class="edit-inp mono" value="${t.startOdo??''}" data-f="startOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
           <td class="mono" data-label="종료거리"><span class="view-val">${t.endOdo??''}</span><input class="edit-inp mono" value="${t.endOdo??''}" data-f="endOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
           <td class="mono" data-label="거리(누계, 자동계산)"><span class="view-val dist-view">${t.distance??''}</span><input class="edit-inp mono dist-inp" value="${t.distance??''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1" title="종료거리-시작거리로 자동계산되며 직접 수정할 수 없습니다."></td>
-          <td class="trip-merged" data-label="">
-            <div class="trip-merged-row">
-              <div class="trip-half"><span class="trip-half-label">제출자</span><span class="view-val" style="color:var(--accent);font-size:11px;">${escapeHtml(t.submitter||'')}</span></div>
-              <div class="trip-half"><span class="trip-half-label">운행자</span><span class="view-val">${escapeHtml(t.user||'')}</span><input class="edit-inp" value="${escapeHtml(t.user||'')}" data-f="user" style="display:none;width:60px;"></div>
-            </div>
-          </td>
-          <td class="trip-merged" data-label="">
-            <div class="trip-merged-row">
-              <div class="trip-half"><span class="trip-half-label">행선지</span><span class="view-val">${escapeHtml(t.dest||'')}</span><input class="edit-inp" value="${escapeHtml(t.dest||'')}" data-f="dest" style="display:none;width:90px;"></div>
-              <div class="trip-half"><span class="trip-half-label">주유비</span><span class="view-val mono">${t.fuel?Number(t.fuel).toLocaleString():''}</span><input class="edit-inp mono" value="${t.fuel?Number(t.fuel).toLocaleString():''}" data-f="fuel" oninput="formatFuelInput(this)" style="display:none;width:65px;"></div>
-            </div>
-          </td>
+          <td data-label="제출자"><span class="view-val" style="color:var(--accent);font-size:11px;">${escapeHtml(t.submitter||'')}</span></td>
+          <td data-label="운행자"><span class="view-val">${escapeHtml(t.user||'')}</span><input class="edit-inp" value="${escapeHtml(t.user||'')}" data-f="user" style="display:none;width:60px;"></td>
+          <td data-label="행선지"><span class="view-val">${escapeHtml(t.dest||'')}</span><input class="edit-inp" value="${escapeHtml(t.dest||'')}" data-f="dest" style="display:none;width:90px;"></td>
+          <td class="mono" data-label="주유비"><span class="view-val mono">${t.fuel?Number(t.fuel).toLocaleString():''}</span><input class="edit-inp mono" value="${t.fuel?Number(t.fuel).toLocaleString():''}" data-f="fuel" oninput="formatFuelInput(this)" style="display:none;width:65px;"></td>
           <td class="${t.status&&t.status!=='정상'?'flag-bad-status':''}" data-label="상태"><span class="view-val">${escapeHtml(t.status||'')}</span><input class="edit-inp" value="${escapeHtml(t.status||'')}" data-f="status" style="display:none;width:60px;"></td>
           <td class="trip-usage-cell" data-label="구분">
             <span class="view-val">${t.isPersonal?'개인사용(주말)':t.isCommute?(t.commuteDir||'출퇴근')+' 사용':t.isDaeCha?'대차 운행':'업무용'}</span>
@@ -2131,7 +2127,7 @@ function openVehicle(plate){
               </div>
             </span>
           </td>
-          <td data-label="대차번호"><span class="view-val">${escapeHtml(t.daeChaPate||'')}</span><input class="edit-inp" value="${escapeHtml(t.daeChaPate||'')}" data-f="daeChaPate" placeholder="대차 차량번호" style="display:none;width:80px;"></td>
+          <td data-label="대차번호"><span class="view-val">${escapeHtml(t.daeChaPate||'')}</span><input class="edit-inp" value="${escapeHtml(t.daeChaPate||'')}" data-f="daeChaPate" placeholder="대차 차량번호(필수)" style="display:none;width:80px;"></td>
           <td data-label="비고"><span class="view-val">${escapeHtml(t.note||'')}</span><input class="edit-inp" value="${escapeHtml(t.note||'')}" data-f="note" style="display:none;width:80px;"></td>
           <td data-label="" class="trip-del-cell"><button class="trip-del" onclick="deleteTrip('${plate}',${i})">삭제</button></td>
         </tr>`).join('')}
@@ -2588,6 +2584,12 @@ async function saveTripEdits(plate){
     const fuelInp=tr.querySelector('[data-f="fuel"]');
     const fromInp=tr.querySelector('.adm-date-from');
     const toInp=tr.querySelector('.adm-date-to');
+    const daechaChk=tr.querySelector('.adm-daecha-chk');
+    const daechaPateInp=tr.querySelector('[data-f="daeChaPate"]');
+    if(daechaChk?.checked && !(daechaPateInp?.value||'').trim()){
+      showAdminToast('저장 실패: 대차 운행으로 체크된 건은 대차 차량번호를 반드시 입력해야 합니다. (과태료·범칙금 발생 시 운행자 확인용)','bad');
+      return;
+    }
     const s=Number(startInp?.value)||0;
     const e=Number(endInp?.value)||0;
     const dist=Math.max(0, e-s);
@@ -3325,8 +3327,8 @@ function addTripRow(prefillStart = null){
         </label>
         <div class="daecha-field" id="daecha-${id}" style="display:none;margin-top:8px;">
           <div style="background:var(--accent-soft);border:1px solid var(--accent);border-radius:9px;padding:10px 12px;">
-            <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px;">대차 차량번호</div>
-            <input type="text" class="tr-daecha-plate" placeholder="대차 차량번호 입력" style="border:1.5px solid var(--accent);border-radius:7px;padding:10px 12px;font-family:'Paperlogy';font-size:14px;width:100%;background:#fff;" oninput="scheduleDraft()">
+            <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px;">대차 차량번호 <span style="color:var(--bad);">*필수</span></div>
+            <input type="text" class="tr-daecha-plate" placeholder="대차 차량번호 입력(필수)" style="border:1.5px solid var(--accent);border-radius:7px;padding:10px 12px;font-family:'Paperlogy';font-size:14px;width:100%;background:#fff;" oninput="scheduleDraft()">
             <div style="font-size:11px;color:var(--accent);margin-top:6px;">💡 원 차량 기준으로 가동일이 반영됩니다. 거리 불연속은 정상입니다.</div>
           </div>
         </div>
@@ -3677,6 +3679,7 @@ async function submitDirectInput(){
     if(!r.endOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리를 입력해 주세요.`); return; }
     if(r.endOdo <= r.startOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리가 시작거리보다 작습니다.`); return; }
     if(!r.dest){ showUserFormErr(`${i+1}번 운행기록: 행선지를 입력해 주세요.`); return; }
+    if(r.isDaeCha && !r.daeChaPate){ showUserFormErr(`${i+1}번 운행기록: 대차 운행 체크 시 대차 차량번호를 반드시 입력해 주세요.`); return; }
     if(r.isPersonal && !r.fuel){ showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유비를 입력해 주세요.`); return; }
     if(r.status==='점검요망' && !r.note){ showUserFormErr(`${i+1}번 운행기록: 점검요망 선택 시 비고(사유)를 입력해 주세요.`); return; }
     if(r.distance >= MAX_TRIP_DISTANCE_KM){ showUserFormErr(`${i+1}번 운행기록: 주행거리가 ${r.distance.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`); return; }
@@ -4120,7 +4123,7 @@ function loadUserEditable(){
             </label>
           </div>
           <div class="ue-daecha-field" style="${f.trip.isDaeCha?'':'display:none;'}margin-top:8px;">
-            <input class="ue-inp" data-f="daeChaPate" value="${escapeHtml(f.trip.daeChaPate||'')}" placeholder="대차 차량번호" style="width:100%;font-size:13px;border:1px solid var(--accent);border-radius:8px;padding:8px 6px;">
+            <input class="ue-inp" data-f="daeChaPate" value="${escapeHtml(f.trip.daeChaPate||'')}" placeholder="대차 차량번호(필수)" style="width:100%;font-size:13px;border:1px solid var(--accent);border-radius:8px;padding:8px 6px;">
           </div>
           <div style="margin-top:10px;">
             <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">출퇴근 사용 <span style="font-weight:400;">(단신부임자 급여공제 승인자)</span></div>
@@ -4245,6 +4248,12 @@ async function saveUserEdits(name){
     const isPersonalChk=tr.querySelector('[data-f="isPersonal"]');
     if(isPersonalChk?.checked && !fuel){
       if(err){ err.textContent='저장 실패: 개인사용 체크 시 주유비를 입력해 주세요.'; err.style.display='block'; }
+      return;
+    }
+    const daechaChkV=tr.querySelector('[data-f="isDaeCha"].ue-chk');
+    const daechaPateInpV=tr.querySelector('[data-f="daeChaPate"]');
+    if(daechaChkV?.checked && !(daechaPateInpV?.value||'').trim()){
+      if(err){ err.textContent='저장 실패: 대차 운행 체크 시 대차 차량번호를 반드시 입력해 주세요. (과태료·범칙금 발생 시 운행자 확인용)'; err.style.display='block'; }
       return;
     }
   }
