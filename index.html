@@ -1232,9 +1232,11 @@ firebase.initializeApp(firebaseConfig);
 
 let _authReadyResolve;
 const authReadyPromise = new Promise(res=>{ _authReadyResolve = res; });
-firebase.auth().onAuthStateChanged(user=>{
-  if(user) _authReadyResolve();
-});
+// 로그인 성공/실패와 무관하게 상태가 확정되면 대기를 풀어줌 (익명 로그인이 아직
+// 콘솔에서 활성화되지 않았거나 일시적으로 실패해도 앱 전체가 멈추지 않도록 하기 위함)
+firebase.auth().onAuthStateChanged(()=>{ _authReadyResolve(); });
+// 혹시 onAuthStateChanged 콜백 자체가 늦게 오는 경우를 대비한 안전장치(최대 5초)
+setTimeout(()=>_authReadyResolve(), 5000);
 firebase.auth().signInAnonymously().catch(e=>{
   console.error('[KSA 차량관리] 익명 인증 실패 — Firebase 콘솔에서 Authentication > 익명 로그인이 활성화되어 있는지 확인하세요.', e);
 });
