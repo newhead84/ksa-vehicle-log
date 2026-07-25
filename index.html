@@ -955,15 +955,118 @@
       </div>
       <button onclick="closeWeekendModal()" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;font-size:16px;cursor:pointer;flex-shrink:0;">✕</button>
     </div>
-    <div style="padding:16px;">
-      <img src="https://newhead84.github.io/ksa-vehicle-log/images/weekend-guide.jpg" alt="주말·공휴일 이용안내"
-        onclick="openImgFullscreen(this.src)"
-        style="width:100%;border-radius:12px;display:block;cursor:zoom-in;touch-action:manipulation;"
-        onerror="this.style.display='none';document.getElementById('weekendImgErr').style.display='block'">
-      <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:6px;">탭하면 크게 볼 수 있습니다</div>
-      <div id="weekendImgErr" style="display:none;padding:20px;text-align:center;color:var(--muted);font-size:13px;">
-        이미지를 불러올 수 없습니다.<br>GitHub에 weekend-guide.jpg 파일을 업로드해 주세요.
+    <div style="padding:20px;">
+
+      <!-- 이용절차 -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <span style="background:var(--navy);color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;">이용절차</span>
       </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:14px;align-items:flex-start;">
+        <div style="background:var(--accent-soft);color:var(--navy);width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px;">⏰</div>
+        <div>
+          <b style="display:block;font-size:14px;color:var(--ink);margin-bottom:2px;">사전예약</b>
+          <div style="font-size:13px;color:var(--ink);line-height:1.6;">그룹웨어 '공용설비 예약 대여자원 - 공용차량 사전 예약'</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:14px;align-items:flex-start;">
+        <div style="background:var(--accent-soft);color:var(--navy);width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px;">🚗</div>
+        <div>
+          <b style="display:block;font-size:14px;color:var(--ink);margin-bottom:2px;">차량이용</b>
+          <div style="font-size:13px;color:var(--ink);line-height:1.6;">차량키 수령, 기존 법인하이패스카드 분리 후 이용</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:14px;align-items:flex-start;">
+        <div style="background:var(--accent-soft);color:var(--navy);width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px;">🧼</div>
+        <div>
+          <b style="display:block;font-size:14px;color:var(--ink);margin-bottom:2px;">차량관리</b>
+          <div style="font-size:13px;color:var(--ink);line-height:1.6;">
+            이용거리 기준 주유비 개인결제 <span style="color:var(--bad);font-weight:700;">※ 주유비 기준 하단 참조</span><br>
+            차량세차(개인부담), 반납 전 반드시 세차 해주세요!<br>
+            차량 내 또는 별도 배포된 <span style="color:var(--navy);font-weight:700;background:var(--accent-soft);padding:0 3px;border-radius:4px;">QR코드를 통해 운행정보 입력 (업무용 이용분과 반드시 구분하여 별도 입력)</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:20px;align-items:flex-start;">
+        <div style="background:var(--accent-soft);color:var(--navy);width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px;">↩</div>
+        <div>
+          <b style="display:block;font-size:14px;color:var(--ink);margin-bottom:2px;">차량반납</b>
+          <div style="font-size:13px;color:var(--ink);line-height:1.6;">
+            차량 이상여부 확인, 하이패스카드 원상복구<br>
+            차량키 반납 <span style="color:var(--bad);font-weight:700;">※ 주유비 증빙 문서중앙화 업로드 필수</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 주유비정산 -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <span style="background:var(--navy);color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;">주유비정산</span>
+      </div>
+
+      <div style="background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">주유비 기준</div>
+        <div style="font-size:13.5px;color:var(--ink);line-height:1.7;">네이버 지도 길찾기 검색(중형차) 기준<br><b style="color:var(--navy);">이용거리 연료비 이상</b></div>
+      </div>
+
+      <div style="background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">주유비 증빙</div>
+        <div style="font-size:13.5px;color:var(--ink);line-height:1.7;">
+          주유 영수증, 개인 결제내역 캡쳐<br>파일명을 다음과 같이 작성하여 업로드
+          <div style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--ink);margin-top:6px;font-family:monospace;line-height:1.5;">
+            (주유일)_(부서명)_(사용자명)_('비용' 원)<br>예시) 20240110_자산총무실_문익주_30,000원
+          </div>
+        </div>
+      </div>
+
+      <div style="background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:16px;margin-bottom:20px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">증빙 문서중앙화 업로드 경로</div>
+        <div style="font-size:13.5px;color:var(--ink);line-height:1.7;">Y:\공통\★주말및공휴일 차량사용<br>주유비 증빙 제출폴더</div>
+      </div>
+
+      <!-- 이용수칙 -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <span style="background:var(--navy);color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;">이용수칙</span>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:14px;align-items:flex-start;">
+        <div style="background:var(--navy);color:#fff;font-size:12px;font-weight:700;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">1</div>
+        <div style="font-size:13.5px;color:var(--ink);line-height:1.6;">
+          휴일 업무수요 발생시 <span style="color:var(--navy);font-weight:700;background:var(--accent-soft);padding:0 3px;border-radius:4px;">개인 사전예약과 상관없이 업무목적 우선</span>하여 사용(예약취소가능)
+          <span style="display:block;font-size:12px;color:var(--muted);margin-top:4px;">* 취소기준 : 차량별 휴일 예약신청일시가 사용일과 가장 근접한 예약 건을 우선하여 취소</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:14px;align-items:flex-start;">
+        <div style="background:var(--navy);color:#fff;font-size:12px;font-weight:700;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">2</div>
+        <div style="font-size:13.5px;color:var(--ink);line-height:1.6;">
+          과태료, 범칙금, 사고로 인한 자차사고 면책금 등의 <span style="color:var(--navy);font-weight:700;background:var(--accent-soft);padding:0 3px;border-radius:4px;">제반비용 일체 사용자 개인 부담</span>
+          <span style="display:block;font-size:12px;color:var(--muted);margin-top:4px;">* 보험사항 : 자기신체사고(자손) 1억원, 대인배상(동승자) 무한, 대물배상 2억원, 자차사고 면책금(5만원)</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:14px;align-items:flex-start;">
+        <div style="background:var(--navy);color:#fff;font-size:12px;font-weight:700;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">3</div>
+        <div style="font-size:13.5px;color:var(--ink);line-height:1.6;">
+          이용 전일 <span style="color:var(--navy);font-weight:700;background:var(--accent-soft);padding:0 3px;border-radius:4px;">퇴근하면서 이용</span>, 반납 당일 <span style="color:var(--navy);font-weight:700;background:var(--accent-soft);padding:0 3px;border-radius:4px;">출근하면서 반납</span> 가능
+          <span style="display:block;font-size:12px;color:var(--muted);margin-top:4px;">* 차량 반납일에 다음 사용자 예약 일정이 있는 경우, 일정에 맞게 조기반납 필수</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:14px;align-items:flex-start;">
+        <div style="background:var(--navy);color:#fff;font-size:12px;font-weight:700;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">4</div>
+        <div style="font-size:13.5px;color:var(--ink);line-height:1.6;">
+          차량 사용 전, 하이패스카드 분리 → <span style="color:var(--navy);font-weight:700;background:var(--accent-soft);padding:0 3px;border-radius:4px;">반납 전 원상복구, 차량세차, 개인주유, 증빙업로드 필수</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:6px;align-items:flex-start;">
+        <div style="background:var(--navy);color:#fff;font-size:12px;font-weight:700;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">5</div>
+        <div style="font-size:13.5px;color:var(--bad);font-weight:700;line-height:1.6;">2회 이상 이용방법 및 수칙 미준수자 휴일 개인사용금지, 증빙미제출자 비용환수</div>
+      </div>
+
       <button onclick="closeWeekendModal()" style="width:100%;padding:14px;background:var(--navy);color:#fff;border:none;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:'Paperlogy',sans-serif;margin-top:14px;">확인</button>
     </div>
   </div>
@@ -3477,11 +3580,14 @@ function toggleDaeCha(chk, id){
   const card = document.getElementById(id);
   const prevWarn = card?.querySelector('[id^="prevDaechaWarn-"]');
   const daechaNotice = card?.querySelector('[id^="daechaNotice-"]');
+  const startInp = card?.querySelector('.tr-start');
   // 대차 시 시작거리 자동채움 해제 (다른 차량이므로) + 사용자가 직접 재입력하도록 강조 표시
   if(chk.checked){
-    const startInp = card?.querySelector('.tr-start');
     const hint = card?.querySelector('[id^="startHint-"]');
     if(startInp){
+      // 대차 체크 해제 시 원래 자동채움 값으로 되돌릴 수 있도록 보관
+      card.dataset.savedStart = startInp.value;
+      card.dataset.savedStartAuto = startInp.classList.contains('auto-filled') ? '1' : '0';
       startInp.value='';
       startInp.classList.remove('auto-filled');
       startInp.classList.add('needs-recheck');
@@ -3493,6 +3599,15 @@ function toggleDaeCha(chk, id){
     calcRowDist(id);
   } else {
     if(daechaNotice) daechaNotice.style.display='none';
+    // 대차 체크를 해제하면 체크 이전에 자동으로 채워져 있던 시작거리를 원상복구
+    if(startInp && card?.dataset.savedStart !== undefined){
+      startInp.value = card.dataset.savedStart;
+      startInp.classList.remove('needs-recheck');
+      if(card.dataset.savedStartAuto === '1') startInp.classList.add('auto-filled');
+      delete card.dataset.savedStart;
+      delete card.dataset.savedStartAuto;
+      calcRowDist(id);
+    }
     if(card?.dataset.prevDaecha === '1'){
       // 대차 체크를 다시 해제했는데 이전 운행이 대차였던 경우라면 재확인 경고를 다시 표시
       if(prevWarn) prevWarn.style.display='block';
