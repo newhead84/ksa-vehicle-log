@@ -338,9 +338,12 @@
     .trip-table th:nth-child(12),.trip-table td:nth-child(12){width:7%;}
     .trip-table th:nth-child(13),.trip-table td:nth-child(13){width:4%;}
     .trip-table td input.edit-inp{width:100%!important;max-width:100%!important;box-sizing:border-box;}
-    /* 운행기간 수정영역: JS가 inline-block으로 강제 지정하는 것을 !important로 덮어써서 항상 flex 한 줄 배치가 되도록 함 */
-    .trip-table td.trip-period .trip-date-wrap,
-    .trip-table td.trip-period .edit-inp{white-space:nowrap;display:flex!important;align-items:center;gap:3px;}
+    .trip-table td.trip-period{position:relative;}
+    .trip-table td.trip-period .trip-usage-tags{display:block;width:100%;margin-bottom:2px;}
+    .trip-table td.trip-period .trip-date-wrap{white-space:nowrap;display:flex;align-items:center;gap:3px;}
+    .trip-table td.trip-period .trip-date-wrap .view-val{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%;}
+    /* edit-inp는 JS가 지정하는 display(none/flex)를 그대로 따름 — !important로 덮어쓰면 수정모드 진입 전에도 계속 보이는 버그가 생김 */
+    .trip-table td.trip-period .edit-inp{white-space:nowrap;align-items:center;gap:3px;}
     .trip-table td.trip-period .adm-date-from,
     .trip-table td.trip-period .adm-date-to{width:auto!important;flex:1 1 0;min-width:0;font-size:11px!important;padding:4px 2px!important;box-sizing:border-box;}
   }
@@ -633,11 +636,13 @@
     .trip-table td .trip-date-wrap{margin-left:auto;text-align:right;}
 
     /* 운행기간: 라벨을 위, 기간 전체를 아래 배치해 프레임 밖으로 벗어나지 않도록 함 */
-    .trip-table td.trip-period{flex-direction:column;align-items:stretch;gap:6px;}
+    .trip-table td.trip-period{flex-direction:column;align-items:stretch;gap:4px;}
     .trip-table td.trip-period::before{flex:0 0 auto;}
+    .trip-table td.trip-period .trip-usage-tags{display:block;width:100%;text-align:left;}
     .trip-table td.trip-period .trip-date-wrap{margin-left:0;text-align:left;width:100%;display:flex!important;align-items:center;flex-wrap:nowrap;gap:3px;}
-    .trip-table td.trip-period .trip-date-wrap .view-val{text-align:left;}
-    .trip-table td.trip-period .edit-inp{max-width:100%!important;width:100%!important;display:flex!important;align-items:center;flex-wrap:nowrap;gap:3px;}
+    .trip-table td.trip-period .trip-date-wrap .view-val{text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    /* edit-inp는 JS가 지정하는 display(none/flex)를 그대로 따름 — !important로 덮어쓰면 수정모드 진입 전에도 계속 보이는 버그가 생김 */
+    .trip-table td.trip-period .edit-inp{max-width:100%!important;width:100%!important;align-items:center;flex-wrap:nowrap;gap:3px;}
     .trip-table td.trip-period .edit-inp>span{flex:0 0 auto;font-size:10px;}
     .trip-table td.trip-period .adm-date-from,
     .trip-table td.trip-period .adm-date-to{width:auto!important;flex:1 1 0;min-width:0;font-size:10px!important;padding:3px 1px!important;box-sizing:border-box;}
@@ -2087,17 +2092,21 @@ function openVehicle(plate){
       <thead><tr><th>운행기간</th><th>시작거리</th><th>종료거리</th><th>거리(누계)</th><th>제출자</th><th>운행자</th><th>행선지</th><th>주유비</th><th>상태</th><th>구분</th><th>대차번호</th><th>비고</th><th></th></tr></thead>
       <tbody>
         ${visible.map(({t,i})=>`<tr data-trip-idx="${i}">
-          <td class="trip-period" data-label="운행기간"><span class="trip-date-wrap">
-            ${t.isDaeCha?`<span class="trip-usage-tag" style="background:var(--accent);color:#fff;">대차</span>`:''}
-            ${t.isPersonal?`<span class="trip-usage-tag tag-personal">개인</span>`:''}
-            ${t.isCommute?`<span class="trip-usage-tag tag-commute">${t.commuteDir||'출퇴근'}</span>`:''}
-            <span class="view-val">${t.date||''}</span>
-            <span class="edit-inp" style="display:none;">
-              <input type="text" inputmode="numeric" class="mono adm-date-from" value="${t.isoDate||''}" maxlength="10" placeholder="YYYY-MM-DD" title="시작일자 (YYYY-MM-DD)" oninput="autoFormatAdminDate(this)" style="width:86px;border:1.5px solid var(--good);border-radius:6px;padding:4px 5px;font-size:11.5px;text-align:center;">
-              <span style="color:var(--muted);font-size:11px;">~</span>
-              <input type="text" inputmode="numeric" class="mono adm-date-to" value="${t.dateTo||t.isoDate||''}" maxlength="10" placeholder="YYYY-MM-DD" title="종료일자 (YYYY-MM-DD, 기간이 아니면 시작일과 동일하게)" oninput="autoFormatAdminDate(this)" style="width:86px;border:1.5px solid var(--good);border-radius:6px;padding:4px 5px;font-size:11.5px;text-align:center;">
+          <td class="trip-period" data-label="운행기간">
+            <span class="trip-usage-tags">
+              ${t.isDaeCha?`<span class="trip-usage-tag" style="background:var(--accent);color:#fff;">대차</span>`:''}
+              ${t.isPersonal?`<span class="trip-usage-tag tag-personal">개인</span>`:''}
+              ${t.isCommute?`<span class="trip-usage-tag tag-commute">${t.commuteDir||'출퇴근'}</span>`:''}
             </span>
-          </span></td>
+            <span class="trip-date-wrap">
+              <span class="view-val">${t.date||''}</span>
+              <span class="edit-inp" style="display:none;">
+                <input type="text" inputmode="numeric" class="mono adm-date-from" value="${t.isoDate||''}" maxlength="10" placeholder="YYYY-MM-DD" title="시작일자 (YYYY-MM-DD)" oninput="autoFormatAdminDate(this)" style="width:86px;border:1.5px solid var(--good);border-radius:6px;padding:4px 5px;font-size:11.5px;text-align:center;">
+                <span style="color:var(--muted);font-size:11px;">~</span>
+                <input type="text" inputmode="numeric" class="mono adm-date-to" value="${t.dateTo||t.isoDate||''}" maxlength="10" placeholder="YYYY-MM-DD" title="종료일자 (YYYY-MM-DD, 기간이 아니면 시작일과 동일하게)" oninput="autoFormatAdminDate(this)" style="width:86px;border:1.5px solid var(--good);border-radius:6px;padding:4px 5px;font-size:11.5px;text-align:center;">
+              </span>
+            </span>
+          </td>
           <td class="mono" data-label="시작거리"><span class="view-val">${t.startOdo??''}</span><input class="edit-inp mono" value="${t.startOdo??''}" data-f="startOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
           <td class="mono" data-label="종료거리"><span class="view-val">${t.endOdo??''}</span><input class="edit-inp mono" value="${t.endOdo??''}" data-f="endOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
           <td class="mono" data-label="거리(누계, 자동계산)"><span class="view-val dist-view">${t.distance??''}</span><input class="edit-inp mono dist-inp" value="${t.distance??''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1" title="종료거리-시작거리로 자동계산되며 직접 수정할 수 없습니다."></td>
@@ -2558,7 +2567,10 @@ function toggleEditMode(plate){
   if(!isEdit){
     // 수정 모드 ON
     table.querySelectorAll('.view-val').forEach(el=>el.style.display='none');
-    table.querySelectorAll('.edit-inp').forEach(el=>el.style.display='inline-block');
+    table.querySelectorAll('.edit-inp').forEach(el=>{
+      // 운행기간(시작~종료일자) 영역은 span이 flex 컨테이너이므로 flex로, 그 외 input들은 inline-block으로 표시
+      el.style.display = el.closest('td.trip-period') ? 'flex' : 'inline-block';
+    });
     bar.style.display='flex';
     btn.style.background='var(--accent)';btn.style.color='#fff';btn.style.borderColor='var(--accent)';
     btn.textContent='✏ 수정 중';
