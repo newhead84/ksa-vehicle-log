@@ -1015,6 +1015,14 @@ const FUEL_PRICE_NODE   = 'fuel-price';
 //                        오타/오입력으로 걸러냅니다. (예: 150,000원 이상이면 오류)
 const MAX_TRIP_DISTANCE_KM = 1000;
 const MAX_FUEL_AMOUNT      = 150000;
+
+// 사용자가 자유 입력하는 텍스트(행선지/비고/운전자명 등)를 HTML에 삽입하기 전
+// 이스케이프 처리하여 저장형 XSS(스크립트 삽입)를 방지합니다.
+// 화면에 표시되는 모든 사용자 입력 텍스트는 반드시 이 함수를 통과시켜야 합니다.
+function escapeHtml(str){
+  if(str===null||str===undefined) return '';
+  return String(str).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
 // ============================================================
 
 const STORAGE_KEY  = 'fleet-data';
@@ -1359,6 +1367,39 @@ function expandDateField(str){
     cd++;if(cd>31){cd=1;cm++;if(cm>12)cm=1;}
   }
   return out;
+}
+
+// 관리자 "운행기록 수정"의 일자 필드는 과거 방식(M/D, 예: 3/15~18)과
+// 표준 방식(YYYY-MM-DD, 예: 2026-03-15~2026-03-18)을 모두 허용합니다.
+// 두 형식 중 하나라도 맞으면 유효한 것으로 판단합니다.
+function isValidTripDateField(str){
+  return parseTripDateField(str) !== null;
+}
+
+// 일자 필드 문자열을 파싱하여 {isoDate, dateTo, usageDates, display} 형태로 반환합니다.
+// 형식을 인식하지 못하면 null을 반환합니다. (연도가 없는 M/D 형식은 fallbackYear를 사용)
+function parseTripDateField(str, fallbackYear){
+  const s=String(str||'').trim();
+  if(!s) return null;
+  // 1) YYYY-MM-DD 또는 YYYY-MM-DD~YYYY-MM-DD
+  const isoMatch=s.match(/^(\d{4}-\d{2}-\d{2})(?:\s*[~\-]\s*(\d{4}-\d{2}-\d{2}))?$/);
+  if(isoMatch){
+    const d1=isoMatch[1], d2=isoMatch[2]||d1;
+    const start=new Date(d1+'T00:00:00'), end=new Date(d2+'T00:00:00');
+    if(isNaN(start)||isNaN(end)||end<start) return null;
+    const usageDates=[]; let cur=start;
+    while(cur<=end){ usageDates.push(iso(cur)); cur=new Date(cur.getTime()+86400000); }
+    const fm=Number(d1.slice(5,7)), fd=Number(d1.slice(8,10));
+    const tm=Number(d2.slice(5,7)), td=Number(d2.slice(8,10));
+    const display = d1===d2 ? `${fm}/${fd}` : `${fm}/${fd}~${td}`;
+    return {isoDate:usageDates[0], dateTo:d2, usageDates, display};
+  }
+  // 2) 기존 방식: M/D 또는 M/D~D (연도 없음)
+  const dates=expandDateField(s);
+  if(dates.length===0) return null;
+  const year=fallbackYear||new Date().getFullYear();
+  const usageDates=dates.map(x=>iso(new Date(year,x.m-1,x.d)));
+  return {isoDate:usageDates[0], dateTo:usageDates[usageDates.length-1], usageDates, display:s};
 }
 
 function resolveBatchYears(rows,anchorDate,forcedYear){
@@ -1728,12 +1769,12 @@ function renderPersonalUseList(){
   const rows=list.map(t=>`<tr>
     <td class="mono">${t.date||t.isoDate||''}</td>
     <td class="mono"><b>${t.plate}</b></td>
-    <td>${t.branch||''}</td>
-    <td>${t.user||''}</td>
+    <td>${escapeHtml(t.branch||'')}</td>
+    <td>${escapeHtml(t.user||'')}</td>
     <td class="mono">${(Number(t.distance)||0).toLocaleString()}km</td>
     <td class="mono">${(Number(t.fuel)||0).toLocaleString()}원</td>
-    <td>${t.dest||''}</td>
-    <td style="color:var(--muted);">${t.submitter||''}</td>
+    <td>${escapeHtml(t.dest||'')}</td>
+    <td style="color:var(--muted);">${escapeHtml(t.submitter||'')}</td>
   </tr>`).join('');
   document.getElementById('personalUseSummaryBar').innerHTML=list.length?`총 <b>${list.length}건</b> · 주행거리 <b>${totalDist.toLocaleString()}km</b> · 총주유비 <b>${totalFuel.toLocaleString()}원</b>`:'';
   document.getElementById('personalUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>주행거리</th><th>주유비</th><th>행선지</th><th>제출자</th></tr></thead><tbody>${rows||`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted);">검색 결과가 없습니다</td></tr>`}</tbody></table></div>`;
@@ -1756,7 +1797,7 @@ const COMMUTE_ROUNDTRIP_LIMIT_KM = 60;
 function commuteDailyTotals(list){
   const map={};
   (list||[]).forEach(t=>{
-    const key=`${t.user||''}|${t.isoDate||''}`;
+    const key=`${escapeHtml(t.user||'')}|${t.isoDate||''}`;
     if(!map[key]) map[key]={total:0,dirs:new Set()};
     map[key].total += Number(t.distance)||0;
     if(t.commuteDir) map[key].dirs.add(t.commuteDir);
@@ -1776,19 +1817,19 @@ function renderCommuteUseList(){
   const dailyTotals=commuteDailyTotals(list);
   const overLimitDays=new Set(Object.keys(dailyTotals).filter(k=>dailyTotals[k].total>COMMUTE_ROUNDTRIP_LIMIT_KM));
   const rows=list.map(t=>{
-    const key=`${t.user||''}|${t.isoDate||''}`;
+    const key=`${escapeHtml(t.user||'')}|${t.isoDate||''}`;
     const dayTotal=dailyTotals[key]?.total||0;
     const isOver=overLimitDays.has(key);
     return `<tr${isOver?' style="background:var(--bad-soft);"':''}>
     <td class="mono">${t.date||t.isoDate||''}</td>
     <td class="mono"><b>${t.plate}</b></td>
-    <td>${t.branch||''}</td>
-    <td>${t.user||''}</td>
+    <td>${escapeHtml(t.branch||'')}</td>
+    <td>${escapeHtml(t.user||'')}</td>
     <td>${t.commuteDir?`<span style="font-size:11px;font-weight:700;color:#7C3AED;">${t.commuteDir}</span>`:'-'}</td>
     <td class="mono">${(Number(t.distance)||0).toLocaleString()}km</td>
     <td class="mono">${dayTotal.toLocaleString()}km${isOver?' <span style="color:var(--bad);font-weight:700;">⚠초과</span>':''}</td>
-    <td>${t.dest||''}</td>
-    <td style="color:var(--muted);">${t.submitter||''}</td>
+    <td>${escapeHtml(t.dest||'')}</td>
+    <td style="color:var(--muted);">${escapeHtml(t.submitter||'')}</td>
   </tr>`;
   }).join('');
   const overCount=new Set(Array.from(overLimitDays).map(k=>k)).size;
@@ -1806,13 +1847,13 @@ function vcardHtml(p){
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px;">
       <div onclick="openVehicle('${p}')" style="cursor:pointer;flex:1;">
         <div class="plate" style="${inactive?'color:var(--muted);':''}">${p}</div>
-        <div class="region">${v.model||''}</div>
+        <div class="region">${escapeHtml(v.model||'')}</div>
       </div>
       <button onclick="openQrModal('${p}')" title="QR 출력"
         style="background:none;border:1.5px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px;cursor:pointer;flex-shrink:0;color:var(--muted);">QR</button>
     </div>
     <div onclick="openVehicle('${p}')" style="cursor:pointer;">
-    <div class="region" style="margin-bottom:10px;">${v.branch||'미배정'} · 최근 운행 ${lastDate}</div>
+    <div class="region" style="margin-bottom:10px;">${escapeHtml(v.branch||'미배정')} · 최근 운행 ${lastDate}</div>
     <div class="vstats">
       <div>주행거리<b>${totalDist.toLocaleString()}km</b></div>
       <div>주유비<b>${totalFuel.toLocaleString()}원</b></div>
@@ -1874,7 +1915,7 @@ function openVehicle(plate){
   const allBranches=Array.from(new Set(FLEET_REGISTRY.map(r=>r.branch).concat(Object.values(data.vehicles).map(x=>x.branch||'')))).filter(Boolean).sort(compareByOrg);
   document.getElementById('modalBody').innerHTML=`
     <div class="modal-head">
-      <div class="modal-head-info"><div class="plate-big">${plate}</div><div class="muted" style="font-size:12px;">${v.model||''}</div></div>
+      <div class="modal-head-info"><div class="plate-big">${plate}</div><div class="muted" style="font-size:12px;">${escapeHtml(v.model||'')}</div></div>
       <div class="modal-head-actions">
         <button id="editModeBtn-${plate}" class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" onclick="toggleEditMode('${plate}')">✏ 수정 모드</button>
         <button class="close-x" onclick="closeModal()">✕</button>
@@ -1926,7 +1967,7 @@ function openVehicle(plate){
           <span style="font-size:18px;">📷</span>
           <div style="flex:1;font-size:12.5px;">
             <b>${g.isoDate?g.isoDate.slice(0,7):''}</b> 제출본
-            <span style="color:var(--muted);margin-left:6px;">${g.submitter} · ${g.count}건</span>
+            <span style="color:var(--muted);margin-left:6px;">${escapeHtml(g.submitter)} · ${g.count}건</span>
           </div>
           <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px;" onclick="viewOriginalImage('${plate}',null,'${g.imgKey}')">원본 보기</button>
         </div>`).join('');
@@ -1979,17 +2020,17 @@ function openVehicle(plate){
             ${t.isPersonal?`<span class="trip-usage-tag tag-personal">개인</span>`:''}
             ${t.isCommute?`<span class="trip-usage-tag tag-commute">${t.commuteDir||'출퇴근'}</span>`:''}
             <span class="view-val">${t.date||''}</span>
-            <input class="edit-inp" value="${t.date||''}" data-f="date" style="display:none;width:70px;">
+            <input class="edit-inp" value="${t.date||''}" data-f="date" placeholder="YYYY-MM-DD" title="YYYY-MM-DD 또는 3/15, 3/15~18 형식 모두 가능" style="display:none;width:80px;">
           </span></td>
           <td class="mono" data-label="시작"><span class="view-val">${t.startOdo??''}</span><input class="edit-inp mono" value="${t.startOdo??''}" data-f="startOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
           <td class="mono" data-label="종료"><span class="view-val">${t.endOdo??''}</span><input class="edit-inp mono" value="${t.endOdo??''}" data-f="endOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
           <td class="mono" data-label="거리"><span class="view-val dist-view">${t.distance??''}</span><input class="edit-inp mono dist-inp" value="${t.distance??''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1"></td>
-          <td data-label="제출자" style="color:var(--accent);font-size:11px;">${t.submitter||''}</td>
-          <td data-label="사용자"><span class="view-val">${t.user||''}</span><input class="edit-inp" value="${t.user||''}" data-f="user" style="display:none;width:60px;"></td>
-          <td data-label="행선지"><span class="view-val">${t.dest||''}</span><input class="edit-inp" value="${t.dest||''}" data-f="dest" style="display:none;width:90px;"></td>
-          <td class="mono" data-label="주유비"><span class="view-val">${t.fuel?Number(t.fuel).toLocaleString():''}</span><input class="edit-inp mono" value="${t.fuel||''}" data-f="fuel" style="display:none;width:65px;"></td>
-          <td class="${t.status&&t.status!=='정상'?'flag-bad-status':''}" data-label="상태"><span class="view-val">${t.status||''}</span><input class="edit-inp" value="${t.status||''}" data-f="status" style="display:none;width:60px;"></td>
-          <td data-label="비고"><span class="view-val">${t.note||''}</span><input class="edit-inp" value="${t.note||''}" data-f="note" style="display:none;width:80px;"></td>
+          <td data-label="제출자" style="color:var(--accent);font-size:11px;">${escapeHtml(t.submitter||'')}</td>
+          <td data-label="사용자"><span class="view-val">${escapeHtml(t.user||'')}</span><input class="edit-inp" value="${escapeHtml(t.user||'')}" data-f="user" style="display:none;width:60px;"></td>
+          <td data-label="행선지"><span class="view-val">${escapeHtml(t.dest||'')}</span><input class="edit-inp" value="${escapeHtml(t.dest||'')}" data-f="dest" style="display:none;width:90px;"></td>
+          <td class="mono" data-label="주유비"><span class="view-val">${t.fuel?Number(t.fuel).toLocaleString():''}</span><input class="edit-inp mono" value="${t.fuel?Number(t.fuel).toLocaleString():''}" data-f="fuel" oninput="formatFuelInput(this)" style="display:none;width:65px;"></td>
+          <td class="${t.status&&t.status!=='정상'?'flag-bad-status':''}" data-label="상태"><span class="view-val">${escapeHtml(t.status||'')}</span><input class="edit-inp" value="${escapeHtml(t.status||'')}" data-f="status" style="display:none;width:60px;"></td>
+          <td data-label="비고"><span class="view-val">${escapeHtml(t.note||'')}</span><input class="edit-inp" value="${escapeHtml(t.note||'')}" data-f="note" style="display:none;width:80px;"></td>
           <td data-label="" class="trip-del-cell"><button class="trip-del" onclick="deleteTrip('${plate}',${i})">삭제</button></td>
         </tr>`).join('')}
       </tbody>
@@ -2396,16 +2437,25 @@ async function saveTripEdits(plate){
     const startInp=tr.querySelector('[data-f="startOdo"]');
     const endInp=tr.querySelector('[data-f="endOdo"]');
     const fuelInp=tr.querySelector('[data-f="fuel"]');
+    const dateInp=tr.querySelector('[data-f="date"]');
     const s=Number(startInp?.value)||0;
     const e=Number(endInp?.value)||0;
     const dist=Math.max(0, e-s);
     const fuel=fuelInp?parseFuelAmount(fuelInp.value):0;
+    if(e<=s){
+      showAdminToast(`저장 실패: 종료거리(${e.toLocaleString()})가 시작거리(${s.toLocaleString()})보다 작거나 같습니다. 값을 확인해 주세요.`,'bad');
+      return;
+    }
     if(dist>=MAX_TRIP_DISTANCE_KM){
       showAdminToast(`저장 실패: 주행거리가 ${dist.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`,'bad');
       return;
     }
     if(fuel>=MAX_FUEL_AMOUNT){
       showAdminToast(`저장 실패: 주유비가 ${fuel.toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`,'bad');
+      return;
+    }
+    if(dateInp && !isValidTripDateField(dateInp.value)){
+      showAdminToast(`저장 실패: 일자 형식을 확인해 주세요. "YYYY-MM-DD" 또는 "3/15", "3/15~18" 형식으로 입력해 주세요. (입력값: ${dateInp.value||'(비어있음)'})`,'bad');
       return;
     }
   }
@@ -2434,12 +2484,14 @@ async function saveTripEdits(plate){
       else if(f==='fuel') target[f]=parseFuelAmount(inp.value);
       else target[f]=inp.value;
     });
-    // isoDate 재계산
-    const dates=expandDateField(target.date);
-    if(dates.length){
-      const y=target.isoDate?Number(target.isoDate.slice(0,4)):new Date().getFullYear();
-      target.usageDates=dates.map(x=>iso(new Date(y,x.m-1,x.d)));
-      target.isoDate=target.usageDates[0];
+    // isoDate 재계산 (YYYY-MM-DD 입력과 기존 M/D 입력 모두 지원)
+    const fallbackYear=target.isoDate?Number(target.isoDate.slice(0,4)):new Date().getFullYear();
+    const parsed=parseTripDateField(target.date, fallbackYear);
+    if(parsed){
+      target.usageDates=parsed.usageDates;
+      target.isoDate=parsed.isoDate;
+      target.dateTo=parsed.dateTo;
+      target.date=parsed.display; // 표시용 원본 필드를 M/D 축약형으로 통일 저장
     }
   });
   const saved = await saveData();
@@ -2636,7 +2688,7 @@ function exportToExcel(){
   const commuteAllList=commuteUseTrips();
   const commuteDaily=commuteDailyTotals(commuteAllList);
   const commuteRows=commuteAllList.map(t=>{
-    const key=`${t.user||''}|${t.isoDate||''}`;
+    const key=`${escapeHtml(t.user||'')}|${t.isoDate||''}`;
     const dayTotal=commuteDaily[key]?.total||0;
     return {'일자':t.date||t.isoDate||'','차량번호':t.plate,'지역구분':t.branch||'','운행자':t.user||'','구분':t.commuteDir||'','출퇴근거리(km)':t.distance||0,'당일합계(왕복,km)':dayTotal,'60km초과여부':dayTotal>COMMUTE_ROUNDTRIP_LIMIT_KM?'초과':'','행선지':t.dest||'','제출자':t.submitter||'','비고':t.note||''};
   });
@@ -3387,14 +3439,14 @@ function showSubmitConfirm(submitter, plate, rows){
         <div><span style="color:var(--muted);">시작거리</span> <b>${Number(r.startOdo).toLocaleString()} km</b></div>
         <div><span style="color:var(--muted);">종료거리</span> <b>${Number(r.endOdo).toLocaleString()} km</b></div>
         <div><span style="color:var(--muted);">주행거리</span> <b style="color:var(--good);">${dist.toLocaleString()} km</b></div>
-        <div><span style="color:var(--muted);">운전자</span> <b>${r.user||'-'}</b></div>
+        <div><span style="color:var(--muted);">운전자</span> <b>${escapeHtml(r.user||'-')}</b></div>
       </div>
       <div style="margin-top:6px;display:grid;grid-template-columns:${r.fuel?'1fr 1fr':'1fr'};gap:6px;font-size:12px;">
-        <div><span style="color:var(--muted);">행선지</span> <b style="color:var(--ink);">${r.dest||'-'}</b></div>
+        <div><span style="color:var(--muted);">행선지</span> <b style="color:var(--ink);">${escapeHtml(r.dest||'-')}</b></div>
         ${r.fuel?`<div><span style="color:var(--muted);">주유비</span> <b>${Number(r.fuel).toLocaleString()}원</b></div>`:''}
       </div>
       ${r.isPersonal?'<div style="margin-top:4px;"><span style="background:#EFF6FF;color:#1D4ED8;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">개인사용</span></div>':''}
-      ${r.isDaeCha?`<div style="margin-top:4px;"><span style="background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">대차 ${r.daeChaPate}</span></div>`:''}
+      ${r.isDaeCha?`<div style="margin-top:4px;"><span style="background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">대차 ${escapeHtml(r.daeChaPate)}</span></div>`:''}
       ${r.isCommute?`<div style="margin-top:4px;"><span style="background:#F5F3FF;color:#7C3AED;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">${r.commuteDir||'출퇴근'}사용 ${dist.toLocaleString()}km</span></div>`:''}
     </div>`;
   });
@@ -3681,7 +3733,7 @@ function renderSubmitLog(scrollTo=false){
   container.innerHTML=sessionSubmits.map(s=>`
     <div class="submit-log-item">
       <div class="sl-plate">${s.plate} <span style="font-size:11px;color:var(--good);margin-left:6px;">✓ ${s.count}건 제출</span>${s.skipped>0?`<span style="font-size:11px;color:var(--muted);margin-left:4px;">(중복 ${s.skipped}건 제외)</span>`:''}</div>
-      <div class="sl-meta">${s.submitter} · ${s.time}${s.range?s.range.replace('\n',' '):''}</div>
+      <div class="sl-meta">${escapeHtml(s.submitter)} · ${s.time}${s.range?s.range.replace('\n',' '):''}</div>
     </div>`).join('');
   if(scrollTo) setTimeout(()=>wrap.scrollIntoView({behavior:'smooth',block:'nearest'}),100);
 }
@@ -3824,7 +3876,7 @@ function loadUserEditable(){
       <div class="user-edit-plate">
         <div>
           <div style="font-size:15px;font-weight:700;color:var(--navy);">${plate} <span style="font-size:12px;font-weight:500;color:var(--muted);">${modelShort(data.vehicles[plate]?.model||'')}</span></div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px;">${data.vehicles[plate]?.branch||''}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">${escapeHtml(data.vehicles[plate]?.branch||'')}</div>
         </div>
         <span style="font-size:12px;color:var(--muted);font-family:'Paperlogy';">${rows.length}건</span>
       </div>
@@ -3849,12 +3901,12 @@ function loadUserEditable(){
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
             <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">행선지</div>
-              <input class="ue-inp" value="${f.trip.dest||''}" data-f="dest" placeholder="행선지" style="width:100%;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;"></div>
+              <input class="ue-inp" value="${escapeHtml(f.trip.dest||'')}" data-f="dest" placeholder="행선지" style="width:100%;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;"></div>
             <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">주유비</div>
-              <input class="ue-inp mono" value="${f.trip.fuel||''}" data-f="fuel" placeholder="0" style="width:100%;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;"></div>
+              <input class="ue-inp mono" value="${f.trip.fuel?Number(f.trip.fuel).toLocaleString():''}" data-f="fuel" oninput="formatFuelInput(this)" placeholder="0" style="width:100%;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;"></div>
           </div>
           <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">비고</div>
-            <input class="ue-inp" value="${f.trip.note||''}" data-f="note" placeholder="특이사항" style="width:100%;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;"></div>
+            <input class="ue-inp" value="${escapeHtml(f.trip.note||'')}" data-f="note" placeholder="특이사항" style="width:100%;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;"></div>
           <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:10px;">
             <label class="check-label" style="padding:2px 0;gap:6px;">
               <input type="checkbox" class="ue-chk native-chk" data-f="isPersonal" ${f.trip.isPersonal?'checked':''} onchange="toggleUePersonal(this)">
@@ -3868,7 +3920,7 @@ function loadUserEditable(){
             </label>
           </div>
           <div class="ue-daecha-field" style="${f.trip.isDaeCha?'':'display:none;'}margin-top:8px;">
-            <input class="ue-inp" data-f="daeChaPate" value="${f.trip.daeChaPate||''}" placeholder="대차 차량번호" style="width:100%;font-size:13px;border:1px solid var(--accent);border-radius:8px;padding:8px 6px;">
+            <input class="ue-inp" data-f="daeChaPate" value="${escapeHtml(f.trip.daeChaPate||'')}" placeholder="대차 차량번호" style="width:100%;font-size:13px;border:1px solid var(--accent);border-radius:8px;padding:8px 6px;">
           </div>
           <div style="margin-top:10px;">
             <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">출퇴근 사용 <span style="font-weight:400;">(단신부임자 급여공제 승인자)</span></div>
@@ -3978,6 +4030,10 @@ async function saveUserEdits(name){
     const e=Number(endInp?.value)||0;
     const dist=Math.max(0, e-s);
     const fuel=fuelInp?parseFuelAmount(fuelInp.value):0;
+    if(e<=s){
+      if(err){ err.textContent=`저장 실패: 종료거리(${e.toLocaleString()})가 시작거리(${s.toLocaleString()})보다 작거나 같습니다. 값을 확인해 주세요.`; err.style.display='block'; }
+      return;
+    }
     if(dist>=MAX_TRIP_DISTANCE_KM){
       if(err){ err.textContent=`저장 실패: 주행거리가 ${dist.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`; err.style.display='block'; }
       return;
