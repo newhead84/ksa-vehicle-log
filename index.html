@@ -3736,6 +3736,24 @@ function loadUserEditable(){
           </div>
           <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">비고</div>
             <input class="ue-inp" value="${f.trip.note||''}" data-f="note" placeholder="특이사항" style="width:100%;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;"></div>
+          <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:10px;">
+            <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink);cursor:pointer;">
+              <input type="checkbox" class="ue-chk" data-f="isPersonal" ${f.trip.isPersonal?'checked':''}> 개인사용 <span style="font-size:11px;color:var(--muted);">(주말·공휴일)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink);cursor:pointer;">
+              <input type="checkbox" class="ue-chk ue-daecha-chk" data-f="isDaeCha" ${f.trip.isDaeCha?'checked':''} onchange="toggleUeDaeCha(this)"> 대차 운행
+            </label>
+          </div>
+          <div class="ue-daecha-field" style="${f.trip.isDaeCha?'':'display:none;'}margin-top:8px;">
+            <input class="ue-inp" data-f="daeChaPate" value="${f.trip.daeChaPate||''}" placeholder="대차 차량번호" style="width:100%;font-size:13px;border:1px solid var(--accent);border-radius:8px;padding:8px 6px;">
+          </div>
+          <div style="margin-top:10px;">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">출퇴근 사용 <span style="font-weight:400;">(단신부임자 급여공제 승인자)</span></div>
+            <div class="status-toggle">
+              <button type="button" class="status-btn ue-commute-btn${f.trip.commuteDir==='출근'?' active-commute':''}" data-dir="출근" onclick="setUeCommuteDirection(this)">🌅 출근</button>
+              <button type="button" class="status-btn ue-commute-btn${f.trip.commuteDir==='퇴근'?' active-commute':''}" data-dir="퇴근" onclick="setUeCommuteDirection(this)">🌆 퇴근</button>
+            </div>
+          </div>
         </div>`).join('')}
       </div>
     </div>`;
@@ -3754,6 +3772,21 @@ function recalcUeDist(inp){
   const e=Number(row.querySelector('[data-f="endOdo"]').value)||0;
   const dInp=row.querySelector('[data-f="distance"]');
   if(dInp) dInp.value=Math.max(0,e-s);
+}
+
+function toggleUeDaeCha(chk){
+  const row=chk.closest('[data-plate]');
+  const field=row?.querySelector('.ue-daecha-field');
+  if(field) field.style.display = chk.checked ? 'block' : 'none';
+}
+
+// 출퇴근 출근/퇴근 구분 선택 — 다시 누르면 선택 해제
+function setUeCommuteDirection(btn){
+  const row=btn.closest('[data-plate]');
+  if(!row) return;
+  const wasActive=btn.classList.contains('active-commute');
+  row.querySelectorAll('.ue-commute-btn').forEach(b=>b.classList.remove('active-commute'));
+  if(!wasActive) btn.classList.add('active-commute');
 }
 
 async function saveUserEdits(name){
@@ -3777,6 +3810,11 @@ async function saveUserEdits(name){
       if(err){ err.textContent=`저장 실패: 주유비가 ${fuel.toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`; err.style.display='block'; }
       return;
     }
+    const isPersonalChk=tr.querySelector('[data-f="isPersonal"]');
+    if(isPersonalChk?.checked && !fuel){
+      if(err){ err.textContent='저장 실패: 개인사용 체크 시 주유비를 입력해 주세요.'; err.style.display='block'; }
+      return;
+    }
   }
   if(err) err.style.display='none';
 
@@ -3793,6 +3831,16 @@ async function saveUserEdits(name){
       else if(f==='fuel') t[f]=parseFuelAmount(inp.value);
       else t[f]=inp.value;
     });
+    // 개인사용 / 대차운행 체크박스 반영
+    const personalChk=tr.querySelector('[data-f="isPersonal"].ue-chk');
+    if(personalChk) t.isPersonal = personalChk.checked;
+    const daechaChk=tr.querySelector('[data-f="isDaeCha"].ue-chk');
+    if(daechaChk) t.isDaeCha = daechaChk.checked;
+    if(!t.isDaeCha) t.daeChaPate='';
+    // 출퇴근 출근/퇴근 구분 반영 (가동율 미반영 대상)
+    const activeCommuteBtn=tr.querySelector('.ue-commute-btn.active-commute');
+    t.commuteDir = activeCommuteBtn ? activeCommuteBtn.dataset.dir : '';
+    t.isCommute = !!t.commuteDir;
     // isoDate 재계산
     const dates=expandDateField(t.date);
     if(dates.length){
