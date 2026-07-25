@@ -84,6 +84,9 @@
     width:100%;max-width:480px;
     text-align:center;
     box-shadow:0 -12px 40px rgba(13,61,41,.4);
+    max-height:calc(100vh - 300px);
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
   }
   .role-logo-area{
     position:absolute;top:0;left:0;right:0;
@@ -98,6 +101,11 @@
   .role-title{font-family:'Paperlogy',sans-serif;font-size:22px;font-weight:600;color:var(--navy);margin-bottom:4px;}
   .role-sub{font-size:13px;color:var(--muted);margin-bottom:28px;}
   .role-btns{display:flex;flex-direction:column;gap:10px;}
+  .drive-phone-warning{
+    background:rgba(232,22,87,.08);border:1px solid rgba(232,22,87,.3);
+    color:var(--bad);border-radius:12px;padding:10px 14px;
+    font-size:13px;font-weight:700;line-height:1.45;text-align:center;
+  }
   .btn-role-user{
     background:linear-gradient(135deg,#10975c,#17593d);color:#fff;border:none;border-radius:14px;
     padding:17px;font-size:16px;font-weight:700;cursor:pointer;
@@ -121,6 +129,22 @@
     padding:15px;width:100%;font-size:15px;font-weight:700;cursor:pointer;
   }
   .login-err{color:var(--bad);font-size:13px;margin-top:8px;display:none;}
+
+  .drive-warn-overlay{
+    display:none;position:fixed;inset:0;background:rgba(10,30,20,.55);
+    z-index:300;align-items:center;justify-content:center;padding:24px;
+  }
+  .drive-warn-box{
+    background:var(--card);border-radius:20px;padding:28px 24px;
+    width:100%;max-width:340px;text-align:center;
+    box-shadow:0 12px 40px rgba(0,0,0,.3);
+  }
+  .drive-warn-icon{font-size:32px;margin-bottom:10px;}
+  .drive-warn-text{font-size:14px;font-weight:600;color:var(--ink);line-height:1.6;margin-bottom:20px;}
+  .drive-warn-btn{
+    background:var(--bad);color:#fff;border:none;border-radius:12px;
+    padding:13px;width:100%;font-size:15px;font-weight:700;cursor:pointer;
+  }
 
   /* ===== 데스크탑 홈화면: 여백 축소 + 로고/버튼 확대 (모바일은 영향 없음) ===== */
   @media (min-width:900px){
@@ -700,6 +724,7 @@
   <div class="role-box">
     <div style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px;">사용 목적을 선택해 주세요</div>
     <div class="role-btns">
+      <div class="drive-phone-warning">⚠️ 운전 중 휴대전화 조작 금지 - 범칙금 부과 및 사고 위험</div>
       <button class="btn-role-user" onclick="enterUserMode()">차량 운행정보 입력</button>
       <button class="btn-role-admin" onclick="showAdminLogin()">관리자 대시보드 →</button>
       <div class="admin-login-wrap" id="adminLoginWrap">
@@ -708,6 +733,15 @@
         <div class="login-err" id="loginErr">비밀번호가 틀렸습니다.</div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ===== 운전 중 조작 금지 확인 모달 ===== -->
+<div class="drive-warn-overlay" id="driveWarnModal">
+  <div class="drive-warn-box">
+    <div class="drive-warn-icon">⚠️</div>
+    <div class="drive-warn-text">운전 중 휴대전화 조작 금지<br>도로교통법 위반 시 범칙금이 부과되며 사고 위험이 있습니다.<br>반드시 운행 종료 후 주차한 뒤 입력해 주세요.</div>
+    <button class="drive-warn-btn" onclick="confirmDriveWarnModal()">확인</button>
   </div>
 </div>
 
@@ -1426,6 +1460,15 @@ async function tryAdminLogin(){
 }
 
 function enterUserMode(){
+  document.getElementById('driveWarnModal').style.display = 'flex';
+}
+
+function confirmDriveWarnModal(){
+  document.getElementById('driveWarnModal').style.display = 'none';
+  proceedEnterUserMode();
+}
+
+function proceedEnterUserMode(){
   currentRole = 'user';
   document.getElementById('roleOverlay').style.display = 'none';
   document.getElementById('mainWrap').style.display = 'block';
