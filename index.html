@@ -758,6 +758,17 @@
       <div id="personalUseList"></div>
     </div>
 
+    <div class="section-head">
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>출퇴근사용 현황 <span style="font-size:11px;color:var(--muted);font-weight:400;">(단신부임자 급여공제, 가동율 미반영)</span></h2>
+    </div>
+    <div class="section-body" id="commuteUseWrap">
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
+        <input class="search-box" id="commuteSearchBox" placeholder="운행자 이름 검색…" oninput="renderCommuteUseList()" style="max-width:280px;">
+        <div id="commuteUseSummaryBar" style="font-size:12.5px;color:var(--ink);"></div>
+      </div>
+      <div id="commuteUseList"></div>
+    </div>
+
     <div class="section-head" style="margin-bottom:10px;">
       <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>공용차량 현황 (<span id="vehicleCount">0</span>대)</h2>
     </div>
@@ -1359,7 +1370,8 @@ function resolveBatchYears(rows,anchorDate,forcedYear){
 // 가동율 계산
 // ============================================================
 function calcUtilization(trips){
-  const all=(trips||[]).flatMap(t=>t.usageDates||[]);
+  // 출퇴근사용(단신부임자 급여공제) 건은 가동율 계산에서 제외
+  const all=(trips||[]).filter(t=>!t.isCommute).flatMap(t=>t.usageDates||[]);
   if(all.length===0) return{opDays:0,spanDays:0,rate:0};
   const bizUsed=new Set(all.filter(ds=>isBizDay(new Date(ds+'T00:00:00'))));
   const sorted=all.slice().sort();
@@ -1376,7 +1388,7 @@ function bizDaysInMonth(y,m){ const{startIso,endIso}=monthRangeIso(y,m); return 
 function monthlyUtilForPlate(plate,year){
   const v=data.vehicles[plate]||{};
   const trips=v.trips||[];
-  const allDates=trips.flatMap(t=>t.usageDates||[]);
+  const allDates=trips.filter(t=>!t.isCommute).flatMap(t=>t.usageDates||[]);
   const manual=(v.manualMonthly&&v.manualMonthly[year])||{};
   const out=[];
   for(let m=1;m<=12;m++){
@@ -1604,7 +1616,7 @@ function renderRegionSummary(){
     tripsByBranch[b].dist+=Number(t.distance)||0;
     tripsByBranch[b].fuel+=Number(t.fuel)||0;
     tripsByBranch[b].count++;
-    (t.usageDates||[]).forEach(d=>tripsByBranch[b].usageDates.push(d));
+    if(!t.isCommute) (t.usageDates||[]).forEach(d=>tripsByBranch[b].usageDates.push(d));
   }));
   const allBranches=new Set([...Object.keys(carsByBranch),...Object.keys(tripsByBranch)]);
   const branches=Array.from(allBranches).sort(compareByOrg);
@@ -1626,12 +1638,13 @@ function driverSummaryMap(){
   Object.keys(data.vehicles).forEach(p=>{
     (data.vehicles[p].trips||[]).forEach(t=>{
       const name=(t.user||'').trim()||'(미입력)';
-      if(!map[name]) map[name]={count:0,dist:0,fuel:0,personal:0,lastDate:'',plates:new Set()};
+      if(!map[name]) map[name]={count:0,dist:0,fuel:0,personal:0,commute:0,lastDate:'',plates:new Set()};
       const m=map[name];
       m.count++;
       m.dist+=Number(t.distance)||0;
       m.fuel+=Number(t.fuel)||0;
       if(t.isPersonal) m.personal++;
+      if(t.isCommute) m.commute++;
       if(!m.lastDate || (t.isoDate||'')>m.lastDate) m.lastDate=t.isoDate||'';
       m.plates.add(p);
     });
@@ -1658,11 +1671,12 @@ function renderDriverSummary(){
       <td class="mono">${m.dist.toLocaleString()}km</td>
       <td class="mono">${m.fuel.toLocaleString()}원</td>
       <td class="mono">${m.personal>0?`<span class="personal-tag">${m.personal}건</span>`:'0건'}</td>
+      <td class="mono">${m.commute>0?`<span class="personal-tag" style="background:#F5F3FF;color:#7C3AED;">${m.commute}건</span>`:'0건'}</td>
       <td style="color:var(--muted);font-size:12px;">${plateDisp}</td>
       <td class="mono" style="color:var(--muted);">${m.lastDate||'-'}</td>
     </tr>`;
   }).join('');
-  document.getElementById('driverSummary').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>운행자</th><th>운행건수</th><th>총주행거리</th><th>총주유비</th><th>개인사용건수</th><th>이용차량</th><th>최근운행일</th></tr></thead><tbody>${rows||`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">검색 결과가 없습니다</td></tr>`}</tbody></table></div>`;
+  document.getElementById('driverSummary').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>운행자</th><th>운행건수</th><th>총주행거리</th><th>총주유비</th><th>개인사용건수</th><th>출퇴근사용건수</th><th>이용차량</th><th>최근운행일</th></tr></thead><tbody>${rows||`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted);">검색 결과가 없습니다</td></tr>`}</tbody></table></div>`;
 }
 
 // 전체 차량의 운행기록 중 개인사용(isPersonal) 건만 모아서 반환
@@ -1699,6 +1713,40 @@ function renderPersonalUseList(){
   </tr>`).join('');
   document.getElementById('personalUseSummaryBar').innerHTML=list.length?`총 <b>${list.length}건</b> · 주행거리 <b>${totalDist.toLocaleString()}km</b> · 총주유비 <b>${totalFuel.toLocaleString()}원</b>`:'';
   document.getElementById('personalUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>주행거리</th><th>주유비</th><th>행선지</th><th>제출자</th></tr></thead><tbody>${rows||`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted);">검색 결과가 없습니다</td></tr>`}</tbody></table></div>`;
+}
+
+// 전체 차량의 운행기록 중 출퇴근사용(isCommute, 단신부임자 급여공제) 건만 모아서 반환
+function commuteUseTrips(){
+  const list=[];
+  Object.keys(data.vehicles).forEach(p=>{
+    (data.vehicles[p].trips||[]).forEach(t=>{
+      if(t.isCommute) list.push({plate:p, branch:t.branchAtTime||data.vehicles[p].branch||'미배정', ...t});
+    });
+  });
+  list.sort((a,b)=>(b.isoDate||'').localeCompare(a.isoDate||''));
+  return list;
+}
+
+function renderCommuteUseList(){
+  const q=(document.getElementById('commuteSearchBox')?.value||'').trim();
+  if(!q){
+    document.getElementById('commuteUseSummaryBar').innerHTML='';
+    document.getElementById('commuteUseList').innerHTML=`<div style="text-align:center;padding:24px;color:var(--muted);font-size:13px;">출퇴근사용 전체 현황은 엑셀 내보내기에서 확인 가능.</div>`;
+    return;
+  }
+  let list=commuteUseTrips().filter(t=>(t.user||'').includes(q));
+  const totalDist=list.reduce((s,t)=>s+(Number(t.commuteDist)||0),0);
+  const rows=list.map(t=>`<tr>
+    <td class="mono">${t.date||t.isoDate||''}</td>
+    <td class="mono"><b>${t.plate}</b></td>
+    <td>${t.branch||''}</td>
+    <td>${t.user||''}</td>
+    <td class="mono">${(Number(t.commuteDist)||0).toLocaleString()}km</td>
+    <td>${t.dest||''}</td>
+    <td style="color:var(--muted);">${t.submitter||''}</td>
+  </tr>`).join('');
+  document.getElementById('commuteUseSummaryBar').innerHTML=list.length?`총 <b>${list.length}건</b> · 출퇴근거리 합계 <b>${totalDist.toLocaleString()}km</b>`:'';
+  document.getElementById('commuteUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>출퇴근거리</th><th>행선지</th><th>제출자</th></tr></thead><tbody>${rows||`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">검색 결과가 없습니다</td></tr>`}</tbody></table></div>`;
 }
 
 function vcardHtml(p){
@@ -1739,6 +1787,7 @@ function renderVehicles(){
   renderRegionSummary();
   renderDriverSummary();
   renderPersonalUseList();
+  renderCommuteUseList();
   const q=(document.getElementById('searchBox').value||'').trim();
   let plates=Object.keys(data.vehicles).filter(p=>p.includes(q)||(data.vehicles[p].branch||'').includes(q));
   if(!showInactive) plates=plates.filter(p=>data.vehicles[p].active!==false);
@@ -2458,9 +2507,9 @@ function exportToExcel(){
   const ws1=XLSX.utils.json_to_sheet(vehicleRows);
   ws1['!cols']=[{wch:12},{wch:28},{wch:16},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10}];
   const tripRows=[];
-  plates.forEach(p=>(data.vehicles[p].trips||[]).slice().sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||'')).forEach(t=>{tripRows.push({'차량번호':p,'지역구분':data.vehicles[p].branch||'','일자(원본)':t.date||'','인식된날짜':t.isoDate||'','시작거리':t.startOdo,'종료거리':t.endOdo,'주행거리(km)':t.distance,'제출자':t.submitter||'','운행자':t.user||'','행선지':t.dest||'','주유비(원)':t.fuel||0,'개인사용여부':t.isPersonal?'개인사용':'','차량상태':t.status||'','비고':t.note||''});}));
+  plates.forEach(p=>(data.vehicles[p].trips||[]).slice().sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||'')).forEach(t=>{tripRows.push({'차량번호':p,'지역구분':data.vehicles[p].branch||'','일자(원본)':t.date||'','인식된날짜':t.isoDate||'','시작거리':t.startOdo,'종료거리':t.endOdo,'주행거리(km)':t.distance,'제출자':t.submitter||'','운행자':t.user||'','행선지':t.dest||'','주유비(원)':t.fuel||0,'개인사용여부':t.isPersonal?'개인사용':'','출퇴근사용여부':t.isCommute?'출퇴근사용':'','출퇴근거리(km)':t.isCommute?(t.commuteDist||0):'','차량상태':t.status||'','비고':t.note||''});}));
   const ws2=XLSX.utils.json_to_sheet(tripRows);
-  ws2['!cols']=[{wch:12},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10},{wch:12},{wch:10},{wch:10},{wch:20},{wch:10},{wch:10},{wch:16},{wch:20}];
+  ws2['!cols']=[{wch:12},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10},{wch:12},{wch:10},{wch:10},{wch:20},{wch:10},{wch:10},{wch:12},{wch:14},{wch:10},{wch:20}];
   const year=monthlyYear||new Date().getFullYear();
   const monthlyRows=plates.map(p=>{
     const hasAnyData=hasMonthlyDataFor(p,year);
@@ -2483,14 +2532,18 @@ function exportToExcel(){
   const driverNames=Object.keys(driverMap).sort((a,b)=>driverMap[b].count-driverMap[a].count||a.localeCompare(b));
   const driverRows=driverNames.map(name=>{
     const m=driverMap[name];
-    return {'운행자':name,'운행건수':m.count,'총주행거리(km)':m.dist,'총주유비(원)':m.fuel,'개인사용건수':m.personal,'이용차량':Array.from(m.plates).join(', '),'최근운행일':m.lastDate||''};
+    return {'운행자':name,'운행건수':m.count,'총주행거리(km)':m.dist,'총주유비(원)':m.fuel,'개인사용건수':m.personal,'출퇴근사용건수':m.commute,'이용차량':Array.from(m.plates).join(', '),'최근운행일':m.lastDate||''};
   });
   const ws4=XLSX.utils.json_to_sheet(driverRows);
-  ws4['!cols']=[{wch:14},{wch:10},{wch:14},{wch:14},{wch:12},{wch:30},{wch:12}];
+  ws4['!cols']=[{wch:14},{wch:10},{wch:14},{wch:14},{wch:12},{wch:12},{wch:30},{wch:12}];
 
   const personalRows=personalUseTrips().map(t=>({'일자':t.date||t.isoDate||'','차량번호':t.plate,'지역구분':t.branch||'','운행자':t.user||'','주행거리(km)':t.distance||0,'주유비(원)':t.fuel||0,'행선지':t.dest||'','제출자':t.submitter||'','비고':t.note||''}));
   const ws5=XLSX.utils.json_to_sheet(personalRows);
   ws5['!cols']=[{wch:12},{wch:12},{wch:16},{wch:10},{wch:12},{wch:12},{wch:20},{wch:10},{wch:20}];
+
+  const commuteRows=commuteUseTrips().map(t=>({'일자':t.date||t.isoDate||'','차량번호':t.plate,'지역구분':t.branch||'','운행자':t.user||'','출퇴근거리(km)':t.commuteDist||0,'행선지':t.dest||'','제출자':t.submitter||'','비고':t.note||''}));
+  const ws6=XLSX.utils.json_to_sheet(commuteRows);
+  ws6['!cols']=[{wch:12},{wch:12},{wch:16},{wch:10},{wch:14},{wch:20},{wch:10},{wch:20}];
 
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws1,'차량현황');
@@ -2498,6 +2551,7 @@ function exportToExcel(){
   XLSX.utils.book_append_sheet(wb,ws3,`월별가동율_${year}`);
   XLSX.utils.book_append_sheet(wb,ws4,'운행자별현황');
   XLSX.utils.book_append_sheet(wb,ws5,'개인사용현황');
+  XLSX.utils.book_append_sheet(wb,ws6,'출퇴근사용현황');
   XLSX.writeFile(wb,`차량운행관리_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
@@ -2906,6 +2960,19 @@ function addTripRow(prefillStart = null){
       </div>
       <div class="check-field">
         <label class="check-label">
+          <input type="checkbox" class="tr-commute-chk native-chk" onchange="toggleCommuteUse(this,'${id}')">
+          <span class="check-icon"></span>
+          <span class="check-text">출퇴근 사용 <span style="font-size:12px;color:var(--muted);font-weight:400;">(단신부임자 급여공제 승인자)</span></span>
+        </label>
+        <div class="commute-field" id="commute-${id}" style="display:none;margin-top:8px;">
+          <div style="background:#F5F3FF;border:1px solid #8B5CF6;border-radius:10px;padding:10px 12px;">
+            <div style="font-size:11px;font-weight:700;color:#7C3AED;margin-bottom:6px;">출퇴근 거리 (km) <span style="font-weight:400;">— 급여공제 대상, 가동율에는 반영되지 않습니다</span></div>
+            <input type="number" class="tr-commute-dist" placeholder="출퇴근 거리 입력" style="border:1.5px solid #8B5CF6;border-radius:7px;padding:10px 12px;font-family:'Paperlogy',sans-serif;font-size:14px;width:100%;background:#fff;" oninput="scheduleDraft()">
+          </div>
+        </div>
+      </div>
+      <div class="check-field">
+        <label class="check-label">
           <input type="checkbox" class="tr-fuel-chk native-chk" onchange="toggleFuelField(this,'${id}')">
           <span class="check-icon"></span>
           <span class="check-text tr-fuel-label">주유비 입력</span>
@@ -3039,6 +3106,13 @@ function togglePersonalUse(chk, id){
   scheduleDraft();
 }
 
+// 출퇴근사용(단신부임자 급여공제) 체크 시 별도 출퇴근거리 입력란 노출
+function toggleCommuteUse(chk, id){
+  const field = document.getElementById('commute-'+id);
+  if(field) field.style.display = chk.checked ? 'block' : 'none';
+  scheduleDraft();
+}
+
 function formatFuelInput(inp){
   const pos = inp.selectionStart;
   const before = inp.value.slice(0, pos).replace(/[^0-9]/g,'').length;
@@ -3103,7 +3177,9 @@ function collectRows(){
     const note = card.querySelector('.tr-note').value.trim();
     const isDaeCha = card.querySelector('.tr-daecha-chk')?.checked || false;
     const daeChaPate = isDaeCha ? (card.querySelector('.tr-daecha-plate')?.value.trim()||'') : '';
-    return {dateFrom, dateTo, startOdo, endOdo, distance: Math.max(0, endOdo-startOdo), dest, user, fuel, status, note, isDaeCha, daeChaPate, isPersonal};
+    const isCommute = card.querySelector('.tr-commute-chk')?.checked || false;
+    const commuteDist = isCommute ? (Number(card.querySelector('.tr-commute-dist')?.value)||0) : 0;
+    return {dateFrom, dateTo, startOdo, endOdo, distance: Math.max(0, endOdo-startOdo), dest, user, fuel, status, note, isDaeCha, daeChaPate, isPersonal, isCommute, commuteDist};
   });
 }
 
@@ -3195,6 +3271,7 @@ function showSubmitConfirm(submitter, plate, rows){
       ${r.fuel?`<div style="margin-top:4px;font-size:12px;"><span style="color:var(--muted);">주유비</span> <b>${Number(r.fuel).toLocaleString()}원</b></div>`:''}
       ${r.isPersonal?'<div style="margin-top:4px;"><span style="background:#EFF6FF;color:#1D4ED8;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">개인사용</span></div>':''}
       ${r.isDaeCha?`<div style="margin-top:4px;"><span style="background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">대차 ${r.daeChaPate}</span></div>`:''}
+      ${r.isCommute?`<div style="margin-top:4px;"><span style="background:#F5F3FF;color:#7C3AED;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">출퇴근사용 ${(Number(r.commuteDist)||0).toLocaleString()}km</span></div>`:''}
     </div>`;
   });
 
@@ -3242,6 +3319,7 @@ async function submitDirectInput(){
     if(r.endOdo <= r.startOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리가 시작거리보다 작습니다.`); return; }
     if(!r.dest){ showUserFormErr(`${i+1}번 운행기록: 행선지를 입력해 주세요.`); return; }
     if(r.isPersonal && !r.fuel){ showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유비를 입력해 주세요.`); return; }
+    if(r.isCommute && !r.commuteDist){ showUserFormErr(`${i+1}번 운행기록: 출퇴근 사용 시 출퇴근 거리를 입력해 주세요.`); return; }
     if(r.status==='점검요망' && !r.note){ showUserFormErr(`${i+1}번 운행기록: 점검요망 선택 시 비고(사유)를 입력해 주세요.`); return; }
     if(r.distance >= MAX_TRIP_DISTANCE_KM){ showUserFormErr(`${i+1}번 운행기록: 주행거리가 ${r.distance.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`); return; }
     if(r.fuel >= MAX_FUEL_AMOUNT){ showUserFormErr(`${i+1}번 운행기록: 주유비가 ${Number(r.fuel).toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`); return; }
@@ -3320,7 +3398,8 @@ async function doSubmit(submitter, plate, rows){
       startOdo:r.startOdo, endOdo:r.endOdo, distance:r.distance,
       user:r.user, dest:r.dest, fuel:r.fuel, status:r.status, note:r.note,
       submitter, branchAtTime, imgKey:null, isPersonal:r.isPersonal||false,
-      isDaeCha:r.isDaeCha||false, daeChaPate:r.daeChaPate||''
+      isDaeCha:r.isDaeCha||false, daeChaPate:r.daeChaPate||'',
+      isCommute:r.isCommute||false, commuteDist:r.commuteDist||0
     });
     addedDates.push(isoDate);
     added++;
@@ -3439,6 +3518,12 @@ async function restoreDraft(){
         if(chk){chk.checked=true;toggleDaeCha(chk,card.id);}
         const dp=card.querySelector('.tr-daecha-plate');
         if(dp) dp.value=r.daeChaPate||'';
+      }
+      if(r.isCommute){
+        const cChk=card.querySelector('.tr-commute-chk');
+        if(cChk){cChk.checked=true;toggleCommuteUse(cChk,card.id);}
+        const cd=card.querySelector('.tr-commute-dist');
+        if(cd) cd.value=r.commuteDist||'';
       }
       calcRowDist(card.id);
     });
