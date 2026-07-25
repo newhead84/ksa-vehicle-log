@@ -7,16 +7,19 @@
 =================================================================
   [필수 설정]
   1. https://console.firebase.google.com 에서 프로젝트 생성
-  2. "빌드 > Realtime Database" 활성화 (테스트 모드로 시작)
+  2. "빌드 > Realtime Database" 활성화
   3. 아래 FIREBASE_URL 을 본인 프로젝트 URL로 교체:
      예) https://my-project-default-rtdb.firebaseio.com
   4. 보안 규칙 (Firebase 콘솔 > Realtime Database > 규칙):
      {
        "rules": {
-         "fleet-data": { ".read": true, ".write": true }
+         "fleet-data": { ".read": true, ".write": "auth != null" }
        }
      }
-  5. ADMIN_PW 를 원하는 관리자 비밀번호로 변경
+  5. Authentication > Sign-in method > "익명" 활성화
+  6. Authentication > Users > 사용자 추가 → 아래 ADMIN_LOGIN_EMAIL과 동일한 이메일로
+     원하는 관리자 비밀번호를 설정 (비밀번호는 코드에 직접 넣지 않음)
+  7. firebaseConfig(apiKey, authDomain, projectId)를 본인 프로젝트 값으로 교체
 =================================================================
 -->
 
@@ -1159,7 +1162,10 @@
 // ★ 설정 - 이 두 줄만 변경하면 됩니다 ★
 // ============================================================
 const FIREBASE_URL = 'https://ksa-vehicle-log-default-rtdb.asia-southeast1.firebasedatabase.app';
-const ADMIN_PW     = 'ksa2026';
+// 관리자 로그인용 계정 이메일 (실제 비밀번호는 여기 없음 — Firebase Authentication에
+// 별도로 등록해둔 계정의 비밀번호를 입력하면 Firebase 서버가 직접 검증합니다.
+// Firebase 콘솔 → Authentication → Users 에서 이 이메일로 계정을 만들어 두세요.)
+const ADMIN_LOGIN_EMAIL  = 'admin@ksa-log.com';
 const APP_URL      = 'https://newhead84.github.io/ksa-vehicle-log/'; // ← QR에 사용할 앱 URL
 // ============================================================
 // ★ 점검요망 이메일 알림 설정 (EmailJS) ★
@@ -1390,9 +1396,14 @@ function showAdminLogin(){
   if(w.style.display==='block') document.getElementById('adminPwInput').focus();
 }
 
-function tryAdminLogin(){
+async function tryAdminLogin(){
   const pw = document.getElementById('adminPwInput').value;
-  if(pw === ADMIN_PW){
+  const btn = document.querySelector('.btn-login');
+  document.getElementById('loginErr').style.display = 'none';
+  if(btn){ btn.disabled = true; btn.textContent = '확인 중...'; }
+  try{
+    // 실제 비밀번호 검증은 Firebase 서버가 수행 (코드 안에는 비밀번호가 존재하지 않음)
+    await firebase.auth().signInWithEmailAndPassword(ADMIN_LOGIN_EMAIL, pw);
     currentRole = 'admin';
     document.getElementById('roleOverlay').style.display = 'none';
     document.getElementById('mainWrap').style.display = 'block';
@@ -1405,10 +1416,12 @@ function tryAdminLogin(){
     document.getElementById('dateSub').textContent = todayStr() + ' 기준';
     pushAppState('admin');
     startAdminPolling();
-  } else {
+  } catch(e){
     document.getElementById('loginErr').style.display = 'block';
     document.getElementById('adminPwInput').value = '';
     document.getElementById('adminPwInput').focus();
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = '로그인'; }
   }
 }
 
@@ -1484,6 +1497,12 @@ function showBackConfirmPopup(){
 
 function exitToRole(){
   stopAdminPolling();
+  // 관리자 계정으로 로그인돼 있었다면 로그아웃 후 다시 익명 인증으로 복귀
+  // (그래야 다음에 일반 사용자가 운행기록을 제출할 때 정상적으로 인증 토큰이 붙음)
+  const u = firebase.auth().currentUser;
+  if(u && !u.isAnonymous){
+    firebase.auth().signOut().then(()=>firebase.auth().signInAnonymously()).catch(()=>{});
+  }
   currentRole = null;
   sessionSubmits = [];
   document.getElementById('roleOverlay').style.display = 'flex';
