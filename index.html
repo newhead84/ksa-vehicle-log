@@ -31,6 +31,7 @@
   [2026-07-26] 제출완료 팝업 2줄 표시(차량·건수 / 기간 분리), 완료 팝업·토스트 한글 keep-all 줄바꿈 적용 | 변경: .done-modal-msg, .submitted-notice p, showSubmitSuccess(), rangeMsg(라인 ~4234)
   [2026-07-26] 내 제출 기록 조회: 조회기간 미지정 시 최신 5건만 표시, 조회기간은 최대 3개월까지만 허용 | 변경: loadUserEditable() (라인 ~4493)
   [2026-07-26] 관리자 대시보드 '개인사용 현황' 제목 → '주말 및 공휴일 개인사용 현황'으로 변경, (가동율 미반영) 문구 추가 | 변경: #personalUseWrap 상단 section-head (라인 ~913)
+  [2026-07-26] 10개 지역본부별 열람전용 링크(?view=readonly&r=토큰) 신설, 지역외 정보 비노출 | 변경: REGION_GROUPS, applyRegionViewerFilter(), openRegionUrlModal(), copyRegionUrl(), #regionUrlBtn
 =================================================================
 -->
 
@@ -798,6 +799,7 @@
       <button class="reset-btn" id="restoreDataBtn" onclick="document.getElementById('restoreInput').click()" style="border-color:var(--accent);color:var(--accent);">📂 데이터 복원</button>
       <input type="file" id="restoreInput" accept=".json" style="display:none;" onchange="restoreData(this)">
       <button class="reset-btn" id="copyReadonlyUrlBtn" onclick="copyReadonlyUrl()" style="border-color:#7eb138;color:#7eb138;">🔗 열람전용URL</button>
+      <button class="reset-btn" id="regionUrlBtn" onclick="openRegionUrlModal()" style="border-color:#7eb138;color:#7eb138;">🔗 지역별 열람URL</button>
       <button class="reset-btn" id="logoutBtn" onclick="exitToRole()">로그아웃</button>
     </div>
   </div>
@@ -1390,6 +1392,7 @@ let data = { vehicles: {} };
 
 let currentRole = null; // 'user' | 'admin'
 let viewerMode = false; // true면 링크로 들어온 열람 전용 모드(로그인 없이 관리자 대시보드 대부분을 조회만 가능, 수정/삭제/백업/복원 불가)
+let viewerRegionToken = null; // 지역본부별 열람전용 링크로 들어온 경우 REGION_GROUPS의 키(토큰). 전체 열람 링크는 null.
 let sessionSubmits = []; // 이번 세션에서 사용자가 제출한 항목들
 
 // ============================================================
@@ -1456,6 +1459,25 @@ const ORG_ORDER = [
 function orgOrderIndex(b){ const i=ORG_ORDER.indexOf(b); return i===-1?999:i; }
 function compareByOrg(a,b){ const ia=orgOrderIndex(a),ib=orgOrderIndex(b); return ia!==ib?ia-ib:a.localeCompare(b); }
 
+// 지역본부별 열람전용 링크 설정 (요청: 2026-07-26)
+// - DT센터/퓨처캠/국가기술표준원(파견)은 지역본부 링크 대상에서 제외
+// - 강원지부는 경기강원지역본부에, 충남지부는 대전세종충남지역본부에 포함시켜 함께 조회되도록 함
+// - token은 추측/열거를 막기 위한 무작위 문자열이며, region 파라미터에 그대로 노출된다는 점에 유의
+//   (완전한 서버 인증이 아닌 순수 클라이언트 구조이므로, 페이지 소스를 열람하면 전체 토큰 확인은 가능함)
+const REGION_GROUPS = {
+  'cfa9cb007059': { label:'경기강원지역본부', branches:['경기강원지역본부','강원지부'] },
+  '278ad79fc9e5': { label:'인천지역본부', branches:['인천지역본부'] },
+  '8449f098f9ab': { label:'대전세종충남지역본부', branches:['대전세종충남지역본부','충남지부'] },
+  'd7759acdceb1': { label:'충북지역본부', branches:['충북지역본부'] },
+  'e250c9b702fd': { label:'대구경북지역본부', branches:['대구경북지역본부'] },
+  '3ab3ef255dd7': { label:'부산지역본부', branches:['부산지역본부'] },
+  '9c8fd52fd6a5': { label:'경남지역본부', branches:['경남지역본부'] },
+  '8818d6cfa99d': { label:'울산지역본부', branches:['울산지역본부'] },
+  'b466a8a22b85': { label:'광주전남제주지역본부', branches:['광주전남제주지역본부'] },
+  '8e5eb3fa6472': { label:'전북지역본부', branches:['전북지역본부'] }
+};
+const REGION_ORDER = ['cfa9cb007059','278ad79fc9e5','8449f098f9ab','d7759acdceb1','e250c9b702fd','3ab3ef255dd7','9c8fd52fd6a5','8818d6cfa99d','b466a8a22b85','8e5eb3fa6472'];
+
 // ============================================================
 // 역할 관리
 // ============================================================
@@ -1502,6 +1524,8 @@ async function tryAdminLogin(){
 function enterViewerMode(){
   viewerMode = true;
   currentRole = 'admin';
+  const _r = new URLSearchParams(window.location.search).get('r');
+  viewerRegionToken = (_r && REGION_GROUPS[_r]) ? _r : null;
   document.getElementById('roleOverlay').style.display = 'none';
   document.getElementById('mainWrap').style.display = 'block';
   document.getElementById('adminTopbar').style.display = 'flex';
@@ -1518,8 +1542,12 @@ function enterViewerMode(){
 // 열람 전용 모드일 때 데이터를 변경하는 관리자 전용 버튼들을 숨기고 안내 배지를 표시
 function applyViewerModeUI(){
   const badge = document.getElementById('roleBadge');
-  if(badge){ badge.textContent = '열람 전용'; badge.style.background = '#7eb138'; }
-  ['manualUploadBtn','backupDataBtn','restoreDataBtn','logoutBtn','qrBulkPdfBtn','addVehicleBtn','copyReadonlyUrlBtn'].forEach(id=>{
+  if(badge){
+    const regionInfo = viewerRegionToken ? REGION_GROUPS[viewerRegionToken] : null;
+    badge.textContent = regionInfo ? `열람 전용 · ${regionInfo.label}` : '열람 전용';
+    badge.style.background = '#7eb138';
+  }
+  ['manualUploadBtn','backupDataBtn','restoreDataBtn','logoutBtn','qrBulkPdfBtn','addVehicleBtn','copyReadonlyUrlBtn','regionUrlBtn'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.style.display = 'none';
   });
@@ -1604,19 +1632,17 @@ function showBackConfirmPopup(){
   el.addEventListener('click', e=>{ if(e.target===el) el.remove(); });
 }
 
-// 관리자 대시보드에서 '열람전용URL' 버튼 클릭 시: 현재 페이지 주소 기준으로
-// ?view=readonly 파라미터가 붙은 링크를 만들어 클립보드에 복사한다.
-function copyReadonlyUrl(){
-  const url = window.location.origin + window.location.pathname + '?view=readonly';
-  const done = ()=> showAdminToast('열람전용 URL이 클립보드에 복사되었습니다.', 'good');
-  const fail = ()=> showAdminToast('클립보드 복사에 실패했습니다. 주소를 직접 복사해 주세요: ' + url, 'bad');
+// 클립보드 복사 공통 헬퍼 (열람전용URL/지역별 열람URL에서 공용으로 사용)
+function copyTextToClipboard(text, successMsg, failMsgPrefix){
+  const done = ()=> showAdminToast(successMsg, 'good');
+  const fail = ()=> showAdminToast(failMsgPrefix + text, 'bad');
   if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(url).then(done).catch(fail);
+    navigator.clipboard.writeText(text).then(done).catch(fail);
   } else {
     // 클립보드 API 미지원 브라우저를 위한 폴백
     try{
       const ta = document.createElement('textarea');
-      ta.value = url;
+      ta.value = text;
       ta.style.position = 'fixed';
       ta.style.opacity = '0';
       document.body.appendChild(ta);
@@ -1627,6 +1653,42 @@ function copyReadonlyUrl(){
       ok ? done() : fail();
     }catch(e){ fail(); }
   }
+}
+
+// 관리자 대시보드에서 '열람전용URL' 버튼 클릭 시: 현재 페이지 주소 기준으로
+// ?view=readonly 파라미터가 붙은 링크를 만들어 클립보드에 복사한다. (전체 지역 열람)
+function copyReadonlyUrl(){
+  const url = window.location.origin + window.location.pathname + '?view=readonly';
+  copyTextToClipboard(url, '열람전용 URL이 클립보드에 복사되었습니다.', '클립보드 복사에 실패했습니다. 주소를 직접 복사해 주세요: ');
+}
+
+// '지역별 열람URL' 버튼 클릭 시: 10개 지역본부 목록을 모달로 보여주고,
+// 지역별로 ?view=readonly&r=토큰 형태의 링크를 개별 복사할 수 있게 한다.
+// 각 지역 링크는 해당 지역본부(및 소속 지부)의 차량/운행정보만 노출되고 다른 사업장 정보는 보이지 않는다.
+function openRegionUrlModal(){
+  const rows = REGION_ORDER.map(token=>{
+    const g = REGION_GROUPS[token];
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 4px;border-bottom:1px solid var(--line);">
+      <span style="font-size:14px;font-weight:600;color:var(--navy);">${escapeHtml(g.label)}</span>
+      <button class="btn btn-ghost" style="padding:6px 12px;font-size:12.5px;flex-shrink:0;" onclick="copyRegionUrl('${token}')">🔗 링크 복사</button>
+    </div>`;
+  }).join('');
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-head">
+      <div><div class="plate-big" style="font-size:18px;">지역본부별 열람URL</div><div class="muted" style="font-size:12px;word-break:keep-all;overflow-wrap:break-word;">지역별 링크는 해당 지역본부(강원지부·충남지부 포함)의 정보만 열람되며, 다른 사업장의 운행정보는 보이지 않습니다.</div></div>
+      <button class="close-x" onclick="closeModal()">✕</button>
+    </div>
+    <div style="max-width:420px;">${rows}</div>
+  `;
+  document.getElementById('modalOverlay').classList.add('show');
+  lockBodyScroll();
+}
+
+function copyRegionUrl(token){
+  const g = REGION_GROUPS[token];
+  if(!g) return;
+  const url = window.location.origin + window.location.pathname + '?view=readonly&r=' + token;
+  copyTextToClipboard(url, `${g.label} 열람전용 URL이 클립보드에 복사되었습니다.`, '클립보드 복사에 실패했습니다. 주소를 직접 복사해 주세요: ');
 }
 
 function exitToRole(){
@@ -1910,7 +1972,21 @@ async function loadData(){
       if(!Array.isArray(data.vehicles[v.plate].trips)) data.vehicles[v.plate].trips=[];
     }
   });
+  applyRegionViewerFilter();
   if(currentRole==='admin') renderAll();
+}
+
+// 지역본부별 열람전용 링크(?view=readonly&r=토큰)로 접근한 경우, 해당 지역본부(및 소속 지부)
+// 차량만 남기고 다른 사업장 차량/운행기록은 화면에 아예 올라오지 않도록 data.vehicles 자체를 제한한다.
+// (개별 렌더 함수마다 필터링하지 않고 데이터 소스 단계에서 한 번에 걸러 누락을 방지)
+function applyRegionViewerFilter(){
+  if(!viewerMode || !viewerRegionToken) return;
+  const allowedBranches = REGION_GROUPS[viewerRegionToken]?.branches || [];
+  const filtered = {};
+  Object.keys(data.vehicles).forEach(plate=>{
+    if(allowedBranches.includes(data.vehicles[plate].branch)) filtered[plate] = data.vehicles[plate];
+  });
+  data.vehicles = filtered;
 }
 
 async function adminRefresh(){
