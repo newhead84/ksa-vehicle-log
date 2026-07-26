@@ -337,6 +337,13 @@
   .modal-overlay{position:fixed;inset:0;background:rgba(22,35,63,.5);display:none;align-items:center;justify-content:center;z-index:50;}
   .modal-overlay.show{display:flex;}
   .modal{background:var(--card);border-radius:16px;width:min(880px,92vw);max-height:86vh;overflow-y:auto;padding:24px 26px;}
+
+  /* ===== 완료 안내 팝업 (제출완료/수정완료) ===== */
+  .done-modal-icon{width:52px;height:52px;border-radius:50%;background:var(--good-soft);color:var(--good);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;margin:0 auto 14px;}
+  .done-modal-title{font-size:17px;font-weight:700;color:var(--ink);margin-bottom:8px;}
+  .done-modal-msg{font-size:13.5px;color:var(--muted);line-height:1.6;margin:0 0 22px;white-space:pre-line;}
+  .done-modal-ok{width:100%;padding:14px;border:none;border-radius:14px;background:var(--navy);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:'Paperlogy',sans-serif;}
+  .done-modal-ok:hover{opacity:.92;}
   .modal-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:10px;}
   .modal-head-info{flex:1 1 auto;min-width:0;}
   .modal-head-actions{flex:0 0 auto;display:flex;gap:8px;align-items:center;white-space:nowrap;}
@@ -985,6 +992,16 @@
     style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;display:block;">
   <button onclick="closeImgFullscreen()"
     style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.2);border:none;color:#fff;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
+</div>
+
+<!-- 제출완료/수정완료 안내 팝업 -->
+<div id="doneOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:700;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this)closeDoneModal()">
+  <div style="background:#fff;border-radius:20px;width:100%;max-width:360px;box-shadow:0 8px 40px rgba(0,0,0,.25);padding:28px 24px 22px;text-align:center;">
+    <div class="done-modal-icon">✓</div>
+    <div id="doneModalTitle" class="done-modal-title"></div>
+    <div id="doneModalMsg" class="done-modal-msg"></div>
+    <button class="done-modal-ok" onclick="closeDoneModal()">확인</button>
+  </div>
 </div>
 
 <!-- 주말·공휴일 개인사용 이용안내 모달 -->
@@ -3035,6 +3052,18 @@ function unlockBodyScroll(){
   }
 }
 function closeModal(){ document.getElementById('modalOverlay').classList.remove('show'); unlockBodyScroll(); }
+
+// 제출완료/수정완료 등, 확인 버튼을 눌러야 닫히는 완료 안내 팝업
+function showDoneModal(title, msg){
+  document.getElementById('doneModalTitle').textContent = title;
+  document.getElementById('doneModalMsg').textContent = msg;
+  document.getElementById('doneOverlay').style.display = 'flex';
+  lockBodyScroll();
+}
+function closeDoneModal(){
+  document.getElementById('doneOverlay').style.display = 'none';
+  unlockBodyScroll();
+}
 async function deleteTrip(plate,idx){
   const trips=data.vehicles[plate].trips.slice().sort(tripChronoCompare);
   const target=trips[idx];
@@ -4359,6 +4388,7 @@ function showSubmitSuccess(plate,count,rangeMsg){
   const inputSec=document.getElementById('userInputSection');
   if(inputSec) inputSec.prepend(div);
   setTimeout(()=>{if(div.parentNode)div.remove();},5000);
+  showDoneModal('제출 완료', `${plate} · ${count}건이 제출되었습니다.${rangeMsg.replace('\n',' ')}`);
 }
 
 // ============================================================
@@ -4754,6 +4784,7 @@ async function saveUserEdits(name){
   }
   document.querySelectorAll('.ue-saved').forEach(el=>el.style.display='inline');
   setTimeout(()=>document.querySelectorAll('.ue-saved').forEach(el=>el.style.display='none'),3000);
+  showDoneModal('수정 완료', '수정하신 내용이 저장되었습니다.');
 }
 
 function closeUserEdit(){
