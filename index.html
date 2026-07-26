@@ -1346,9 +1346,11 @@ async function syncFuelPriceFromOpinet(){
 
 function refreshAllFuelPriceNotes(){
   document.querySelectorAll('[id^="fuelrefprice-"]').forEach(el=>{
-    el.textContent = fuelPriceIsLive
-      ? `기준 휘발유 단가: ${currentFuelPricePerL.toLocaleString()}원/L (오피넷 자동 갱신${fuelPriceUpdatedAt?', '+fuelPriceUpdatedAt+' 기준':''})`
-      : `기준 휘발유 단가: ${currentFuelPricePerL.toLocaleString()}원/L (기본값 적용 중 — 자동 갱신 미연결)`;
+    const priceLine = `<span style="background:#FEF3C7;color:#1D4ED8;font-weight:700;padding:1px 5px;border-radius:4px;">기준 휘발유 단가: ${currentFuelPricePerL.toLocaleString()}원/L</span>`;
+    const subLine = fuelPriceIsLive
+      ? `오피넷 자동 갱신${fuelPriceUpdatedAt?', '+fuelPriceUpdatedAt+' 기준':''}`
+      : `기본값 적용 중 — 자동 갱신 미연결`;
+    el.innerHTML = `${priceLine}<br><span style="opacity:.85;">(${subLine})</span>`;
   });
 }
 
@@ -3559,7 +3561,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
         </label>
         <div class="personal-notice" id="personal-${id}" style="display:none;background:#EFF6FF;border:1px solid #3B82F6;border-radius:10px;padding:10px 12px;margin-top:4px;font-size:12.5px;color:#1D4ED8;line-height:1.6;">
           📌 주말·공휴일 운행 시 운행거리에 해당하는 주유비는 <b>본인이 직접 부담</b>해야 합니다.
-          <div id="fuelrefprice-${id}" style="margin-top:6px;font-size:11px;color:#1D4ED8;opacity:.8;"></div>
+          <div id="fuelrefprice-${id}" style="margin-top:6px;font-size:11px;color:#1D4ED8;line-height:1.6;"></div>
         </div>
       </div>
       <div class="check-field">
