@@ -763,7 +763,7 @@
   <div class="admin-topbar" id="adminTopbar" style="display:none;padding:28px 24px 0;">
     <div>
       <div class="brand-eyebrow">회원홍보자산실 · 차량관리</div>
-      <h1>KSA 업무용 차량 운행정보 관리 <span class="admin-badge">관리자</span></h1>
+      <h1>KSA 업무용 차량 운행정보 관리 <span class="admin-badge" id="roleBadge">관리자</span></h1>
       <div class="sub-row" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
         <div class="sub" id="dateSub"></div>
         <span class="sub-dot" style="color:var(--line);">·</span>
@@ -773,13 +773,12 @@
     <div class="admin-topbar-actions">
       <button class="reset-btn" id="refreshBtn" onclick="adminRefresh()" style="border-color:var(--accent);color:var(--accent);">⟳ 새로고침</button>
       <button class="reset-btn" onclick="exportToExcel()" style="border-color:var(--good);color:var(--good);">엑셀 내보내기</button>
-      <button class="reset-btn" onclick="openReportLinkModal()" style="border-color:#7eb138;color:#17593d;">📄 부서장 리포트 링크</button>
-      <button class="reset-btn" onclick="triggerManualMonthlyUpload()" style="border-color:#7C3AED;color:#7C3AED;">📊 엑셀 업로드</button>
+      <button class="reset-btn" id="manualUploadBtn" onclick="triggerManualMonthlyUpload()" style="border-color:#7C3AED;color:#7C3AED;">📊 엑셀 업로드</button>
       <input type="file" id="manualMonthlyInput" accept=".xlsx,.xls" style="display:none;" onchange="handleManualMonthlyUpload(this)">
-      <button class="reset-btn" onclick="backupData()" style="border-color:var(--navy);color:var(--navy);">💾 데이터 백업</button>
-      <button class="reset-btn" onclick="document.getElementById('restoreInput').click()" style="border-color:var(--accent);color:var(--accent);">📂 데이터 복원</button>
+      <button class="reset-btn" id="backupDataBtn" onclick="backupData()" style="border-color:var(--navy);color:var(--navy);">💾 데이터 백업</button>
+      <button class="reset-btn" id="restoreDataBtn" onclick="document.getElementById('restoreInput').click()" style="border-color:var(--accent);color:var(--accent);">📂 데이터 복원</button>
       <input type="file" id="restoreInput" accept=".json" style="display:none;" onchange="restoreData(this)">
-      <button class="reset-btn" onclick="exitToRole()">로그아웃</button>
+      <button class="reset-btn" id="logoutBtn" onclick="exitToRole()">로그아웃</button>
     </div>
   </div>
 
@@ -1191,11 +1190,6 @@
   <div class="modal" id="modalBody"></div>
 </div>
 
-<!-- ===== 부서장 전용 월별 리포트 열람 화면 (로그인 없이 링크로 접근, 열람 전용) ===== -->
-<div id="reportView" style="display:none;min-height:100%;background:var(--paper);padding:24px 20px 60px;">
-  <div id="reportViewContent" style="max-width:960px;margin:0 auto;"></div>
-</div>
-
 <script>
 // ============================================================
 // 설정
@@ -1365,6 +1359,7 @@ let data = { vehicles: {} };
 // URL 파라미터 차량번호 저장 (페이지 로드 시)
 
 let currentRole = null; // 'user' | 'admin'
+let viewerMode = false; // true면 링크로 들어온 열람 전용 모드(로그인 없이 관리자 대시보드 대부분을 조회만 가능, 수정/삭제/백업/복원 불가)
 let sessionSubmits = []; // 이번 세션에서 사용자가 제출한 항목들
 
 // ============================================================
@@ -1471,6 +1466,35 @@ async function tryAdminLogin(){
   }
 }
 
+// 링크(?view=readonly)로 접근한 열람 전용 사용자를 위한 진입 함수.
+// 로그인 없이 관리자 대시보드와 동일한 화면을 보여주되, 수정/삭제/백업/복원 등
+// 데이터를 변경하는 기능은 모두 숨기고 saveData()에서도 이중으로 차단한다.
+function enterViewerMode(){
+  viewerMode = true;
+  currentRole = 'admin';
+  document.getElementById('roleOverlay').style.display = 'none';
+  document.getElementById('mainWrap').style.display = 'block';
+  document.getElementById('adminTopbar').style.display = 'flex';
+  document.getElementById('statStrip').style.display = 'grid';
+  document.getElementById('adminSections').style.display = 'block';
+  document.getElementById('submitLog').style.display = 'none';
+  document.getElementById('userInputSection').style.display = 'none';
+  document.getElementById('dateSub').textContent = todayStr() + ' 기준';
+  applyViewerModeUI();
+  pushAppState('admin');
+  startAdminPolling();
+}
+
+// 열람 전용 모드일 때 데이터를 변경하는 관리자 전용 버튼들을 숨기고 안내 배지를 표시
+function applyViewerModeUI(){
+  const badge = document.getElementById('roleBadge');
+  if(badge){ badge.textContent = '열람 전용'; badge.style.background = '#7eb138'; }
+  ['manualUploadBtn','backupDataBtn','restoreDataBtn','logoutBtn'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.style.display = 'none';
+  });
+}
+
 function enterUserMode(){
   document.getElementById('driveWarnModal').style.display = 'flex';
 }
@@ -1552,6 +1576,7 @@ function showBackConfirmPopup(){
 
 function exitToRole(){
   stopAdminPolling();
+  viewerMode = false;
   // 관리자 계정으로 로그인돼 있었다면 로그아웃 후 다시 익명 인증으로 복귀
   // (그래야 다음에 일반 사용자가 운행기록을 제출할 때 정상적으로 인증 토큰이 붙음)
   const u = firebase.auth().currentUser;
@@ -1857,6 +1882,7 @@ function stopAdminPolling(){
 }
 
 async function saveData(){
+  if(viewerMode){ console.warn('[KSA 차량관리] 열람 전용 모드에서는 저장할 수 없습니다.'); return false; }
   try{
     await fbSet(STORAGE_KEY, data);
     document.getElementById('firebaseWarnBanner')?.remove();
@@ -2149,8 +2175,8 @@ function vcardHtml(p){
         <div class="plate" style="${inactive?'color:var(--muted);':''}">${p}</div>
         <div class="region">${escapeHtml(v.model||'')}</div>
       </div>
-      <button onclick="openQrModal('${p}')" title="QR 출력"
-        style="background:none;border:1.5px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px;cursor:pointer;flex-shrink:0;color:var(--muted);">QR</button>
+      ${viewerMode?'':`<button onclick="openQrModal('${p}')" title="QR 출력"
+        style="background:none;border:1.5px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px;cursor:pointer;flex-shrink:0;color:var(--muted);">QR</button>`}
     </div>
     <div onclick="openVehicle('${p}')" style="cursor:pointer;">
     <div class="region" style="margin-bottom:10px;">${escapeHtml(v.branch||'미배정')} · 최근 운행 ${lastDate}</div>
@@ -2217,10 +2243,17 @@ function openVehicle(plate){
     <div class="modal-head">
       <div class="modal-head-info"><div class="plate-big">${plate}</div><div class="muted" style="font-size:12px;">${escapeHtml(v.model||'')}</div></div>
       <div class="modal-head-actions">
-        <button id="editModeBtn-${plate}" class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" onclick="toggleEditMode('${plate}')">✏ 수정 모드</button>
+        ${viewerMode?'':`<button id="editModeBtn-${plate}" class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" onclick="toggleEditMode('${plate}')">✏ 수정 모드</button>`}
         <button class="close-x" onclick="closeModal()">✕</button>
       </div>
     </div>
+    ${viewerMode ? `
+    <div class="branch-edit">
+      <label class="muted" style="font-size:12px;">지역구분</label>
+      <span style="font-size:13px;font-weight:600;color:var(--navy);">${escapeHtml(v.branch||'미배정')}</span>
+      ${v.originalBranch&&v.originalBranch!==v.branch?`<span class="orig">최초 배정: ${escapeHtml(v.originalBranch)}</span>`:''}
+      ${v.active===false?`<span class="badge" style="background:#E5E7EB;color:#9CA3AF;margin-left:auto;">운용중지</span>`:''}
+    </div>` : `
     <div class="branch-edit">
       <label class="muted" style="font-size:12px;">지역구분</label>
       <select id="branchSelect-${plate}">
@@ -2232,7 +2265,7 @@ function openVehicle(plate){
       ${v.originalBranch&&v.originalBranch!==v.branch?`<span class="orig">최초 배정: ${v.originalBranch}</span>`:''}
       <button class="btn" style="padding:6px 12px;font-size:12px;${v.addedManually?'':'margin-left:auto;'}${v.active===false?'background:var(--good);color:#fff;':'background:none;border:1px solid var(--bad);color:var(--bad);'}" onclick="toggleVehicleActive('${plate}')">${v.active===false?'운용 재개':'운용 중지'}</button>
       ${v.addedManually?`<button class="btn" style="padding:6px 12px;font-size:12px;margin-left:auto;background:var(--bad);color:#fff;border:none;" onclick="deleteVehicleForever('${plate}')" title="수동으로 추가한 테스트 차량을 명단에서 완전히 삭제합니다">🗑 완전 삭제</button>`:''}
-    </div>
+    </div>`}
     <div class="modal-stats">
       <div>총 주행거리<b>${totalDist.toLocaleString()} km</b></div>
       <div>총 주유비<b>${totalFuel.toLocaleString()} 원</b></div>
@@ -2356,7 +2389,7 @@ function openVehicle(plate){
           </td>
           <td data-label="대차번호"><span class="view-val">${escapeHtml(t.daeChaPate||'')}</span><input class="edit-inp" value="${escapeHtml(t.daeChaPate||'')}" data-f="daeChaPate" placeholder="대차 차량번호(필수)" style="display:none;width:80px;"></td>
           <td data-label="비고"><span class="view-val">${escapeHtml(t.note||'')}</span><input class="edit-inp" value="${escapeHtml(t.note||'')}" data-f="note" style="display:none;width:80px;"></td>
-          <td data-label="" class="trip-del-cell"><button class="trip-del" onclick="deleteTrip('${plate}',${i})">삭제</button></td>
+          <td data-label="" class="trip-del-cell">${viewerMode?'':`<button class="trip-del" onclick="deleteTrip('${plate}',${i})">삭제</button>`}</td>
         </tr>`).join('')}
       </tbody>
     </table>
@@ -3164,208 +3197,6 @@ function exportToExcel(){
   XLSX.utils.book_append_sheet(wb,ws5,'개인사용현황');
   XLSX.utils.book_append_sheet(wb,ws6,'출퇴근사용현황');
   XLSX.writeFile(wb,`차량운행관리_${new Date().toISOString().slice(0,10)}.xlsx`);
-}
-
-// ============================================================
-// 부서장 전용 월별 리포트 (로그인 없이 링크로 열람) — 링크 생성 + 조회 화면 렌더링
-// ============================================================
-
-// 관리자 화면: "부서장 리포트 링크" 버튼 클릭 시 부서/연월 선택 후 링크를 생성하는 모달
-function openReportLinkModal(){
-  const existing = document.getElementById('reportLinkOverlay');
-  if(existing) existing.remove();
-  const branches = Array.from(new Set(
-    FLEET_REGISTRY
-      .filter(v => data.vehicles[v.plate]?.active !== false)
-      .map(v => data.vehicles[v.plate]?.branch || v.branch)
-  )).sort(compareByOrg);
-  const now = new Date();
-  const years = availableYears().slice().reverse();
-  const div = document.createElement('div');
-  div.id = 'reportLinkOverlay';
-  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;';
-  div.innerHTML = `
-    <div style="background:#fff;border-radius:16px;max-width:400px;width:100%;padding:22px 22px 20px;font-family:'Paperlogy',sans-serif;">
-      <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:4px;">부서장 리포트 링크 생성</div>
-      <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:16px;">선택한 부서·연월의 운행 리포트를 로그인 없이 조회할 수 있는 링크입니다. 열람 전용이며, 링크를 아는 사람은 누구나 볼 수 있으니 해당 부서장에게만 전달해 주세요.</div>
-      <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">부서(지역구분)</label>
-      <select id="reportLinkBranch" style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:11px;font-size:14px;font-family:'Paperlogy';margin-bottom:12px;">
-        ${branches.map(b=>`<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')}
-      </select>
-      <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <div style="flex:1;">
-          <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">연도</label>
-          <select id="reportLinkYear" style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:11px;font-size:14px;font-family:'Paperlogy';">
-            ${years.map(y=>`<option value="${y}" ${Number(y)===now.getFullYear()?'selected':''}>${y}년</option>`).join('')}
-          </select>
-        </div>
-        <div style="flex:1;">
-          <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">월</label>
-          <select id="reportLinkMonth" style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:11px;font-size:14px;font-family:'Paperlogy';">
-            ${Array.from({length:12},(_,i)=>i+1).map(m=>`<option value="${m}" ${m===now.getMonth()+1?'selected':''}>${m}월</option>`).join('')}
-          </select>
-        </div>
-      </div>
-      <div id="reportLinkResultWrap" style="display:none;margin-bottom:14px;">
-        <input id="reportLinkResultInput" readonly style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:11px;font-size:12.5px;font-family:'Paperlogy';margin-bottom:8px;background:var(--paper);">
-        <button id="reportLinkCopyBtn" style="width:100%;padding:11px;border:1.5px solid var(--good);border-radius:10px;background:#fff;color:var(--good);font-size:13px;font-weight:700;cursor:pointer;font-family:'Paperlogy',sans-serif;">링크 복사</button>
-      </div>
-      <div style="display:flex;gap:8px;">
-        <button id="reportLinkCloseBtn" style="flex:1;padding:12px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:'Paperlogy',sans-serif;">닫기</button>
-        <button id="reportLinkGenBtn" style="flex:1;padding:12px;border:none;border-radius:10px;background:var(--navy);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Paperlogy',sans-serif;">링크 생성</button>
-      </div>
-    </div>`;
-  document.body.appendChild(div);
-  div.addEventListener('click', e=>{ if(e.target===div) div.remove(); });
-  document.getElementById('reportLinkCloseBtn').onclick = () => div.remove();
-  document.getElementById('reportLinkGenBtn').onclick = () => {
-    const branch = document.getElementById('reportLinkBranch').value;
-    const year = document.getElementById('reportLinkYear').value;
-    const month = document.getElementById('reportLinkMonth').value;
-    const url = `${APP_URL}?report=1&branch=${encodeURIComponent(branch)}&year=${year}&month=${month}`;
-    document.getElementById('reportLinkResultInput').value = url;
-    document.getElementById('reportLinkResultWrap').style.display = 'block';
-  };
-  div.addEventListener('click', e=>{
-    if(e.target && e.target.id === 'reportLinkCopyBtn'){
-      const inp = document.getElementById('reportLinkResultInput');
-      inp.select();
-      (navigator.clipboard?.writeText(inp.value) ?? Promise.reject()).then(()=>{
-        e.target.textContent = '복사됨 ✓';
-        setTimeout(()=>{ if(document.getElementById('reportLinkCopyBtn')) e.target.textContent = '링크 복사'; },2000);
-      }).catch(()=>{
-        try{ document.execCommand('copy'); e.target.textContent='복사됨 ✓'; setTimeout(()=>{ if(document.getElementById('reportLinkCopyBtn')) e.target.textContent='링크 복사'; },2000); }catch(err){}
-      });
-    }
-  });
-}
-
-// URL에 ?report=1&branch=&year=&month= 파라미터가 있으면 역할선택 화면 대신
-// 부서장 전용 열람 화면을 표시 (로그인 불필요, 열람 전용 — 확인/승인 기능 없음)
-function initReportViewIfRequested(){
-  const params = new URLSearchParams(window.location.search);
-  if(params.get('report') !== '1') return;
-  const branch = decodeURIComponent(params.get('branch') || '');
-  const year = Number(params.get('year')) || new Date().getFullYear();
-  const month = Number(params.get('month')) || (new Date().getMonth()+1);
-  const roleEl = document.getElementById('roleOverlay');
-  const mainEl = document.getElementById('mainWrap');
-  const reportEl = document.getElementById('reportView');
-  if(roleEl) roleEl.style.display = 'none';
-  if(mainEl) mainEl.style.display = 'none';
-  if(reportEl) reportEl.style.display = 'block';
-  const contentEl = document.getElementById('reportViewContent');
-  if(contentEl) contentEl.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--muted);font-size:14px;">리포트를 불러오는 중입니다…</div>';
-  loadData().then(()=>renderReportContent(branch, year, month)).catch(()=>{
-    if(contentEl) contentEl.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--bad);font-size:14px;">리포트를 불러오지 못했습니다. 인터넷 연결을 확인한 후 링크를 다시 열어 주세요.</div>';
-  });
-}
-
-// 부서장 열람 화면 본문 렌더링: 선택된 부서·연월의 차량별 요약 + 상세 운행내역 (열람 전용)
-function renderReportContent(branch, year, month){
-  const container = document.getElementById('reportViewContent');
-  if(!container) return;
-  if(!branch){
-    container.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--bad);font-size:14px;">유효하지 않은 리포트 링크입니다. 부서 정보가 없습니다.</div>';
-    return;
-  }
-  const ym = `${year}-${String(month).padStart(2,'0')}`;
-  const plates = Object.keys(data.vehicles)
-    .filter(p => (data.vehicles[p].branch||'') === branch)
-    .sort((a,b)=>a.localeCompare(b));
-
-  if(plates.length===0){
-    container.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--muted);font-size:14px;">'${escapeHtml(branch)}' 부서에 배정된 차량이 없습니다.</div>`;
-    return;
-  }
-
-  let sumDist=0, sumFuel=0, sumCount=0, rateSum=0, rateN=0;
-  const vehicleRows = plates.map(p=>{
-    const v = data.vehicles[p];
-    const trips = (v.trips||[]).filter(t=>(t.isoDate||'').startsWith(ym));
-    const dist = trips.reduce((s,t)=>s+(Number(t.distance)||0),0);
-    const fuel = trips.reduce((s,t)=>s+(Number(t.fuel)||0),0);
-    const monthly = monthlyUtilForPlate(p, year).find(m=>m.month===month) || {rate:0,manual:false};
-    sumDist+=dist; sumFuel+=fuel; sumCount+=trips.length;
-    if(trips.length>0 || monthly.manual){ rateSum+=monthly.rate; rateN++; }
-    return {plate:p, model:modelShort(v.model||''), count:trips.length, dist, fuel, rate:monthly.rate};
-  });
-  const avgRate = rateN>0 ? rateSum/rateN : 0;
-
-  const vehicleRowsHtml = vehicleRows.map(r=>`
-    <tr>
-      <td>${escapeHtml(r.plate)}</td>
-      <td>${escapeHtml(r.model)}</td>
-      <td class="mono">${r.count}건</td>
-      <td class="mono">${r.dist.toLocaleString()}km</td>
-      <td class="mono">${r.fuel.toLocaleString()}원</td>
-      <td>${utilBar(r.rate)}</td>
-    </tr>`).join('');
-
-  const detailTrips = [];
-  plates.forEach(p=>{
-    (data.vehicles[p].trips||[]).filter(t=>(t.isoDate||'').startsWith(ym)).forEach(t=>detailTrips.push(Object.assign({},t,{plate:p})));
-  });
-  detailTrips.sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||'') || (a.plate||'').localeCompare(b.plate||''));
-
-  const detailRowsHtml = detailTrips.map(t=>{
-    const gubun = t.isPersonal ? '개인사용' : (t.isCommute ? (t.commuteDir||'출퇴근사용') : '정상');
-    return `<tr>
-      <td>${escapeHtml(t.date||t.isoDate||'')}</td>
-      <td>${escapeHtml(t.plate)}</td>
-      <td>${escapeHtml(t.user||'')}</td>
-      <td>${escapeHtml(t.dest||'')}</td>
-      <td class="mono">${(Number(t.distance)||0).toLocaleString()}km</td>
-      <td class="mono">${(Number(t.fuel)||0).toLocaleString()}원</td>
-      <td>${escapeHtml(gubun)}</td>
-      <td>${escapeHtml(t.note||'')}</td>
-    </tr>`;
-  }).join('');
-
-  container.innerHTML = `
-    <div style="background:var(--card);border-radius:20px;padding:24px 22px;margin-bottom:20px;">
-      <div style="font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px;">KSA 업무용 차량 운행 리포트 · 열람 전용</div>
-      <h1 style="font-size:22px;color:var(--navy);margin-bottom:4px;">${escapeHtml(branch)}</h1>
-      <div style="font-size:14px;color:var(--ink);">${year}년 ${month}월</div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:24px;">
-      <div style="background:var(--card);border-radius:14px;padding:14px;text-align:center;">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">차량대수</div>
-        <div style="font-size:18px;font-weight:700;color:var(--navy);">${plates.length}대</div>
-      </div>
-      <div style="background:var(--card);border-radius:14px;padding:14px;text-align:center;">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">총 운행건수</div>
-        <div style="font-size:18px;font-weight:700;color:var(--navy);">${sumCount}건</div>
-      </div>
-      <div style="background:var(--card);border-radius:14px;padding:14px;text-align:center;">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">총 주행거리</div>
-        <div style="font-size:18px;font-weight:700;color:var(--navy);">${sumDist.toLocaleString()}km</div>
-      </div>
-      <div style="background:var(--card);border-radius:14px;padding:14px;text-align:center;">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">총 주유비</div>
-        <div style="font-size:18px;font-weight:700;color:var(--navy);">${sumFuel.toLocaleString()}원</div>
-      </div>
-      <div style="background:var(--card);border-radius:14px;padding:14px;text-align:center;">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">평균 가동율</div>
-        <div style="font-size:18px;font-weight:700;color:${utilColor(avgRate)};">${avgRate.toFixed(0)}%</div>
-      </div>
-    </div>
-    <h2 style="font-size:16px;color:var(--navy);margin-bottom:10px;">차량별 현황</h2>
-    <div class="table-scroll" style="margin-bottom:24px;">
-      <table class="region-table">
-        <thead><tr><th>차량번호</th><th>차종</th><th>운행건수</th><th>주행거리</th><th>주유비</th><th>가동율</th></tr></thead>
-        <tbody>${vehicleRowsHtml}</tbody>
-      </table>
-    </div>
-    <h2 style="font-size:16px;color:var(--navy);margin-bottom:10px;">상세 운행내역</h2>
-    <div class="table-scroll">
-      <table class="region-table">
-        <thead><tr><th>일자</th><th>차량번호</th><th>운행자</th><th>행선지</th><th>주행거리</th><th>주유비</th><th>구분</th><th>비고</th></tr></thead>
-        <tbody>${detailRowsHtml || `<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted);">해당 월 운행기록이 없습니다</td></tr>`}</tbody>
-      </table>
-    </div>
-    <div style="text-align:center;margin-top:28px;font-size:11px;color:var(--muted);">본 화면은 열람 전용이며, 별도의 확인/승인 처리는 이루어지지 않습니다.</div>
-  `;
 }
 
 // ============================================================
@@ -4880,8 +4711,11 @@ function closeUserEdit(){
 renderSubmitLog();
 // 오피넷 자동 갱신 휘발유 단가 동기화 (GitHub Actions가 Firebase에 매일 기록한 값)
 syncFuelPriceFromOpinet();
-// 부서장 전용 월별 리포트 열람 모드 진입 체크 (URL에 ?report=1 있으면 역할선택 화면 대신 리포트 표시)
-initReportViewIfRequested();
+// 부서장 등을 위한 열람 전용 링크 진입 체크: URL에 ?view=readonly 가 있으면
+// 역할선택 화면 없이 곧바로 관리자 대시보드(열람 전용)로 진입한다.
+if(new URLSearchParams(window.location.search).get('view') === 'readonly'){
+  enterViewerMode();
+}
 </script>
 </body>
 </html>
