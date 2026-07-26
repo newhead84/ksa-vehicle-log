@@ -778,6 +778,7 @@
       <button class="reset-btn" id="backupDataBtn" onclick="backupData()" style="border-color:var(--navy);color:var(--navy);">💾 데이터 백업</button>
       <button class="reset-btn" id="restoreDataBtn" onclick="document.getElementById('restoreInput').click()" style="border-color:var(--accent);color:var(--accent);">📂 데이터 복원</button>
       <input type="file" id="restoreInput" accept=".json" style="display:none;" onchange="restoreData(this)">
+      <button class="reset-btn" id="copyReadonlyUrlBtn" onclick="copyReadonlyUrl()" style="border-color:#7eb138;color:#7eb138;">🔗 열람전용URL</button>
       <button class="reset-btn" id="logoutBtn" onclick="exitToRole()">로그아웃</button>
     </div>
   </div>
@@ -922,7 +923,7 @@
         <button class="vt-btn" data-mode="flat" onclick="setViewMode('flat')">전체</button>
       </div>
       <button id="inactiveToggleBtn" class="reset-btn" style="font-size:12px;flex-shrink:0;" onclick="toggleInactive()">운용중지 포함</button>
-      <button class="reset-btn" onclick="openAddVehicleModal()" style="border-color:var(--navy);color:var(--navy);font-size:12px;flex-shrink:0;">+ 차량 추가</button>
+      <button id="addVehicleBtn" class="reset-btn" onclick="openAddVehicleModal()" style="border-color:var(--navy);color:var(--navy);font-size:12px;flex-shrink:0;">+ 차량 추가</button>
       <button id="qrBulkPdfBtn" class="reset-btn" onclick="printAllQrCodes()" style="border-color:#17593d;color:#17593d;font-size:12px;flex-shrink:0;">📄 QR 일괄 PDF 다운로드</button>
       <input class="search-box" id="searchBox" placeholder="차량번호 또는 지역본부 검색…" oninput="renderVehicles()" style="flex:1;min-width:140px;">
     </div>
@@ -1489,7 +1490,7 @@ function enterViewerMode(){
 function applyViewerModeUI(){
   const badge = document.getElementById('roleBadge');
   if(badge){ badge.textContent = '열람 전용'; badge.style.background = '#7eb138'; }
-  ['manualUploadBtn','backupDataBtn','restoreDataBtn','logoutBtn','qrBulkPdfBtn'].forEach(id=>{
+  ['manualUploadBtn','backupDataBtn','restoreDataBtn','logoutBtn','qrBulkPdfBtn','addVehicleBtn','copyReadonlyUrlBtn'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.style.display = 'none';
   });
@@ -1572,6 +1573,31 @@ function showBackConfirmPopup(){
     + '</div></div>';
   document.body.appendChild(el);
   el.addEventListener('click', e=>{ if(e.target===el) el.remove(); });
+}
+
+// 관리자 대시보드에서 '열람전용URL' 버튼 클릭 시: 현재 페이지 주소 기준으로
+// ?view=readonly 파라미터가 붙은 링크를 만들어 클립보드에 복사한다.
+function copyReadonlyUrl(){
+  const url = window.location.origin + window.location.pathname + '?view=readonly';
+  const done = ()=> showAdminToast('열람전용 URL이 클립보드에 복사되었습니다.', 'good');
+  const fail = ()=> showAdminToast('클립보드 복사에 실패했습니다. 주소를 직접 복사해 주세요: ' + url, 'bad');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(done).catch(fail);
+  } else {
+    // 클립보드 API 미지원 브라우저를 위한 폴백
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      ok ? done() : fail();
+    }catch(e){ fail(); }
+  }
 }
 
 function exitToRole(){
@@ -1986,7 +2012,7 @@ function vehicleStatsOf(plate){
   const totalDist=trips.reduce((s,t)=>s+(Number(t.distance)||0),0)+manualDist;
   const totalFuel=trips.reduce((s,t)=>s+(Number(t.fuel)||0),0);
   const issues=trips.filter(t=>t.status&&t.status!=='정상').length;
-  const sortedByDate=trips.slice().sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||''));
+  const sortedByDate=trips.slice().sort(tripChronoCompare);
   const lastDate=sortedByDate.length?sortedByDate[sortedByDate.length-1].date:'-';
   const util=calcUtilization(trips);
   return{v,trips,totalDist,manualDist,totalFuel,issues,lastDate,util};
@@ -2078,7 +2104,7 @@ function personalUseTrips(){
       if(t.isPersonal) list.push({plate:p, branch:t.branchAtTime||data.vehicles[p].branch||'미배정', ...t});
     });
   });
-  list.sort((a,b)=>(b.isoDate||'').localeCompare(a.isoDate||''));
+  list.sort((a,b)=>tripChronoCompare(b,a));
   return list;
 }
 
@@ -2114,7 +2140,7 @@ function commuteUseTrips(){
       if(t.isCommute) list.push({plate:p, branch:t.branchAtTime||data.vehicles[p].branch||'미배정', ...t});
     });
   });
-  list.sort((a,b)=>(b.isoDate||'').localeCompare(a.isoDate||''));
+  list.sort((a,b)=>tripChronoCompare(b,a));
   return list;
 }
 
@@ -2229,7 +2255,7 @@ function renderVehicles(){
 
 function openVehicle(plate){
   const v=data.vehicles[plate];
-  const trips=(v.trips||[]).slice().sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||''));
+  const trips=(v.trips||[]).slice().sort(tripChronoCompare);
   const totalDist=trips.reduce((s,t)=>s+(Number(t.distance)||0),0);
   const totalFuel=trips.reduce((s,t)=>s+(Number(t.fuel)||0),0);
   const w=560,h=80,pad=8;
@@ -2887,7 +2913,7 @@ async function saveTripEdits(plate){
   }
 
   // 편집 전 시점의 정렬본 키 목록 수집
-  const oldTrips=data.vehicles[plate].trips.slice().sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||''));
+  const oldTrips=data.vehicles[plate].trips.slice().sort(tripChronoCompare);
   const rowKeys=[];
   table.querySelectorAll('tbody tr').forEach(tr=>{
     const idx=Number(tr.dataset.tripIdx);
@@ -3010,7 +3036,7 @@ function unlockBodyScroll(){
 }
 function closeModal(){ document.getElementById('modalOverlay').classList.remove('show'); unlockBodyScroll(); }
 async function deleteTrip(plate,idx){
-  const trips=data.vehicles[plate].trips.slice().sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||''));
+  const trips=data.vehicles[plate].trips.slice().sort(tripChronoCompare);
   const target=trips[idx];
   if(!target) return;
   const key=`${target.isoDate}|${target.startOdo}|${target.endOdo}|${target.submitter||''}`;
@@ -3145,7 +3171,7 @@ function exportToExcel(){
   const ws1=XLSX.utils.json_to_sheet(vehicleRows);
   ws1['!cols']=[{wch:12},{wch:28},{wch:16},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10}];
   const tripRows=[];
-  plates.forEach(p=>(data.vehicles[p].trips||[]).slice().sort((a,b)=>(a.isoDate||'').localeCompare(b.isoDate||'')).forEach(t=>{tripRows.push({'차량번호':p,'지역구분':data.vehicles[p].branch||'','일자(원본)':t.date||'','인식된날짜':t.isoDate||'','시작거리':t.startOdo,'종료거리':t.endOdo,'주행거리(km)':t.distance,'제출자':t.submitter||'','운행자':t.user||'','행선지':t.dest||'','주유비(원)':t.fuel||0,'개인사용여부':t.isPersonal?'개인사용':'','출퇴근사용여부':t.isCommute?(t.commuteDir||'출퇴근사용'):'','출퇴근거리(km)':t.isCommute?(t.distance||0):'','차량상태':t.status||'','비고':t.note||''});}));
+  plates.forEach(p=>(data.vehicles[p].trips||[]).slice().sort(tripChronoCompare).forEach(t=>{tripRows.push({'차량번호':p,'지역구분':data.vehicles[p].branch||'','일자(원본)':t.date||'','인식된날짜':t.isoDate||'','시작거리':t.startOdo,'종료거리':t.endOdo,'주행거리(km)':t.distance,'제출자':t.submitter||'','운행자':t.user||'','행선지':t.dest||'','주유비(원)':t.fuel||0,'개인사용여부':t.isPersonal?'개인사용':'','출퇴근사용여부':t.isCommute?(t.commuteDir||'출퇴근사용'):'','출퇴근거리(km)':t.isCommute?(t.distance||0):'','차량상태':t.status||'','비고':t.note||''});}));
   const ws2=XLSX.utils.json_to_sheet(tripRows);
   ws2['!cols']=[{wch:12},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10},{wch:12},{wch:10},{wch:10},{wch:20},{wch:10},{wch:10},{wch:12},{wch:14},{wch:10},{wch:20}];
   const year=monthlyYear||new Date().getFullYear();
@@ -3402,19 +3428,39 @@ function buildVehicleDropdown(){
   buildBranchDropdown();
 }
 
+// 운행기록을 일자(isoDate) 오름차순으로 정렬하되, 같은 날짜에 여러 건이 있을 경우
+// 실제 입력(제출) 시간(submittedAt) 기준으로 2차 정렬한다.
+// submittedAt이 없는 과거 데이터는 기존 배열 순서를 그대로 유지(0 반환)해 하위호환.
+function tripChronoCompare(a,b){
+  const d=(a.isoDate||'').localeCompare(b.isoDate||'');
+  if(d!==0) return d;
+  const sa=a.submittedAt||'', sb=b.submittedAt||'';
+  if(sa && sb) return sa.localeCompare(sb);
+  return 0;
+}
+
 function getLastEndOdo(plate){
   const trips = (data.vehicles[plate]?.trips || []);
   if(!trips.length) return null;
-  const sorted = trips.slice().sort((a,b) => (a.isoDate||'').localeCompare(b.isoDate||''));
+  const sorted = trips.slice().sort(tripChronoCompare);
   return Number(sorted[sorted.length - 1].endOdo) || null;
 }
 
 // 차량의 가장 최근 운행기록이 대차 운행이었는지, 운행자가 누구였는지까지 함께 반환
 // (반납 후 원 차량 복귀 시 시작거리 재확인 안내 및 이전 운행자 표시용)
+// 특정 운행기록(trip)의 종료거리를 시작거리로 그대로 이어받아
+// 이미 제출된 '다음 기록'이 존재하는지 확인.
+// true면 해당 기록의 시작거리/종료거리는 수정 시 다음 기록과 어긋나므로 잠근다.
+function isChainLocked(plate, trip){
+  const trips = data.vehicles[plate]?.trips || [];
+  const endOdo = Number(trip.endOdo);
+  return trips.some(t2 => t2!==trip && Number(t2.startOdo)===endOdo);
+}
+
 function getLastTripMeta(plate){
   const trips = (data.vehicles[plate]?.trips || []);
   if(!trips.length) return {endOdo:null, isDaeCha:false, user:''};
-  const sorted = trips.slice().sort((a,b) => (a.isoDate||'').localeCompare(b.isoDate||''));
+  const sorted = trips.slice().sort(tripChronoCompare);
   const last = sorted[sorted.length - 1];
   return {endOdo: Number(last.endOdo) || null, isDaeCha: !!last.isDaeCha, user: last.user||''};
 }
@@ -4132,7 +4178,8 @@ async function doSubmit(submitter, plate, rows){
       user:r.user, dest:r.dest, fuel:r.fuel, status:r.status, note:r.note,
       submitter, branchAtTime, imgKey:null, isPersonal:r.isPersonal||false,
       isDaeCha:r.isDaeCha||false, daeChaPate:r.daeChaPate||'',
-      isCommute:r.isCommute||false, commuteDir:r.commuteDir||''
+      isCommute:r.isCommute||false, commuteDir:r.commuteDir||'',
+      submittedAt: new Date().toISOString()
     });
     addedDates.push(isoDate);
     added++;
@@ -4452,7 +4499,7 @@ function loadUserEditable(){
 
   let html='';
   Object.keys(byPlate).sort().forEach(plate=>{
-    const rows=byPlate[plate].sort((a,b)=>(a.trip.isoDate||'').localeCompare(b.trip.isoDate||''));
+    const rows=byPlate[plate].sort((a,b)=>tripChronoCompare(a.trip,b.trip));
     html+=`
     <div style="margin-bottom:18px;">
       <div class="user-edit-plate">
@@ -4463,11 +4510,16 @@ function loadUserEditable(){
         <span style="font-size:12px;color:var(--muted);font-family:'Paperlogy';">${rows.length}건</span>
       </div>
       <div style="padding:8px 0;">
-        ${rows.map(f=>`<div data-plate="${f.plate}" data-idx="${f.tripIdx}" data-key="${f.trip.isoDate}|${f.trip.startOdo}|${f.trip.endOdo}|${f.trip.submitter||''}" style="border:1.5px solid var(--line);border-radius:12px;margin:0 12px 10px;padding:12px 14px;">
+        ${rows.map(f=>{
+          const locked = isChainLocked(f.plate, f.trip);
+          const lockAttr = locked ? 'readonly tabindex="-1" title="다음 운행기록에 이미 연동되어 수정할 수 없습니다."' : '';
+          const lockStyle = locked ? 'background:var(--paper);color:var(--muted);cursor:not-allowed;' : '';
+          return `<div data-plate="${f.plate}" data-idx="${f.tripIdx}" data-key="${f.trip.isoDate}|${f.trip.startOdo}|${f.trip.endOdo}|${f.trip.submitter||''}" style="border:1.5px solid var(--line);border-radius:12px;margin:0 12px 10px;padding:12px 14px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
             <span style="font-size:11px;font-weight:700;color:var(--muted);">운행기간</span>
             <span class="ue-saved" style="color:var(--good);font-size:11px;font-weight:600;display:none;">✓ 저장됨</span>
           </div>
+          ${locked ? `<div style="font-size:11px;color:var(--bad);font-weight:600;margin-bottom:8px;">⚠ 다음 운행기록에 이미 연동되어 시작거리·종료거리는 수정할 수 없습니다. (그 외 항목은 수정 가능)</div>` : ''}
           <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;margin-bottom:10px;">
             <input type="text" inputmode="numeric" class="ue-date-from" value="${f.trip.isoDate||''}" maxlength="10" placeholder="YYYY-MM-DD" oninput="autoFormatUeDate(this)" style="border:1.5px solid var(--good);border-radius:8px;padding:9px 8px;font-size:13px;text-align:center;font-family:'Paperlogy',sans-serif;width:100%;">
             <span style="color:var(--muted);font-size:13px;font-weight:700;">~</span>
@@ -4475,9 +4527,9 @@ function loadUserEditable(){
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
             <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">시작거리</div>
-              <input class="ue-inp mono" value="${f.trip.startOdo??''}" data-f="startOdo" oninput="recalcUeDist(this)" placeholder="0" style="width:100%;font-size:14px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;text-align:right;"></div>
+              <input class="ue-inp mono" value="${f.trip.startOdo??''}" data-f="startOdo" ${lockAttr} oninput="recalcUeDist(this)" placeholder="0" style="width:100%;font-size:14px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;text-align:right;${lockStyle}"></div>
             <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">종료거리</div>
-              <input class="ue-inp mono" value="${f.trip.endOdo??''}" data-f="endOdo" oninput="recalcUeDist(this)" placeholder="0" style="width:100%;font-size:14px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;text-align:right;"></div>
+              <input class="ue-inp mono" value="${f.trip.endOdo??''}" data-f="endOdo" ${lockAttr} oninput="recalcUeDist(this)" placeholder="0" style="width:100%;font-size:14px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;text-align:right;${lockStyle}"></div>
             <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">주행거리</div>
               <input class="ue-inp mono" value="${f.trip.distance??''}" data-f="distance" readonly tabindex="-1" style="width:100%;font-size:14px;font-weight:700;color:var(--good);border:1px solid var(--good-soft);border-radius:8px;padding:8px 6px;text-align:right;background:var(--good-soft);cursor:not-allowed;"></div>
           </div>
@@ -4511,7 +4563,7 @@ function loadUserEditable(){
               <button type="button" class="status-btn ue-commute-btn${f.trip.commuteDir==='퇴근'?' active-commute':''}" data-dir="퇴근" onclick="setUeCommuteDirection(this)">🌆 퇴근</button>
             </div>
           </div>
-        </div>`).join('')}
+        </div>`;}).join('')}
       </div>
     </div>`;
   });
@@ -4655,9 +4707,10 @@ async function saveUserEdits(name){
     const key=tr.dataset.key;
     const t=(data.vehicles[plate]?.trips||[]).find(x=>`${x.isoDate}|${x.startOdo}|${x.endOdo}|${x.submitter||''}`===key);
     if(!t) return;
+    const locked = isChainLocked(plate, t); // 다음 기록에 이미 연동된 경우, 화면 조작과 무관하게 서버측에서도 재확인 후 차단
     tr.querySelectorAll('.ue-inp').forEach(inp=>{
       const f=inp.dataset.f;
-      if(f==='startOdo'||f==='endOdo'||f==='distance') t[f]=Number(inp.value)||0;
+      if(f==='startOdo'||f==='endOdo'||f==='distance'){ if(!locked) t[f]=Number(inp.value)||0; }
       else if(f==='fuel') t[f]=parseFuelAmount(inp.value);
       else t[f]=inp.value;
     });
