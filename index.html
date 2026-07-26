@@ -29,6 +29,7 @@
   - 20줄 초과 시 오래된 항목은 하단 이동 또는 별도 CHANGELOG.md로 분리
 =================================================================
   [2026-07-26] 제출완료 팝업 2줄 표시(차량·건수 / 기간 분리), 완료 팝업·토스트 한글 keep-all 줄바꿈 적용 | 변경: .done-modal-msg, .submitted-notice p, showSubmitSuccess(), rangeMsg(라인 ~4234)
+  [2026-07-26] 내 제출 기록 조회: 조회기간 미지정 시 최신 5건만 표시, 조회기간은 최대 3개월까지만 허용 | 변경: loadUserEditable() (라인 ~4493)
 =================================================================
 -->
 
@@ -4495,6 +4496,14 @@ function loadUserEditable(){
   if(periodFrom && periodTo && periodTo<periodFrom){
     err.textContent='조회기간이 올바르지 않습니다. 종료일이 시작일보다 빠릅니다.';err.style.display='block';if(summary)summary.textContent='';return;
   }
+  // 조회기간은 최대 3개월 단위까지만 허용 (대량 조회로 인한 성능 저하 방지)
+  if(periodFrom && periodTo){
+    const dFrom=new Date(periodFrom), dTo=new Date(periodTo);
+    const maxTo=new Date(dFrom.getFullYear(), dFrom.getMonth()+3, dFrom.getDate());
+    if(dTo>maxTo){
+      err.textContent='조회기간은 최대 3개월까지만 조회 가능합니다.';err.style.display='block';if(summary)summary.textContent='';return;
+    }
+  }
   err.style.display='none';
 
   // 이름 기준으로 내 제출 기록 검색 (조회기준: 운행자 또는 제출자, 상단 토글로 선택)
@@ -4517,9 +4526,18 @@ function loadUserEditable(){
     });
   }
 
+  // 조회기간을 지정하지 않은 경우, 최신 5건만 표시 (전체 DB 과다 노출 방지)
+  const totalFoundCount=found.length;
+  let limitedToRecent5=false;
+  if(!periodFrom && !periodTo && found.length>5){
+    found=found.slice().sort((a,b)=>tripChronoCompare(b.trip,a.trip)).slice(0,5);
+    limitedToRecent5=true;
+  }
+
   if(summary){
     const periodLabel=(periodFrom||periodTo)?` · 조회기간 ${periodFrom||'제한없음'} ~ ${periodTo||'제한없음'}`:'';
-    summary.textContent=found.length?`총 ${found.length}건 조회됨${periodLabel}`:'';
+    const recentNote=limitedToRecent5?` · 최근 5건만 표시 (전체 ${totalFoundCount}건 · 더 보려면 조회기간을 지정하세요)`:'';
+    summary.textContent=found.length?`총 ${found.length}건 조회됨${periodLabel}${recentNote}`:'';
   }
 
   if(found.length===0){
