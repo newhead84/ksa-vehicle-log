@@ -22,6 +22,15 @@
   7. firebaseConfig(apiKey, authDomain, projectId)를 본인 프로젝트 값으로 교체
 =================================================================
 -->
+<!--
+=================================================================
+  CHANGELOG
+  형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
+  - 20줄 초과 시 오래된 항목은 하단 이동 또는 별도 CHANGELOG.md로 분리
+=================================================================
+  [2026-07-26] 제출완료 팝업 2줄 표시(차량·건수 / 기간 분리), 완료 팝업·토스트 한글 keep-all 줄바꿈 적용 | 변경: .done-modal-msg, .submitted-notice p, showSubmitSuccess(), rangeMsg(라인 ~4234)
+=================================================================
+-->
 
 <head>
 <meta charset="UTF-8">
@@ -199,7 +208,7 @@
   /* ===== Submitted notice ===== */
   .submitted-notice{background:var(--good-soft);border:1px solid var(--good);border-radius:var(--radius);padding:18px 20px;margin-bottom:20px;}
   .submitted-notice h3{font-size:16px;color:var(--good);margin-bottom:6px;}
-  .submitted-notice p{font-size:13px;color:var(--good);margin:0;}
+  .submitted-notice p{font-size:13px;color:var(--good);margin:0;white-space:pre-line;word-break:keep-all;overflow-wrap:break-word;}
 
   /* ===== Stat strip ===== */
   .stat-strip{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:14px;margin-bottom:26px;}
@@ -341,7 +350,7 @@
   /* ===== 완료 안내 팝업 (제출완료/수정완료) ===== */
   .done-modal-icon{width:52px;height:52px;border-radius:50%;background:var(--good-soft);color:var(--good);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;margin:0 auto 14px;}
   .done-modal-title{font-size:17px;font-weight:700;color:var(--ink);margin-bottom:8px;}
-  .done-modal-msg{font-size:13.5px;color:var(--muted);line-height:1.6;margin:0 0 22px;white-space:pre-line;}
+  .done-modal-msg{font-size:13.5px;color:var(--muted);line-height:1.6;margin:0 0 22px;white-space:pre-line;word-break:keep-all;overflow-wrap:break-word;}
   .done-modal-ok{width:100%;padding:14px;border:none;border-radius:14px;background:var(--navy);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:'Paperlogy',sans-serif;}
   .done-modal-ok:hover{opacity:.92;}
   .modal-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:10px;}
@@ -4231,7 +4240,7 @@ async function doSubmit(submitter, plate, rows){
   rowCounter=0;
 
   const sorted = addedDates.filter(Boolean).sort();
-  const rangeMsg = sorted.length ? ` (${sorted[0]} ~ ${sorted[sorted.length-1]})` : '';
+  const rangeMsg = sorted.length ? `\n(${sorted[0]} ~ ${sorted[sorted.length-1]})` : '';
   sessionSubmits.push({plate,submitter,count:added,skipped,range:rangeMsg,time:new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})});
   renderSubmitLog(true);
   if(added>0) showSubmitSuccess(plate,added,rangeMsg);
@@ -4384,11 +4393,11 @@ function showSubmitSuccess(plate,count,rangeMsg){
   const div=document.createElement('div');
   div.id='submitSuccess';
   div.className='submitted-notice';
-  div.innerHTML=`<h3>✓ 제출 완료</h3><p>${plate} · ${count}건이 제출되었습니다.${rangeMsg.replace('\n',' ')}</p>`;
+  div.innerHTML=`<h3>✓ 제출 완료</h3><p>${plate} · ${count}건이 제출되었습니다.${rangeMsg}</p>`;
   const inputSec=document.getElementById('userInputSection');
   if(inputSec) inputSec.prepend(div);
   setTimeout(()=>{if(div.parentNode)div.remove();},5000);
-  showDoneModal('제출 완료', `${plate} · ${count}건이 제출되었습니다.${rangeMsg.replace('\n',' ')}`);
+  showDoneModal('제출 완료', `${plate} · ${count}건이 제출되었습니다.${rangeMsg}`);
 }
 
 // ============================================================
