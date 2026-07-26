@@ -923,7 +923,7 @@
       </div>
       <button id="inactiveToggleBtn" class="reset-btn" style="font-size:12px;flex-shrink:0;" onclick="toggleInactive()">운용중지 포함</button>
       <button class="reset-btn" onclick="openAddVehicleModal()" style="border-color:var(--navy);color:var(--navy);font-size:12px;flex-shrink:0;">+ 차량 추가</button>
-      <button class="reset-btn" onclick="printAllQrCodes()" style="border-color:#17593d;color:#17593d;font-size:12px;flex-shrink:0;">📄 QR 일괄 PDF 다운로드</button>
+      <button id="qrBulkPdfBtn" class="reset-btn" onclick="printAllQrCodes()" style="border-color:#17593d;color:#17593d;font-size:12px;flex-shrink:0;">📄 QR 일괄 PDF 다운로드</button>
       <input class="search-box" id="searchBox" placeholder="차량번호 또는 지역본부 검색…" oninput="renderVehicles()" style="flex:1;min-width:140px;">
     </div>
     <div class="section-body" id="vehicleAreaWrap">
@@ -1489,7 +1489,7 @@ function enterViewerMode(){
 function applyViewerModeUI(){
   const badge = document.getElementById('roleBadge');
   if(badge){ badge.textContent = '열람 전용'; badge.style.background = '#7eb138'; }
-  ['manualUploadBtn','backupDataBtn','restoreDataBtn','logoutBtn'].forEach(id=>{
+  ['manualUploadBtn','backupDataBtn','restoreDataBtn','logoutBtn','qrBulkPdfBtn'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.style.display = 'none';
   });
