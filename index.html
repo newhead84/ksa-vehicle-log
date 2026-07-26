@@ -30,6 +30,7 @@
 =================================================================
   [2026-07-26] 제출완료 팝업 2줄 표시(차량·건수 / 기간 분리), 완료 팝업·토스트 한글 keep-all 줄바꿈 적용 | 변경: .done-modal-msg, .submitted-notice p, showSubmitSuccess(), rangeMsg(라인 ~4234)
   [2026-07-26] 내 제출 기록 조회: 조회기간 미지정 시 최신 5건만 표시, 조회기간은 최대 3개월까지만 허용 | 변경: loadUserEditable() (라인 ~4493)
+  [2026-07-26] 관리자 대시보드 '개인사용 현황' 제목 → '주말 및 공휴일 개인사용 현황'으로 변경, (가동율 미반영) 문구 추가 | 변경: #personalUseWrap 상단 section-head (라인 ~913)
 =================================================================
 -->
 
@@ -910,7 +911,7 @@
     </div>
 
     <div class="section-head">
-      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>개인사용 현황</h2>
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>주말 및 공휴일 개인사용 현황 <span style="font-size:11px;color:var(--muted);font-weight:400;">(가동율 미반영)</span></h2>
     </div>
     <div class="section-body collapsed" id="personalUseWrap">
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
