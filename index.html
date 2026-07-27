@@ -33,6 +33,7 @@
   [2026-07-26] 관리자 대시보드 '개인사용 현황' 제목 → '주말 및 공휴일 개인사용 현황'으로 변경, (가동율 미반영) 문구 추가 | 변경: #personalUseWrap 상단 section-head (라인 ~913)
   [2026-07-26] 10개 지역본부별 열람전용 링크(?view=readonly&r=토큰) 신설, 지역외 정보 비노출 | 변경: REGION_GROUPS, applyRegionViewerFilter(), openRegionUrlModal(), copyRegionUrl(), #regionUrlBtn
   [2026-07-27] 개별 QR 선택 인쇄 시안을 QR 일괄 PDF 카드 규격(63.25mm x 90mm, QR 49.5mm)과 동일하게 mm 단위로 통일 | 변경: printQr()
+  [2026-07-27] 지역본부별 열람URL 모달, 데스크탑에서 넓은 .modal 기본폭에 짧은 목록이 들어가 우측 여백이 크게 보이던 문제 수정 | 변경: .region-url-list, .modal:has(.region-url-list), openRegionUrlModal()
 =================================================================
 -->
 
@@ -350,6 +351,7 @@
   .modal-overlay{position:fixed;inset:0;background:rgba(22,35,63,.5);display:none;align-items:center;justify-content:center;z-index:50;}
   .modal-overlay.show{display:flex;}
   .modal{background:var(--card);border-radius:16px;width:min(880px,92vw);max-height:86vh;overflow-y:auto;padding:24px 26px;}
+  .modal:has(.region-url-list){width:min(460px,92vw);}
 
   /* ===== 완료 안내 팝업 (제출완료/수정완료) ===== */
   .done-modal-icon{width:52px;height:52px;border-radius:50%;background:var(--good-soft);color:var(--good);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;margin:0 auto 14px;}
@@ -1679,7 +1681,7 @@ function openRegionUrlModal(){
       <div><div class="plate-big" style="font-size:18px;">지역본부별 열람URL</div><div class="muted" style="font-size:12px;word-break:keep-all;overflow-wrap:break-word;">지역별 링크는 해당 지역본부(강원지부·충남지부 포함)의 정보만 열람되며, 다른 사업장의 운행정보는 보이지 않습니다.</div></div>
       <button class="close-x" onclick="closeModal()">✕</button>
     </div>
-    <div style="max-width:420px;">${rows}</div>
+    <div class="region-url-list">${rows}</div>
   `;
   document.getElementById('modalOverlay').classList.add('show');
   lockBodyScroll();
