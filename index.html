@@ -34,6 +34,7 @@
   [2026-07-26] 10개 지역본부별 열람전용 링크(?view=readonly&r=토큰) 신설, 지역외 정보 비노출 | 변경: REGION_GROUPS, applyRegionViewerFilter(), openRegionUrlModal(), copyRegionUrl(), #regionUrlBtn
   [2026-07-27] 개별 QR 선택 인쇄 시안을 QR 일괄 PDF 카드 규격(63.25mm x 90mm, QR 49.5mm)과 동일하게 mm 단위로 통일 | 변경: printQr()
   [2026-07-27] 지역본부별 열람URL 모달, 데스크탑에서 넓은 .modal 기본폭에 짧은 목록이 들어가 우측 여백이 크게 보이던 문제 수정 | 변경: .region-url-list, .modal:has(.region-url-list), openRegionUrlModal()
+  [2026-07-28] 운행기록 삭제 버튼이 확인 없이 즉시 삭제되던 문제 수정, 임시저장 삭제·운행 입력행 삭제(입력값 있을 때)에도 확인 팝업 추가 | 변경: deleteTrip(), clearDraft(), removeTripRow()
 =================================================================
 -->
 
@@ -3188,6 +3189,10 @@ async function deleteTrip(plate,idx){
   const trips=data.vehicles[plate].trips.slice().sort(tripChronoCompare);
   const target=trips[idx];
   if(!target) return;
+  const dateLabel=target.date||target.isoDate||'';
+  const distLabel=(target.startOdo!=null&&target.endOdo!=null)?`${target.startOdo}→${target.endOdo}km`:'';
+  const warnMsg=`⚠️ '${plate}' 차량의 아래 운행기록을 삭제합니다.\n${dateLabel}${distLabel?' · '+distLabel:''}${target.dest?' · '+target.dest:''}\n이 작업은 되돌릴 수 없습니다.\n\n계속 진행하시겠습니까?`;
+  if(!confirm(warnMsg)) return;
   const key=`${target.isoDate}|${target.startOdo}|${target.endOdo}|${target.submitter||''}`;
   // 최신 데이터 재조회 후 키 기반 삭제 (동시성 안전)
   await refreshDataFromStorage();
@@ -3880,7 +3885,11 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
 
 function removeTripRow(id){
   const el = document.getElementById(id);
-  if(el) el.remove();
+  if(el){
+    const hasInput = Array.from(el.querySelectorAll('input[type="text"],input[type="number"]')).some(inp=>inp.value && inp.value.trim()!=='');
+    if(hasInput && !confirm('⚠️ 입력하신 운행 정보가 삭제됩니다.\n계속 진행하시겠습니까?')) return;
+    el.remove();
+  }
   renumberRows();
   scheduleDraft();
 }
@@ -4474,6 +4483,7 @@ async function onVehicleSelectAsync(plate){
 }
 
 async function clearDraft(){
+  if(!confirm('⚠️ 임시저장된 입력 내용을 삭제합니다.\n삭제 후에는 복구할 수 없습니다.\n\n계속 진행하시겠습니까?')) return;
   try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
   document.getElementById('draftBanner').style.display='none';
 }
