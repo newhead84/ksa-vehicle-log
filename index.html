@@ -47,6 +47,8 @@
   [2026-07-28] 운행기록 삭제 버튼이 확인 없이 즉시 삭제되던 문제 수정, 임시저장 삭제·운행 입력행 삭제(입력값 있을 때)에도 확인 팝업 추가 | 변경: deleteTrip(), clearDraft(), removeTripRow()
   [2026-07-29] 관리자 로그인에 이메일 OTP 2차 인증 추가(비밀번호 확인 후 관리자 이메일로 6자리 코드 발송, 5분 유효) | 변경: #adminOtpWrap, tryAdminLogin(), sendAdminOtp(), verifyAdminOtp(), resendAdminOtp(), cancelAdminOtp(), completeAdminLogin()
   [2026-07-29] OTP 화면에 "이 기기에서 30일간 인증코드 생략" 체크박스 추가, 체크 시 신뢰 기기로 등록되어 다음 로그인부터 OTP 생략(서버측 만료시간 기준 검증) | 변경: #trustDeviceChk, isDeviceTrusted(), trustThisDevice(), generateDeviceId(), tryAdminLogin(), verifyAdminOtp(), cancelAdminOtp(), exitToRole()
+  [2026-07-29] 제출하기 성공 후 임시저장 자동 정리 시 불필요한 삭제 확인 팝업이 뜨던 문제 수정(사용자가 직접 누르는 "삭제" 버튼은 확인 팝업 유지) | 변경: clearDraft(skipConfirm 파라미터 추가), doSubmit()
+  [2026-07-29] "이 기기에서 30일간 인증코드 생략" 체크박스가 클릭은 되나 체크 표시가 보이지 않아 비활성화된 것처럼 보이던 문제 수정(전역 appearance:none으로 브라우저 기본 체크마크가 사라졌으나 커스텀 체크 표시가 없었음) | 변경: .otp-trust-label input[type="checkbox"]:checked 스타일 추가
 =================================================================
 -->
 
@@ -166,7 +168,12 @@
   .otp-trust-label input[type="checkbox"]{
     width:16px;height:16px;min-width:16px;margin:2px 0 0;flex:none;
     padding:0;border:1.5px solid var(--line);border-radius:4px;background:var(--paper);
-    text-align:initial;letter-spacing:normal;
+    text-align:initial;letter-spacing:normal;position:relative;transition:all .15s;
+  }
+  .otp-trust-label input[type="checkbox"]:checked{background:var(--navy);border-color:var(--navy);}
+  .otp-trust-label input[type="checkbox"]:checked::after{
+    content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;
+    border:2px solid #fff;border-top:none;border-left:none;transform:rotate(45deg);
   }
 
   .drive-warn-overlay{
@@ -4554,7 +4561,7 @@ async function doSubmit(submitter, plate, rows){
   if(!saved){
     return false;
   }
-  await clearDraft();
+  await clearDraft(true);
 
   // 점검요망 상태로 제출된 건이 있으면 관리자에게 이메일 알림 (실패해도 제출 자체는 정상 처리됨)
   notifyMaintenanceNeeded(plate, branchAtTime, submitter, rows);
@@ -4689,8 +4696,9 @@ async function onVehicleSelectAsync(plate){
   document.getElementById('submitBar').style.display='flex';
 }
 
-async function clearDraft(){
-  if(!confirm('⚠️ 임시저장된 입력 내용을 삭제합니다.\n삭제 후에는 복구할 수 없습니다.\n\n계속 진행하시겠습니까?')) return;
+async function clearDraft(skipConfirm){
+  // skipConfirm=true: 제출 성공 후 자동 정리 등, 사용자가 삭제를 의도한 것이 아닌 내부 호출용 예외 처리
+  if(!skipConfirm && !confirm('⚠️ 임시저장된 입력 내용을 삭제합니다.\n삭제 후에는 복구할 수 없습니다.\n\n계속 진행하시겠습니까?')) return;
   try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
   document.getElementById('draftBanner').style.display='none';
 }
