@@ -20,6 +20,16 @@
   6. Authentication > Users > 사용자 추가 → 아래 ADMIN_LOGIN_EMAIL과 동일한 이메일로
      원하는 관리자 비밀번호를 설정 (비밀번호는 코드에 직접 넣지 않음)
   7. firebaseConfig(apiKey, authDomain, projectId)를 본인 프로젝트 값으로 교체
+  8. [2026-07-29 추가] 관리자 로그인 2차 인증(이메일 OTP)용 규칙 반영 필요:
+     {
+       "rules": {
+         "adminOtp": { ".read": "auth != null", ".write": "auth != null" },
+         "adminTrustedDevices": { ".read": "auth != null", ".write": "auth != null" }
+       }
+     }
+     ※ 규칙 최상단에 ".read": true 등 전체 공개 규칙이 있다면 adminOtp/adminTrustedDevices
+        경로가 의도치 않게 공개될 수 있으니, 반드시 위처럼 auth != null 조건을 명시해
+        기존 규칙보다 우선 적용되도록 확인할 것.
 =================================================================
 -->
 <!--
@@ -35,6 +45,8 @@
   [2026-07-27] 개별 QR 선택 인쇄 시안을 QR 일괄 PDF 카드 규격(63.25mm x 90mm, QR 49.5mm)과 동일하게 mm 단위로 통일 | 변경: printQr()
   [2026-07-27] 지역본부별 열람URL 모달, 데스크탑에서 넓은 .modal 기본폭에 짧은 목록이 들어가 우측 여백이 크게 보이던 문제 수정 | 변경: .region-url-list, .modal:has(.region-url-list), openRegionUrlModal()
   [2026-07-28] 운행기록 삭제 버튼이 확인 없이 즉시 삭제되던 문제 수정, 임시저장 삭제·운행 입력행 삭제(입력값 있을 때)에도 확인 팝업 추가 | 변경: deleteTrip(), clearDraft(), removeTripRow()
+  [2026-07-29] 관리자 로그인에 이메일 OTP 2차 인증 추가(비밀번호 확인 후 관리자 이메일로 6자리 코드 발송, 5분 유효) | 변경: #adminOtpWrap, tryAdminLogin(), sendAdminOtp(), verifyAdminOtp(), resendAdminOtp(), cancelAdminOtp(), completeAdminLogin()
+  [2026-07-29] OTP 화면에 "이 기기에서 30일간 인증코드 생략" 체크박스 추가, 체크 시 신뢰 기기로 등록되어 다음 로그인부터 OTP 생략(서버측 만료시간 기준 검증) | 변경: #trustDeviceChk, isDeviceTrusted(), trustThisDevice(), generateDeviceId(), tryAdminLogin(), verifyAdminOtp(), cancelAdminOtp(), exitToRole()
 =================================================================
 -->
 
@@ -146,6 +158,16 @@
     padding:15px;width:100%;font-size:15px;font-weight:700;cursor:pointer;
   }
   .login-err{color:var(--bad);font-size:13px;margin-top:8px;display:none;}
+  .otp-guide{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:12px;word-break:keep-all;overflow-wrap:break-word;}
+  .otp-links{display:flex;justify-content:center;gap:16px;margin-top:10px;}
+  .otp-links a{font-size:12.5px;color:var(--muted);text-decoration:underline;cursor:pointer;}
+  .otp-trust-label{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--muted);
+    line-height:1.5;text-align:left;margin-bottom:12px;cursor:pointer;word-break:keep-all;overflow-wrap:break-word;}
+  .otp-trust-label input[type="checkbox"]{
+    width:16px;height:16px;min-width:16px;margin:2px 0 0;flex:none;
+    padding:0;border:1.5px solid var(--line);border-radius:4px;background:var(--paper);
+    text-align:initial;letter-spacing:normal;
+  }
 
   .drive-warn-overlay{
     display:none;position:fixed;inset:0;background:rgba(10,30,20,.55);
@@ -757,6 +779,21 @@
         <input type="password" id="adminPwInput" placeholder="관리자 비밀번호" onkeydown="if(event.key==='Enter')tryAdminLogin()">
         <button class="btn-login" onclick="tryAdminLogin()">로그인</button>
         <div class="login-err" id="loginErr">비밀번호가 틀렸습니다.</div>
+      </div>
+      <!-- 2차 인증(이메일 OTP) 단계: 비밀번호 확인 후에만 표시됨 -->
+      <div class="admin-login-wrap" id="adminOtpWrap" style="display:none;">
+        <div class="otp-guide" id="otpGuide">관리자 이메일로 인증코드를 보냈습니다.<br>5분 이내에 입력해 주세요.</div>
+        <input type="text" inputmode="numeric" maxlength="6" id="adminOtpInput" placeholder="인증코드 6자리" onkeydown="if(event.key==='Enter')verifyAdminOtp()">
+        <label class="otp-trust-label" for="trustDeviceChk">
+          <input type="checkbox" id="trustDeviceChk">
+          <span>이 기기에서 30일간 인증코드 생략 (공용 PC에서는 선택하지 마세요)</span>
+        </label>
+        <button class="btn-login" onclick="verifyAdminOtp()">확인</button>
+        <div class="login-err" id="otpErr">인증코드가 올바르지 않거나 만료되었습니다.</div>
+        <div class="otp-links">
+          <a href="javascript:void(0)" onclick="resendAdminOtp(event)">코드 재전송</a>
+          <a href="javascript:void(0)" onclick="cancelAdminOtp()">취소</a>
+        </div>
       </div>
     </div>
   </div>
@@ -1494,31 +1531,117 @@ const REGION_ORDER = ['cfa9cb007059','278ad79fc9e5','8449f098f9ab','d7759acdceb1
 function showAdminLogin(){
   const w = document.getElementById('adminLoginWrap');
   const notice = document.getElementById('noticeBtnGroup');
-  w.style.display = w.style.display==='block' ? 'none' : 'block';
+  const wasOpen = w.style.display==='block' || document.getElementById('adminOtpWrap').style.display==='block';
+  w.style.display = wasOpen ? 'none' : 'block';
+  document.getElementById('adminOtpWrap').style.display = 'none';
   if(notice) notice.style.display = w.style.display==='block' ? 'none' : 'flex';
   if(w.style.display==='block') document.getElementById('adminPwInput').focus();
 }
 
+// ============================================================
+// ★ 관리자 2차 인증 (이메일 OTP) ★
+// ------------------------------------------------------------
+// 비밀번호(1차) 확인 후, Firebase RTDB에 만료시간이 있는 6자리 코드를 저장하고
+// 기존 EmailJS 연동(점검요망 알림과 동일한 서비스/템플릿)으로 관리자 이메일에 발송합니다.
+// 비밀번호를 알아도 관리자 이메일(ADMIN_EMAIL)에 접근하지 못하면 로그인이 완료되지 않습니다.
+// ============================================================
+const ADMIN_OTP_NODE   = 'adminOtp';
+const ADMIN_OTP_TTL_MS = 5 * 60 * 1000; // 5분
+let adminOtpFailCount = 0;
+
+// ------------------------------------------------------------
+// 기기 기억(2차 인증 생략) — OTP 화면 체크박스로 사용자가 직접 선택했을 때만 적용
+// 로컬에는 랜덤 기기 ID만 저장하고, 실제 유효 여부(만료시간)는 항상 서버(RTDB)
+// 값을 기준으로 판단합니다 (로컬 값 조작만으로는 인증을 우회할 수 없도록 하기 위함).
+// ------------------------------------------------------------
+const ADMIN_TRUSTED_DEVICES_NODE = 'adminTrustedDevices';
+const ADMIN_TRUST_TTL_MS         = 30 * 24 * 60 * 60 * 1000; // 30일
+const ADMIN_TRUST_STORAGE_KEY    = 'ksaAdminTrustedDeviceId';
+
+function generateDeviceId(){
+  if(window.crypto && crypto.getRandomValues){
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    return Array.from(bytes, b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  return 'd'+Date.now().toString(36)+Math.random().toString(36).slice(2);
+}
+
+// 이 기기가 이미 신뢰(2차 인증 생략) 상태인지 서버 기준으로 확인
+async function isDeviceTrusted(){
+  const id = localStorage.getItem(ADMIN_TRUST_STORAGE_KEY);
+  if(!id) return false;
+  try{
+    const rec = await fbGet(`${ADMIN_TRUSTED_DEVICES_NODE}/${id}`);
+    if(rec && Number(rec.expiresAt||0) > Date.now()) return true;
+    // 만료되었거나 서버에 기록이 없으면 로컬 값도 함께 정리
+    localStorage.removeItem(ADMIN_TRUST_STORAGE_KEY);
+    return false;
+  }catch(e){
+    // 조회 실패 시에는 안전하게 신뢰하지 않음(OTP 단계로 진행)
+    return false;
+  }
+}
+
+// 사용자가 체크박스를 선택한 경우에만 호출: 새 기기 ID 발급 후 서버에 만료시간과 함께 기록
+async function trustThisDevice(){
+  const id = generateDeviceId();
+  const expiresAt = Date.now() + ADMIN_TRUST_TTL_MS;
+  try{
+    await fbSet(`${ADMIN_TRUSTED_DEVICES_NODE}/${id}`, { expiresAt });
+    localStorage.setItem(ADMIN_TRUST_STORAGE_KEY, id);
+  }catch(e){
+    console.error('[2차 인증] 기기 기억 저장 실패:', e);
+  }
+}
+
+function generateOtpCode(){
+  return String(Math.floor(100000 + Math.random()*900000));
+}
+
+async function sendAdminOtp(){
+  const code = generateOtpCode();
+  const expiresAt = Date.now() + ADMIN_OTP_TTL_MS;
+  await fbSet(ADMIN_OTP_NODE, { code, expiresAt });
+  if(window.emailjs && EMAILJS_PUBLIC_KEY && !EMAILJS_PUBLIC_KEY.startsWith('YOUR_')){
+    try{
+      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+        to_email: ADMIN_EMAIL,
+        plate: '-',
+        branch: '관리자 로그인 2차 인증',
+        submitter: '(시스템)',
+        status: '인증코드 발송',
+        detail: `인증코드: ${code}\n(5분간 유효합니다. 본인이 요청하지 않았다면 즉시 관리자 비밀번호를 변경해 주세요.)`,
+        submitted_at: new Date().toLocaleString('ko-KR')
+      });
+    }catch(e){
+      console.error('[2차 인증] 이메일 발송 실패:', e);
+    }
+  } else {
+    console.warn('[2차 인증] EmailJS 설정이 완료되지 않아 이메일을 발송하지 않았습니다.');
+  }
+}
+
 async function tryAdminLogin(){
   const pw = document.getElementById('adminPwInput').value;
-  const btn = document.querySelector('.btn-login');
+  const btn = document.querySelector('#adminLoginWrap .btn-login');
   document.getElementById('loginErr').style.display = 'none';
   if(btn){ btn.disabled = true; btn.textContent = '확인 중...'; }
   try{
     // 실제 비밀번호 검증은 Firebase 서버가 수행 (코드 안에는 비밀번호가 존재하지 않음)
     await firebase.auth().signInWithEmailAndPassword(ADMIN_LOGIN_EMAIL, pw);
-    currentRole = 'admin';
-    document.getElementById('roleOverlay').style.display = 'none';
-    document.getElementById('mainWrap').style.display = 'block';
-    document.getElementById('adminTopbar').style.display = 'flex';
-    document.getElementById('statStrip').style.display = 'grid';
-    document.getElementById('adminSections').style.display = 'block';
-    document.getElementById('submitLog').style.display = 'none';
-    document.getElementById('userInputSection').style.display = 'none';
-
-    document.getElementById('dateSub').textContent = todayStr() + ' 기준';
-    pushAppState('admin');
-    startAdminPolling();
+    // 비밀번호(1차 인증) 통과 → 이 기기가 이미 신뢰된 상태라면 2차 인증 없이 바로 로그인
+    if(await isDeviceTrusted()){
+      completeAdminLogin();
+      return;
+    }
+    // 신뢰된 기기가 아니면 이메일 OTP(2차 인증) 단계로 전환
+    adminOtpFailCount = 0;
+    await sendAdminOtp();
+    document.getElementById('adminLoginWrap').style.display = 'none';
+    document.getElementById('adminOtpWrap').style.display = 'block';
+    document.getElementById('otpErr').style.display = 'none';
+    document.getElementById('adminOtpInput').value = '';
+    document.getElementById('adminOtpInput').focus();
   } catch(e){
     document.getElementById('loginErr').style.display = 'block';
     document.getElementById('adminPwInput').value = '';
@@ -1526,6 +1649,84 @@ async function tryAdminLogin(){
   } finally {
     if(btn){ btn.disabled = false; btn.textContent = '로그인'; }
   }
+}
+
+async function verifyAdminOtp(){
+  const input = document.getElementById('adminOtpInput').value.trim();
+  const btn = document.querySelector('#adminOtpWrap .btn-login');
+  document.getElementById('otpErr').style.display = 'none';
+  if(btn){ btn.disabled = true; btn.textContent = '확인 중...'; }
+  try{
+    const rec = await fbGet(ADMIN_OTP_NODE);
+    const ok = rec && rec.code && input === String(rec.code) && Date.now() <= Number(rec.expiresAt||0);
+    if(!ok){
+      adminOtpFailCount++;
+      document.getElementById('otpErr').textContent = adminOtpFailCount >= 5
+        ? '인증 시도 횟수를 초과했습니다. 처음부터 다시 로그인해 주세요.'
+        : '인증코드가 올바르지 않거나 만료되었습니다.';
+      document.getElementById('otpErr').style.display = 'block';
+      document.getElementById('adminOtpInput').value = '';
+      document.getElementById('adminOtpInput').focus();
+      if(adminOtpFailCount >= 5) await cancelAdminOtp();
+      return;
+    }
+    await fbSet(ADMIN_OTP_NODE, null); // 사용된 코드는 즉시 폐기
+    if(document.getElementById('trustDeviceChk')?.checked){
+      await trustThisDevice();
+    }
+    completeAdminLogin();
+  } catch(e){
+    document.getElementById('otpErr').textContent = '인증 확인 중 오류가 발생했습니다. 다시 시도해 주세요.';
+    document.getElementById('otpErr').style.display = 'block';
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = '확인'; }
+  }
+}
+
+async function resendAdminOtp(ev){
+  const link = ev && ev.target;
+  if(link){ link.textContent = '전송 중...'; }
+  try{
+    adminOtpFailCount = 0;
+    await sendAdminOtp();
+    document.getElementById('otpErr').style.display = 'none';
+    document.getElementById('adminOtpInput').value = '';
+    document.getElementById('adminOtpInput').focus();
+  } finally {
+    if(link){ link.textContent = '코드 재전송'; }
+  }
+}
+
+function cancelAdminOtp(){
+  // 인증 미완료 상태로 이탈 시, Firebase 인증도 익명으로 되돌려 관리자 세션이 남지 않도록 함
+  const u = firebase.auth().currentUser;
+  if(u && !u.isAnonymous){
+    firebase.auth().signOut().then(()=>firebase.auth().signInAnonymously()).catch(()=>{});
+  }
+  document.getElementById('adminOtpWrap').style.display = 'none';
+  document.getElementById('adminOtpInput').value = '';
+  document.getElementById('otpErr').style.display = 'none';
+  const trustChk = document.getElementById('trustDeviceChk');
+  if(trustChk) trustChk.checked = false;
+  document.getElementById('adminLoginWrap').style.display = 'block';
+  document.getElementById('adminPwInput').value = '';
+  document.getElementById('adminPwInput').focus();
+}
+
+function completeAdminLogin(){
+  currentRole = 'admin';
+  document.getElementById('adminOtpWrap').style.display = 'none';
+  document.getElementById('roleOverlay').style.display = 'none';
+  document.getElementById('mainWrap').style.display = 'block';
+  document.getElementById('adminTopbar').style.display = 'flex';
+  document.getElementById('statStrip').style.display = 'grid';
+  document.getElementById('adminSections').style.display = 'block';
+  document.getElementById('submitLog').style.display = 'none';
+  document.getElementById('userInputSection').style.display = 'none';
+
+  document.getElementById('dateSub').textContent = todayStr() + ' 기준';
+  pushAppState('admin');
+  startAdminPolling();
 }
 
 // 링크(?view=readonly)로 접근한 열람 전용 사용자를 위한 진입 함수.
@@ -1734,6 +1935,12 @@ function exitToRole(){
   document.getElementById('adminPwInput').value = '';
   document.getElementById('loginErr').style.display = 'none';
   document.getElementById('adminLoginWrap').style.display = 'none';
+  document.getElementById('adminOtpWrap').style.display = 'none';
+  document.getElementById('adminOtpInput').value = '';
+  document.getElementById('otpErr').style.display = 'none';
+  const trustChkExit = document.getElementById('trustDeviceChk');
+  if(trustChkExit) trustChkExit.checked = false;
+  adminOtpFailCount = 0;
 }
 
 // ============================================================
