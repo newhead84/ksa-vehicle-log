@@ -1,0 +1,89 @@
+name: Update KR Holidays from Nager.Date
+
+# 공공데이터포털(data.go.kr) API키 발급/승인 없이, 인증이 필요 없는 무료 공개 API인
+# Nager.Date(https://date.nager.at)에서 대한민국 국경일/대체공휴일을 가져와
+# Firebase Realtime Database의 kr-holidays-remote 경로에 반영한다.
+# 앱은 index.html의 loadRemoteHolidays()에서 이 경로를 읽어 KR_HOLIDAYS_REMOTE에 병합한다.
+#
+# 주의(한계): Nager.Date는 정기 국경일/대체공휴일은 안정적으로 반영하지만,
+# 선거일 등 정부가 그때그때 개별 지정하는 임시공휴일은 놓칠 수 있다.
+# 그런 예외 건은 index.html의 KR_HOLIDAYS(수기 목록)에 계속 수동으로 추가해야 한다.
+
+on:
+  schedule:
+    # 매월 1일 05:00 KST(=전날 20:00 UTC)에 실행 — 연 1회만 실행하면 다음해 공휴일이
+    # 아직 API에 올라오기 전일 수 있어, 매월 확인해 공개되는 즉시 자동 반영되게 한다.
+    - cron: '0 20 * * *'
+    # 위 cron은 매일 20:00 UTC(05:00 KST)에 실행된다. 매월 1일에만 돌리고 싶다면
+    # '0 20 1 * *'로 변경해도 되지만, 실행 비용이 낮은 작업이라 매일 실행도 무방하다.
+  workflow_dispatch: {}
+
+jobs:
+  update-kr-holidays:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch KR public holidays from Nager.Date (current year + next year)
+        id: fetch
+        run: |
+          set -e
+          THIS_YEAR=$(TZ='Asia/Seoul' date +"%Y")
+          NEXT_YEAR=$((THIS_YEAR + 1))
+
+          echo "Fetching $THIS_YEAR..."
+          RES_THIS=$(curl -sf "https://date.nager.at/api/v3/PublicHolidays/${THIS_YEAR}/KR")
+          echo "Fetching $NEXT_YEAR..."
+          RES_NEXT=$(curl -sf "https://date.nager.at/api/v3/PublicHolidays/${NEXT_YEAR}/KR" || echo "[]")
+
+          # [{"date":"2026-01-01","localName":"신정",...}, ...] 배열 2개를
+          # {"2026-01-01":"신정", ...} 형태의 단일 객체로 병합
+          BODY=$(jq -s '
+            (.[0] + .[1])
+            | map({(.date): (.localName // .name)})
+            | add
+          ' <(echo "$RES_THIS") <(echo "$RES_NEXT"))
+
+          if [ -z "$BODY" ] || [ "$BODY" = "null" ]; then
+            echo "Nager.Date 응답을 파싱하지 못했습니다."
+            exit 1
+          fi
+
+          echo "Merged holidays: $BODY"
+          echo "body<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$BODY" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Write to Firebase Realtime Database
+        env:
+          FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
+          BODY: ${{ steps.fetch.outputs.body }}
+        run: |
+          set -e
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X PUT "${FIREBASE_URL}/kr-holidays-remote.json" \
+            -H "Content-Type: application/json" \
+            -d "$BODY")
+
+          echo "HTTP status: $HTTP_STATUS"
+          echo "Firebase response body:"
+          cat response.json
+
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "Firebase write failed with HTTP $HTTP_STATUS"
+            exit 1
+          fi
+
+          if grep -q '"error"' response.json; then
+            echo "Firebase returned an error (likely a security rules / permission issue)"
+            exit 1
+          fi
+
+      - name: Verify the value was actually written
+        env:
+          FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
+        run: |
+          set -e
+          RESULT=$(curl -s "${FIREBASE_URL}/kr-holidays-remote.json")
+          echo "Current kr-holidays-remote value (truncated): $(echo "$RESULT" | head -c 300)"
+          if [ "$RESULT" = "null" ]; then
+            echo "kr-holidays-remote is still null after write - check database rules"
+            exit 1
+          fi
