@@ -47,8 +47,7 @@
   [2026-07-28] 운행기록 삭제 버튼이 확인 없이 즉시 삭제되던 문제 수정, 임시저장 삭제·운행 입력행 삭제(입력값 있을 때)에도 확인 팝업 추가 | 변경: deleteTrip(), clearDraft(), removeTripRow()
   [2026-07-29] 관리자 로그인에 이메일 OTP 2차 인증 추가(비밀번호 확인 후 관리자 이메일로 6자리 코드 발송, 5분 유효) | 변경: #adminOtpWrap, tryAdminLogin(), sendAdminOtp(), verifyAdminOtp(), resendAdminOtp(), cancelAdminOtp(), completeAdminLogin()
   [2026-07-29] OTP 화면에 "이 기기에서 30일간 인증코드 생략" 체크박스 추가, 체크 시 신뢰 기기로 등록되어 다음 로그인부터 OTP 생략(서버측 만료시간 기준 검증) | 변경: #trustDeviceChk, isDeviceTrusted(), trustThisDevice(), generateDeviceId(), tryAdminLogin(), verifyAdminOtp(), cancelAdminOtp(), exitToRole()
-  [2026-07-29] 제출하기 성공 후 임시저장 자동 정리 시 불필요한 삭제 확인 팝업이 뜨던 문제 수정(사용자가 직접 누르는 "삭제" 버튼은 확인 팝업 유지) | 변경: clearDraft(skipConfirm 파라미터 추가), doSubmit()
-  [2026-07-29] "이 기기에서 30일간 인증코드 생략" 체크박스가 클릭은 되나 체크 표시가 보이지 않아 비활성화된 것처럼 보이던 문제 수정(전역 appearance:none으로 브라우저 기본 체크마크가 사라졌으나 커스텀 체크 표시가 없었음) | 변경: .otp-trust-label input[type="checkbox"]:checked 스타일 추가
+  [2026-07-30] 공공데이터포털 API키 없이 국경일/대체공휴일 자동 갱신 기능 추가: GitHub Actions(update-kr-holidays.yml)가 Nager.Date 무료 API에서 연 1회+ 공휴일을 가져와 Firebase(kr-holidays-remote)에 기록, 앱은 로드 시 이를 읽어 기존 수기 KR_HOLIDAYS(임시공휴일·선거일 등 예외 유지용)와 병합 | 변경: KR_HOLIDAYS_REMOTE, loadRemoteHolidays(), isHoliday(), loadData()
 =================================================================
 -->
 
@@ -168,12 +167,7 @@
   .otp-trust-label input[type="checkbox"]{
     width:16px;height:16px;min-width:16px;margin:2px 0 0;flex:none;
     padding:0;border:1.5px solid var(--line);border-radius:4px;background:var(--paper);
-    text-align:initial;letter-spacing:normal;position:relative;transition:all .15s;
-  }
-  .otp-trust-label input[type="checkbox"]:checked{background:var(--navy);border-color:var(--navy);}
-  .otp-trust-label input[type="checkbox"]:checked::after{
-    content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;
-    border:2px solid #fff;border-top:none;border-left:none;transform:rotate(45deg);
+    text-align:initial;letter-spacing:normal;
   }
 
   .drive-warn-overlay{
@@ -1953,6 +1947,12 @@ function exitToRole(){
 // ============================================================
 // 날짜 유틸
 // ============================================================
+// KR_HOLIDAYS: 수기 관리 목록 (예외/폴백용).
+// - 정기 국경일·대체공휴일은 아래 KR_HOLIDAYS_REMOTE(Nager.Date 자동 갱신)가 매년 채워주므로
+//   이 목록은 유지보수 부담을 줄이기 위해 새로 늘릴 필요는 없음
+// - 단, 선거일(임시공휴일)처럼 그때그때 정부가 개별 지정하는 날은 자동 갱신 API가
+//   놓칠 수 있으므로, 그런 예외 건만 이 목록에 계속 수동으로 추가할 것 (예: 2026-06-03 지방선거)
+// - 네트워크 오류 등으로 KR_HOLIDAYS_REMOTE를 못 불러온 경우의 폴백 데이터 역할도 겸함
 const KR_HOLIDAYS = new Set([
   // 2025년
   '2025-01-01',                                           // 신정
@@ -2010,7 +2010,22 @@ function todayLocalISO(){
   return `${y}-${m}-${day}`;
 }
 function isWeekend(d){ const w=d.getDay(); return w===0||w===6; }
-function isHoliday(d){ return KR_HOLIDAYS.has(iso(d)); }
+// GitHub Actions(update-kr-holidays.yml)가 Nager.Date API에서 자동으로 채워 Firebase에 저장한
+// 국경일/대체공휴일 목록. loadRemoteHolidays()가 앱 로드 시 채운다. (초기값은 빈 Set → 폴백은 KR_HOLIDAYS)
+let KR_HOLIDAYS_REMOTE = new Set();
+function isHoliday(d){ const key=iso(d); return KR_HOLIDAYS.has(key) || KR_HOLIDAYS_REMOTE.has(key); }
+// Firebase(kr-holidays-remote)에서 자동 갱신된 공휴일 날짜 목록을 읽어와 KR_HOLIDAYS_REMOTE에 반영합니다.
+// 값 형식은 {"2026-01-01":"신정", ...} 형태의 객체(키=날짜)이며, 실패해도 KR_HOLIDAYS(수기 목록)로 계속 동작합니다.
+async function loadRemoteHolidays(){
+  try{
+    const remote = await fbGet('kr-holidays-remote');
+    if(remote && typeof remote === 'object'){
+      KR_HOLIDAYS_REMOTE = new Set(Object.keys(remote));
+    }
+  }catch(e){
+    console.warn('공휴일 자동 갱신 데이터 로드 실패 (수기 KR_HOLIDAYS로 계속 동작):', e.message);
+  }
+}
 function isBizDay(d){ return !isWeekend(d)&&!isHoliday(d); }
 function countBizDays(s,e){ let d=new Date(s+'T00:00:00'),end=new Date(e+'T00:00:00'),n=0; while(d<=end){if(isBizDay(d))n++;d=new Date(d.getTime()+86400000);} return n; }
 function todayStr(){ return new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'}); }
@@ -2181,7 +2196,7 @@ async function loadData(){
     showFirebaseWarning();
   } else {
     try{
-      const res = await fbGet(STORAGE_KEY);
+      const [res] = await Promise.all([ fbGet(STORAGE_KEY), loadRemoteHolidays() ]);
       if(res && typeof res === 'object') data = res;
       document.getElementById('firebaseWarnBanner')?.remove();
     }catch(e){
@@ -4561,7 +4576,7 @@ async function doSubmit(submitter, plate, rows){
   if(!saved){
     return false;
   }
-  await clearDraft(true);
+  await clearDraft();
 
   // 점검요망 상태로 제출된 건이 있으면 관리자에게 이메일 알림 (실패해도 제출 자체는 정상 처리됨)
   notifyMaintenanceNeeded(plate, branchAtTime, submitter, rows);
@@ -4696,9 +4711,8 @@ async function onVehicleSelectAsync(plate){
   document.getElementById('submitBar').style.display='flex';
 }
 
-async function clearDraft(skipConfirm){
-  // skipConfirm=true: 제출 성공 후 자동 정리 등, 사용자가 삭제를 의도한 것이 아닌 내부 호출용 예외 처리
-  if(!skipConfirm && !confirm('⚠️ 임시저장된 입력 내용을 삭제합니다.\n삭제 후에는 복구할 수 없습니다.\n\n계속 진행하시겠습니까?')) return;
+async function clearDraft(){
+  if(!confirm('⚠️ 임시저장된 입력 내용을 삭제합니다.\n삭제 후에는 복구할 수 없습니다.\n\n계속 진행하시겠습니까?')) return;
   try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
   document.getElementById('draftBanner').style.display='none';
 }
