@@ -55,6 +55,7 @@
   [2026-07-30] ① 운행기간을 10일 이상(달력일수)으로 설정 시 몰아서 임의 입력하는 것을 방지하기 위해 종료일을 시작일+8일(최대 9일)로 자동 조정하고 사유 안내문구 표시. ② 선택 기간이 연휴 중간에서 끊겨도(예: 추석 9/24~26 중 9/25까지만 선택) 실제 공휴일명이 이어지는 한 선택기간 밖으로 확장해 연휴 전체 구간을 온전히 표시하도록 수정 | 변경: MAX_TRIP_RANGE_DAYS(신규), onDateRangeChange(), formatHolidayRanges()
   [2026-07-30] ① 가동율 계산에 개인사용(주말·공휴일) 건의 인접 업무일이 잘못 포함되던 버그 수정: calcUtilization()·monthlyUtilForPlate()가 isCommute만 제외하던 것을 isPersonal도 함께 제외하도록 수정(지역별 현황과 정책 일치). ② 미사용 dead function onDateFromChange() 제거(실제 경로는 onDateRangeChange()). ③ <b id="lastOdoVal"> 중복 id(5건) 제거(참조하는 코드 없어 id 속성만 삭제) | 변경: calcUtilization(), monthlyUtilForPlate(), onDateFromChange()(삭제), #lastOdoVal(id 삭제 5건)
   [2026-07-30] 실제운행정보입력 화면의 운행기간 안내문구가 개인사용/출퇴근사용 체크와 무관하게 항상 "업무일 기준 N일 가동율 반영됩니다"로만 표시되어 정책(①번 항목)과 불일치하던 문제 수정: 개인사용 체크 시 파란색 "개인사용(주말·공휴일) 건은 가동율에 반영되지 않습니다" 문구로, 출퇴근 선택 시 보라색 "출퇴근사용 건은 가동율에 반영되지 않습니다" 문구로 즉시 전환 표시(체크박스/버튼 클릭 즉시 반영, 날짜 재입력 불필요) | 변경: onDateRangeChange(), togglePersonalUse(), setCommuteDirection()
+  [2026-07-30] 운행기간 최대 설정 일수 기준을 "달력일수 10일 미만(최대 9일)"에서 "업무일 기준 10일 이하(주말·공휴일 제외)"로 변경: 기간 내 주말·공휴일이 포함되어도 업무일수만으로 10일까지 허용하고, 초과 시 업무일 기준 10일째 날짜로 종료일 자동 조정 | 변경: MAX_TRIP_RANGE_DAYS(9→10), onDateRangeChange()
 =================================================================
 -->
 
@@ -4028,9 +4029,9 @@ function syncFromPicker(picker, id, which){
   onDateRangeChange(id);
 }
 
-// 운행기간 한 번에 설정 가능한 최대 일수(달력일수, 시작~종료 포함). 10일 이상은 자동 조정하여
-// 몰아서 다수 일자를 한 건으로 임의 입력하는 것을 방지한다.
-const MAX_TRIP_RANGE_DAYS = 9;
+// 운행기간 한 번에 설정 가능한 최대 업무일수(주말·공휴일 제외, 시작~종료 포함). 업무일 기준
+// 10일 초과 시 자동 조정하여 몰아서 다수 일자를 한 건으로 임의 입력하는 것을 방지한다.
+const MAX_TRIP_RANGE_DAYS = 10;
 function onDateRangeChange(id){
   const card = document.getElementById(id);
   if(!card) return;
@@ -4047,16 +4048,24 @@ function onDateRangeChange(id){
     toInp.style.borderColor='var(--good)';
     errMsg = `⚠ 종료일이 시작일(${fromVal})보다 빠를 수 없어 종료일이 시작일과 동일하게 자동 조정되었습니다.`;
   }
-  // 운행기간이 10일 이상이면 최대 허용일수(MAX_TRIP_RANGE_DAYS)로 종료일을 자동 보정
+  // 운행기간의 업무일수(주말·공휴일 제외)가 최대 허용치(MAX_TRIP_RANGE_DAYS=10일)를 초과하면
+  // 업무일 기준 10일째가 되는 날짜로 종료일을 자동 보정 (주말·공휴일은 일수 계산에서 제외되므로
+  // 그만큼 종료일이 뒤로 밀릴 수 있음)
   if(!errMsg && fromVal.length===10 && toInp.value.length===10){
     const d1chk = new Date(fromVal+'T00:00:00'), d2chk = new Date(toInp.value+'T00:00:00');
-    const totalDays = Math.round((d2chk-d1chk)/86400000)+1;
-    if(totalDays >= 10){
-      const clamped = new Date(d1chk.getTime() + (MAX_TRIP_RANGE_DAYS-1)*86400000);
-      const yy=clamped.getFullYear(), mm=String(clamped.getMonth()+1).padStart(2,'0'), dd=String(clamped.getDate()).padStart(2,'0');
+    let bizCount=0, dchk=new Date(d1chk), clampDate=null;
+    while(dchk<=d2chk){
+      if(isBizDay(dchk)){
+        bizCount++;
+        if(bizCount===MAX_TRIP_RANGE_DAYS && !clampDate) clampDate=new Date(dchk);
+      }
+      dchk=new Date(dchk.getTime()+86400000);
+    }
+    if(bizCount > MAX_TRIP_RANGE_DAYS && clampDate){
+      const yy=clampDate.getFullYear(), mm=String(clampDate.getMonth()+1).padStart(2,'0'), dd=String(clampDate.getDate()).padStart(2,'0');
       toInp.value = `${yy}-${mm}-${dd}`;
       toInp.style.borderColor='var(--good)';
-      errMsg = `⚠ 운행기간은 한 번에 최대 ${MAX_TRIP_RANGE_DAYS}일(10일 미만)까지만 설정할 수 있어 종료일이 ${toInp.value}로 자동 조정되었습니다.`;
+      errMsg = `⚠ 운행기간은 한 번에 업무일 기준 최대 ${MAX_TRIP_RANGE_DAYS}일(주말·공휴일 제외)까지만 설정할 수 있어 종료일이 ${toInp.value}로 자동 조정되었습니다.`;
     }
   }
   if(errEl){
