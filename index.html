@@ -48,6 +48,7 @@
   [2026-07-29] 관리자 로그인에 이메일 OTP 2차 인증 추가(비밀번호 확인 후 관리자 이메일로 6자리 코드 발송, 5분 유효) | 변경: #adminOtpWrap, tryAdminLogin(), sendAdminOtp(), verifyAdminOtp(), resendAdminOtp(), cancelAdminOtp(), completeAdminLogin()
   [2026-07-29] OTP 화면에 "이 기기에서 30일간 인증코드 생략" 체크박스 추가, 체크 시 신뢰 기기로 등록되어 다음 로그인부터 OTP 생략(서버측 만료시간 기준 검증) | 변경: #trustDeviceChk, isDeviceTrusted(), trustThisDevice(), generateDeviceId(), tryAdminLogin(), verifyAdminOtp(), cancelAdminOtp(), exitToRole()
   [2026-07-30] 공공데이터포털 API키 없이 국경일/대체공휴일 자동 갱신 기능 추가: GitHub Actions(update-kr-holidays.yml)가 Nager.Date 무료 API에서 연 1회+ 공휴일을 가져와 Firebase(kr-holidays-remote)에 기록, 앱은 로드 시 이를 읽어 기존 수기 KR_HOLIDAYS(임시공휴일·선거일 등 예외 유지용)와 병합 | 변경: KR_HOLIDAYS_REMOTE, loadRemoteHolidays(), isHoliday(), loadData()
+  [2026-07-30] 운행기간 날짜선택 네이티브 달력이 다크모드에서 어둡게 표시되던 문제 수정(항상 라이트 테마 강제), 달력 자체에 공휴일 표시는 브라우저 네이티브 UI 한계로 불가하여 대신 안내문구를 "업무일 기준 N일 가동율 반영"으로 축약하고 해당기간 포함 공휴일을 "공휴일 포함: M/D~M/D" 형식(연속일 구간 압축)으로 문구 뒤에 표기 | 변경: input[type="date"]{color-scheme:light}, formatHolidayRanges(), onDateRangeChange(), onDateFromChange(), #daterange-${id}
 =================================================================
 -->
 
@@ -97,6 +98,8 @@
   .muted{color:var(--muted);}
   button,input,select,textarea{font-family:'Paperlogy',sans-serif;-webkit-appearance:none;appearance:none;}
   input[type="date"]::-webkit-calendar-picker-indicator{opacity:.6;}
+  /* 브라우저/OS가 다크모드여도 네이티브 달력 팝업은 항상 밝은(라이트) 테마로 표시 */
+  input[type="date"]{color-scheme:light;}
 
   /* ===== Role overlay (풀스크린 앱 스타일) ===== */
   #roleOverlay{
@@ -2028,6 +2031,31 @@ async function loadRemoteHolidays(){
 }
 function isBizDay(d){ return !isWeekend(d)&&!isHoliday(d); }
 function countBizDays(s,e){ let d=new Date(s+'T00:00:00'),end=new Date(e+'T00:00:00'),n=0; while(d<=end){if(isBizDay(d))n++;d=new Date(d.getTime()+86400000);} return n; }
+// 운행기간(from~to) 내 포함된 공휴일을 'M/D' 또는 연속 구간 'M/D~M/D' 형식 문자열로 반환 (안내 문구에 표기용)
+function formatHolidayRanges(fromStr, toStr){
+  const d1=new Date(fromStr+'T00:00:00'), d2=new Date(toStr+'T00:00:00');
+  const dates=[];
+  let d=new Date(d1);
+  while(d<=d2){
+    if(isHoliday(d)) dates.push(new Date(d));
+    d=new Date(d.getTime()+86400000);
+  }
+  if(!dates.length) return '';
+  const ranges=[];
+  let rangeStart=dates[0], rangeEnd=dates[0];
+  for(let i=1;i<dates.length;i++){
+    const cur=dates[i];
+    if(cur.getTime()-rangeEnd.getTime()===86400000){
+      rangeEnd=cur;
+    }else{
+      ranges.push([rangeStart,rangeEnd]);
+      rangeStart=cur; rangeEnd=cur;
+    }
+  }
+  ranges.push([rangeStart,rangeEnd]);
+  const fmt=dt=>`${dt.getMonth()+1}/${dt.getDate()}`;
+  return ranges.map(([s,e])=> s.getTime()===e.getTime() ? fmt(s) : `${fmt(s)}~${fmt(e)}`).join(', ');
+}
 function todayStr(){ return new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'}); }
 
 function expandDateField(str){
@@ -3929,7 +3957,8 @@ function onDateRangeChange(id){
     const d1=new Date(fv+'T00:00:00'), d2=new Date(tv+'T00:00:00');
     let days=0, d=new Date(d1);
     while(d<=d2){if(isBizDay(d))days++;d=new Date(d.getTime()+86400000);}
-    infoEl.textContent=`업무일 기준 ${days}일 가동으로 반영됩니다`;
+    const holidayText=formatHolidayRanges(fv,tv);
+    infoEl.textContent=`업무일 기준 ${days}일 가동율 반영`+(holidayText?` (공휴일 포함: ${holidayText})`:'');
     infoEl.style.display='block';
   } else if(infoEl){
     infoEl.style.display='none';
@@ -3950,7 +3979,8 @@ function onDateFromChange(inp, id){
     let days = 0;
     let d = new Date(d1);
     while(d <= d2){ if(isBizDay(d)) days++; d = new Date(d.getTime()+86400000); }
-    infoEl.textContent = `업무일 기준 ${days}일 가동으로 반영됩니다`;
+    const holidayText = formatHolidayRanges(fromVal, toVal);
+    infoEl.textContent = `업무일 기준 ${days}일 가동율 반영`+(holidayText?` (공휴일 포함: ${holidayText})`:'');
     infoEl.style.display = 'block';
   } else if(infoEl){
     infoEl.style.display = 'none';
@@ -4006,7 +4036,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
             </label>
           </div>
         </div>
-        <div id="daterange-${id}" style="font-size:12px;color:var(--good);margin-top:6px;display:none;padding:6px 10px;background:var(--good-soft);border-radius:8px;"></div>
+        <div id="daterange-${id}" style="font-size:12px;color:var(--good);margin-top:6px;display:none;padding:6px 10px;background:var(--good-soft);border-radius:8px;word-break:keep-all;overflow-wrap:break-word;"></div>
       </div>
       <div class="form-row-2">
         <div class="form-field">
