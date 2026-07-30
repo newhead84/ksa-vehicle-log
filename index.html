@@ -53,6 +53,8 @@
   [2026-07-30] 관리자 OTP 화면 "이 기기에서 30일간 인증코드 생략" 체크박스가 모바일 등에서 탭해도 체크 표시가 보이지 않던 문제 수정: 전역 규칙(button,input,select,textarea{appearance:none})으로 네이티브 체크박스 렌더링이 제거되어 있었는데 :checked 상태의 대체 시각 표시가 없었음 → 기존 native-chk/check-icon 패턴과 동일하게 실제 input은 숨기고 형제 span(.otp-trust-icon)으로 체크 아이콘 표시(기능 로직은 변경 없음) | 변경: .otp-trust-label input[type="checkbox"], .otp-trust-icon, #trustDeviceChk
   [2026-07-30] ① 공휴일 매칭 버그 수정: isHoliday()가 UTC 기반 iso()를 써서 KST 자정 Date가 하루 전으로 밀려 매칭되던 문제(예: 2026년 광복절 대체휴일 8/17이 8/16·8/18로 잘못 표시) → 로컬 날짜 기준 localDateKey() 도입. ② 안내문구를 "업무일 기준 N일 가동율 반영됩니다./(공휴일 포함 : 명칭-날짜)" 2줄 형식으로 변경, 공휴일명 표기 추가(KR_HOLIDAY_NAMES 신규, 원격 데이터는 KR_HOLIDAYS_REMOTE_NAMES로 이름 보존). ③ 차량 선택 시 최초 생성되는 운행 카드(기본값 오늘~오늘)에서도 날짜를 직접 건드리지 않아도 안내문구가 바로 표시되도록 addTripRow()에서 onDateRangeChange() 즉시 호출 | 변경: localDateKey(), isHoliday(), holidayName(), KR_HOLIDAY_NAMES, KR_HOLIDAYS_REMOTE_NAMES, formatHolidayRanges(), onDateRangeChange(), onDateFromChange(), addTripRow(), #daterange-${id}
   [2026-07-30] ① 운행기간을 10일 이상(달력일수)으로 설정 시 몰아서 임의 입력하는 것을 방지하기 위해 종료일을 시작일+8일(최대 9일)로 자동 조정하고 사유 안내문구 표시. ② 선택 기간이 연휴 중간에서 끊겨도(예: 추석 9/24~26 중 9/25까지만 선택) 실제 공휴일명이 이어지는 한 선택기간 밖으로 확장해 연휴 전체 구간을 온전히 표시하도록 수정 | 변경: MAX_TRIP_RANGE_DAYS(신규), onDateRangeChange(), formatHolidayRanges()
+  [2026-07-31] 5초 이내 자동 소멸되던 오류·경고 안내문구 표시시간을 15초로 연장(운행기간 오류 4초→15초, 폼 입력 오류 5초→15초) | 변경: onDateRangeChange() #dateErr-${id} 타이머, showUserFormErr()
+  [2026-07-31] DT센터 주차안내 팝업의 카리프트 운영시간을 평일 07:30~21:00에서 07:00~20:00으로 변경 | 변경: openParkingModal() 카리프트 운행 정보 박스
   [2026-07-30] ① 가동율 계산에 개인사용(주말·공휴일) 건의 인접 업무일이 잘못 포함되던 버그 수정: calcUtilization()·monthlyUtilForPlate()가 isCommute만 제외하던 것을 isPersonal도 함께 제외하도록 수정(지역별 현황과 정책 일치). ② 미사용 dead function onDateFromChange() 제거(실제 경로는 onDateRangeChange()). ③ <b id="lastOdoVal"> 중복 id(5건) 제거(참조하는 코드 없어 id 속성만 삭제) | 변경: calcUtilization(), monthlyUtilForPlate(), onDateFromChange()(삭제), #lastOdoVal(id 삭제 5건)
   [2026-07-30] 실제운행정보입력 화면의 운행기간 안내문구가 개인사용/출퇴근사용 체크와 무관하게 항상 "업무일 기준 N일 가동율 반영됩니다"로만 표시되어 정책(①번 항목)과 불일치하던 문제 수정: 개인사용 체크 시 파란색 "개인사용(주말·공휴일) 건은 가동율에 반영되지 않습니다" 문구로, 출퇴근 선택 시 보라색 "출퇴근사용 건은 가동율에 반영되지 않습니다" 문구로 즉시 전환 표시(체크박스/버튼 클릭 즉시 반영, 날짜 재입력 불필요) | 변경: onDateRangeChange(), togglePersonalUse(), setCommuteDirection()
   [2026-07-30] 운행기간 최대 설정 일수 기준을 "달력일수 10일 미만(최대 9일)"에서 "업무일 기준 10일 이하(주말·공휴일 제외)"로 변경: 기간 내 주말·공휴일이 포함되어도 업무일수만으로 10일까지 허용하고, 초과 시 업무일 기준 10일째 날짜로 종료일 자동 조정 | 변경: MAX_TRIP_RANGE_DAYS(9→10), onDateRangeChange()
@@ -1243,7 +1245,7 @@
         <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px;">카리프트 운행 정보</div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <span style="font-size:13px;">🕐</span>
-          <span style="font-size:13.5px;color:var(--ink);"><b>운행시간</b> 평일 07:30 ~ 21:00</span>
+          <span style="font-size:13.5px;color:var(--ink);"><b>운행시간</b> 평일 07:00 ~ 20:00</span>
         </div>
         <div style="font-size:12px;color:var(--bad);background:var(--bad-soft);border-radius:8px;padding:6px 10px;margin-bottom:12px;">
           주말 및 공휴일 미운영
@@ -4073,7 +4075,7 @@ function onDateRangeChange(id){
       errEl.textContent = errMsg;
       errEl.style.display = 'block';
       clearTimeout(errEl._hideTimer);
-      errEl._hideTimer = setTimeout(()=>{ errEl.style.display='none'; }, 4000);
+      errEl._hideTimer = setTimeout(()=>{ errEl.style.display='none'; }, 15000);
     } else {
       errEl.style.display = 'none';
     }
@@ -4504,7 +4506,7 @@ function showUserFormErr(msg){
   const el = document.getElementById('userFormErr');
   el.textContent = msg; el.style.display = 'block';
   el.scrollIntoView({behavior:'smooth', block:'nearest'});
-  setTimeout(()=>el.style.display='none', 5000);
+  setTimeout(()=>el.style.display='none', 15000);
 }
 
 // 제출 확인 팝업
