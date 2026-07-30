@@ -53,6 +53,7 @@
   [2026-07-30] ① 공휴일 매칭 버그 수정: isHoliday()가 UTC 기반 iso()를 써서 KST 자정 Date가 하루 전으로 밀려 매칭되던 문제(예: 2026년 광복절 대체휴일 8/17이 8/16·8/18로 잘못 표시) → 로컬 날짜 기준 localDateKey() 도입. ② 안내문구를 "업무일 기준 N일 가동율 반영됩니다./(공휴일 포함 : 명칭-날짜)" 2줄 형식으로 변경, 공휴일명 표기 추가(KR_HOLIDAY_NAMES 신규, 원격 데이터는 KR_HOLIDAYS_REMOTE_NAMES로 이름 보존). ③ 차량 선택 시 최초 생성되는 운행 카드(기본값 오늘~오늘)에서도 날짜를 직접 건드리지 않아도 안내문구가 바로 표시되도록 addTripRow()에서 onDateRangeChange() 즉시 호출 | 변경: localDateKey(), isHoliday(), holidayName(), KR_HOLIDAY_NAMES, KR_HOLIDAYS_REMOTE_NAMES, formatHolidayRanges(), onDateRangeChange(), onDateFromChange(), addTripRow(), #daterange-${id}
   [2026-07-30] ① 운행기간을 10일 이상(달력일수)으로 설정 시 몰아서 임의 입력하는 것을 방지하기 위해 종료일을 시작일+8일(최대 9일)로 자동 조정하고 사유 안내문구 표시. ② 선택 기간이 연휴 중간에서 끊겨도(예: 추석 9/24~26 중 9/25까지만 선택) 실제 공휴일명이 이어지는 한 선택기간 밖으로 확장해 연휴 전체 구간을 온전히 표시하도록 수정 | 변경: MAX_TRIP_RANGE_DAYS(신규), onDateRangeChange(), formatHolidayRanges()
   [2026-07-30] ① 가동율 계산에 개인사용(주말·공휴일) 건의 인접 업무일이 잘못 포함되던 버그 수정: calcUtilization()·monthlyUtilForPlate()가 isCommute만 제외하던 것을 isPersonal도 함께 제외하도록 수정(지역별 현황과 정책 일치). ② 미사용 dead function onDateFromChange() 제거(실제 경로는 onDateRangeChange()). ③ <b id="lastOdoVal"> 중복 id(5건) 제거(참조하는 코드 없어 id 속성만 삭제) | 변경: calcUtilization(), monthlyUtilForPlate(), onDateFromChange()(삭제), #lastOdoVal(id 삭제 5건)
+  [2026-07-30] 실제운행정보입력 화면의 운행기간 안내문구가 개인사용/출퇴근사용 체크와 무관하게 항상 "업무일 기준 N일 가동율 반영됩니다"로만 표시되어 정책(①번 항목)과 불일치하던 문제 수정: 개인사용 체크 시 파란색 "개인사용(주말·공휴일) 건은 가동율에 반영되지 않습니다" 문구로, 출퇴근 선택 시 보라색 "출퇴근사용 건은 가동율에 반영되지 않습니다" 문구로 즉시 전환 표시(체크박스/버튼 클릭 즉시 반영, 날짜 재입력 불필요) | 변경: onDateRangeChange(), togglePersonalUse(), setCommuteDirection()
 =================================================================
 -->
 
@@ -4058,7 +4059,7 @@ function onDateRangeChange(id){
       errEl.style.display = 'none';
     }
   }
-  // 업무일 안내 (1일인 경우도 표기)
+  // 업무일 안내 (1일인 경우도 표기) — 개인사용/출퇴근사용 체크 시 "가동율 미반영" 안내로 전환
   const infoEl = document.getElementById('daterange-'+id);
   const fv = fromInp?.value || '';
   const tv = toInp?.value || fv;
@@ -4067,7 +4068,18 @@ function onDateRangeChange(id){
     let days=0, d=new Date(d1);
     while(d<=d2){if(isBizDay(d))days++;d=new Date(d.getTime()+86400000);}
     const holidayText=formatHolidayRanges(fv,tv);
-    infoEl.textContent=`업무일 기준 ${days}일 가동율 반영됩니다.`+(holidayText?`\n(공휴일 포함 : ${holidayText})`:'');
+    const isPersonalNow = !!card.querySelector('.tr-personal-chk')?.checked;
+    const isCommuteNow = !!card.querySelector('.commute-btn.active-commute');
+    if(isPersonalNow){
+      infoEl.textContent=`개인사용(주말·공휴일) 건은 가동율에 반영되지 않습니다. (전일·후일 인접 업무일 포함 전체 제외)`+(holidayText?`\n(공휴일 포함 : ${holidayText})`:'');
+      infoEl.style.color='#1D4ED8'; infoEl.style.background='#EFF6FF';
+    } else if(isCommuteNow){
+      infoEl.textContent=`출퇴근사용 건은 가동율에 반영되지 않습니다.`+(holidayText?`\n(공휴일 포함 : ${holidayText})`:'');
+      infoEl.style.color='#7C3AED'; infoEl.style.background='#F5F3FF';
+    } else {
+      infoEl.textContent=`업무일 기준 ${days}일 가동율 반영됩니다.`+(holidayText?`\n(공휴일 포함 : ${holidayText})`:'');
+      infoEl.style.color='var(--good)'; infoEl.style.background='var(--good-soft)';
+    }
     infoEl.style.display='block';
   } else if(infoEl){
     infoEl.style.display='none';
@@ -4361,7 +4373,7 @@ function togglePersonalUse(chk, id){
     if(commuteNotice) commuteNotice.style.display='none';
   }
   checkFuelVsDistance(id);
-  scheduleDraft();
+  onDateRangeChange(id); // 운행기간 안내문구를 "가동율 미반영" 상태로 즉시 갱신 (scheduleDraft 포함)
 }
 
 // 출퇴근사용(단신부임자 급여공제) 출근/퇴근 구분 선택 — 다시 누르면 선택 해제
@@ -4395,7 +4407,7 @@ function setCommuteDirection(btn, id){
       destInp.dataset.destAutoFilled = 'true';
     }
   }
-  scheduleDraft();
+  onDateRangeChange(id); // 운행기간 안내문구를 "가동율 미반영" 상태로 즉시 갱신 (scheduleDraft 포함)
 }
 
 function formatFuelInput(inp){
