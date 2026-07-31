@@ -59,6 +59,7 @@
   [2026-07-30] ① 가동율 계산에 개인사용(주말·공휴일) 건의 인접 업무일이 잘못 포함되던 버그 수정: calcUtilization()·monthlyUtilForPlate()가 isCommute만 제외하던 것을 isPersonal도 함께 제외하도록 수정(지역별 현황과 정책 일치). ② 미사용 dead function onDateFromChange() 제거(실제 경로는 onDateRangeChange()). ③ <b id="lastOdoVal"> 중복 id(5건) 제거(참조하는 코드 없어 id 속성만 삭제) | 변경: calcUtilization(), monthlyUtilForPlate(), onDateFromChange()(삭제), #lastOdoVal(id 삭제 5건)
   [2026-07-30] 실제운행정보입력 화면의 운행기간 안내문구가 개인사용/출퇴근사용 체크와 무관하게 항상 "업무일 기준 N일 가동율 반영됩니다"로만 표시되어 정책(①번 항목)과 불일치하던 문제 수정: 개인사용 체크 시 파란색 "개인사용(주말·공휴일) 건은 가동율에 반영되지 않습니다" 문구로, 출퇴근 선택 시 보라색 "출퇴근사용 건은 가동율에 반영되지 않습니다" 문구로 즉시 전환 표시(체크박스/버튼 클릭 즉시 반영, 날짜 재입력 불필요) | 변경: onDateRangeChange(), togglePersonalUse(), setCommuteDirection()
   [2026-07-30] 운행기간 최대 설정 일수 기준을 "달력일수 10일 미만(최대 9일)"에서 "업무일 기준 10일 이하(주말·공휴일 제외)"로 변경: 기간 내 주말·공휴일이 포함되어도 업무일수만으로 10일까지 허용하고, 초과 시 업무일 기준 10일째 날짜로 종료일 자동 조정 | 변경: MAX_TRIP_RANGE_DAYS(9→10), onDateRangeChange()
+  [2026-07-31] 기존 등록 차량 중 운행 기간 중간에 신규 배정/개시되는 차량(예: 183호5250, 26.5.12 개시)의 가동율이 개시 이전 기간까지 분모(전체 업무일)에 포함되어 부당하게 낮게 계산되던 문제를 위한 "차량개시일" 필드 신규 추가: 차량 상세 모달(관리자)에서 개시일 입력/해제 가능, 개시일 이전 월은 월별 가동율표·모달 미니셀·엑셀 내보내기에서 "–"(데이터없음)로 표시되고 연평균 계산에서 제외되며, 개시월은 개시일부터의 업무일만 분모로 반영 | 변경: monthlyUtilForPlate(), monthCellHtml(), renderMonthly(), openVehicle() 모달(branch-edit 신규 행, 미니 월별 셀), exportToExcel(), setServiceStartDate()(신규), clearServiceStartDate()(신규)
 =================================================================
 -->
 
@@ -1469,52 +1470,52 @@ let sessionSubmits = []; // 이번 세션에서 사용자가 제출한 항목들
 // 보유차량 명단 (차량현황.xls 기준, 공용차량 46대)
 // ============================================================
 const FLEET_REGISTRY = [
-{"plate":"181호6088","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부"},
-{"plate":"181호6031","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"경기강원지역본부"},
-{"plate":"181하4790","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"강원지부"},
-{"plate":"181호6062","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부"},
-{"plate":"181호6063","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부"},
-{"plate":"181호6064","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부"},
-{"plate":"181호6065","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부"},
-{"plate":"181호6037","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"경남지역본부"},
-{"plate":"181호6089","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"경남지역본부"},
-{"plate":"231호4154","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"부산지역본부"},
-{"plate":"181호6039","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"광주전남제주지역본부"},
-{"plate":"181호6091","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"광주전남제주지역본부"},
-{"plate":"231호4157","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"광주전남제주지역본부"},
-{"plate":"231호4158","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"광주전남제주지역본부"},
-{"plate":"181호6035","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"대구경북지역본부"},
-{"plate":"181호6042","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"대구경북지역본부"},
-{"plate":"231호4136","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대구경북지역본부"},
-{"plate":"231호4137","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"울산지역본부"},
-{"plate":"231호4138","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대구경북지역본부"},
-{"plate":"181호6033","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"대전세종충남지역본부"},
-{"plate":"181하4792","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"충남지부"},
-{"plate":"231호4132","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대전세종충남지역본부"},
-{"plate":"231호4133","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"충북지역본부"},
-{"plate":"231호4134","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대전세종충남지역본부"},
-{"plate":"231호4135","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"충남지부"},
-{"plate":"181호6036","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"부산지역본부"},
-{"plate":"181호6043","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"부산지역본부"},
-{"plate":"231호4141","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경남지역본부"},
-{"plate":"181호6038","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"울산지역본부"},
-{"plate":"181호6090","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"울산지역본부"},
-{"plate":"231호4155","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대구경북지역본부"},
-{"plate":"181호6032","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"인천지역본부"},
-{"plate":"181하4791","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"인천지역본부"},
-{"plate":"231호4162","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"퓨처캠"},
-{"plate":"181호6040","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"전북지역본부"},
-{"plate":"181호6092","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"전북지역본부"},
-{"plate":"231호4156","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"전북지역본부"},
-{"plate":"181호6034","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"충북지역본부"},
-{"plate":"181호6041","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"충북지역본부"},
-{"plate":"231호4139","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대전세종충남지역본부"},
-{"plate":"231호4140","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"충북지역본부"},
-{"plate":"181하4788","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"DT센터"},
-{"plate":"181하4789","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"DT센터"},
-{"plate":"181하4793","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"인천지역본부"},
-{"plate":"181호6175","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"DT센터"},
-{"plate":"183호5250","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"국가기술표준원(파견)"}
+{"plate":"181호6088","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":4590000},
+{"plate":"181호6031","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"경기강원지역본부","fee":6270000},
+{"plate":"181하4790","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"강원지부","fee":5260000},
+{"plate":"181호6062","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":4270000},
+{"plate":"181호6063","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":4270000},
+{"plate":"181호6064","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":4270000},
+{"plate":"181호6065","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":4270000},
+{"plate":"181호6037","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"경남지역본부","fee":6270000},
+{"plate":"181호6089","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"경남지역본부","fee":5280000},
+{"plate":"231호4154","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"부산지역본부","fee":4270000},
+{"plate":"181호6039","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"광주전남제주지역본부","fee":6270000},
+{"plate":"181호6091","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"광주전남제주지역본부","fee":5280000},
+{"plate":"231호4157","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"광주전남제주지역본부","fee":4270000},
+{"plate":"231호4158","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"광주전남제주지역본부","fee":4270000},
+{"plate":"181호6035","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"대구경북지역본부","fee":6270000},
+{"plate":"181호6042","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"대구경북지역본부","fee":5280000},
+{"plate":"231호4136","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대구경북지역본부","fee":4270000},
+{"plate":"231호4137","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"울산지역본부","fee":4270000},
+{"plate":"231호4138","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대구경북지역본부","fee":4270000},
+{"plate":"181호6033","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"대전세종충남지역본부","fee":6270000},
+{"plate":"181하4792","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"충남지부","fee":5280000},
+{"plate":"231호4132","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대전세종충남지역본부","fee":4270000},
+{"plate":"231호4133","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"충북지역본부","fee":4270000},
+{"plate":"231호4134","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대전세종충남지역본부","fee":4270000},
+{"plate":"231호4135","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"충남지부","fee":4270000},
+{"plate":"181호6036","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"부산지역본부","fee":6270000},
+{"plate":"181호6043","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"부산지역본부","fee":5280000},
+{"plate":"231호4141","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경남지역본부","fee":4270000},
+{"plate":"181호6038","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"울산지역본부","fee":6270000},
+{"plate":"181호6090","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"울산지역본부","fee":5280000},
+{"plate":"231호4155","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대구경북지역본부","fee":4270000},
+{"plate":"181호6032","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"인천지역본부","fee":6270000},
+{"plate":"181하4791","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"인천지역본부","fee":5280000},
+{"plate":"231호4162","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"퓨처캠","fee":4270000},
+{"plate":"181호6040","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"전북지역본부","fee":6270000},
+{"plate":"181호6092","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"전북지역본부","fee":5280000},
+{"plate":"231호4156","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"전북지역본부","fee":4270000},
+{"plate":"181호6034","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"충북지역본부","fee":6270000},
+{"plate":"181호6041","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"충북지역본부","fee":5280000},
+{"plate":"231호4139","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대전세종충남지역본부","fee":4270000},
+{"plate":"231호4140","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"충북지역본부","fee":4270000},
+{"plate":"181하4788","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"DT센터","fee":5280000},
+{"plate":"181하4789","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"DT센터","fee":5280000},
+{"plate":"181하4793","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"인천지역본부","fee":4270000},
+{"plate":"181호6175","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"DT센터","fee":6270000,"serviceStartDate":"2025-09-15"},
+{"plate":"183호5250","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"국가기술표준원(파견)","fee":5280000,"serviceStartDate":"2026-05-12"}
 ];
 const REGISTRY_MAP = {};
 FLEET_REGISTRY.forEach(v=>REGISTRY_MAP[v.plate]=v);
@@ -2258,6 +2259,7 @@ function monthlyUtilForPlate(plate,year){
   const trips=v.trips||[];
   const allDates=trips.filter(t=>!t.isCommute&&!t.isPersonal).flatMap(t=>t.usageDates||[]);
   const manual=(v.manualMonthly&&v.manualMonthly[year])||{};
+  const svcStart=v.serviceStartDate||null; // 차량개시일: 설정 시 이전 월은 제외, 개시월은 개시일부터의 업무일만 반영
   const out=[];
   for(let m=1;m<=12;m++){
     const mm=manual[m];
@@ -2265,9 +2267,15 @@ function monthlyUtilForPlate(plate,year){
       out.push({month:m,used:null,total:null,rate:Number(mm.rate)||0,distance:Number(mm.distance)||0,manual:true});
       continue;
     }
+    const{startIso:monStart,endIso:monEnd}=monthRangeIso(year,m);
+    if(svcStart&&monEnd<svcStart){
+      // 차량개시일 이전 월: 가동율 계산 대상에서 제외(데이터 없음으로 표시)
+      out.push({month:m,used:null,total:null,rate:0,distance:0,manual:false,beforeService:true});
+      continue;
+    }
     const ym=`${year}-${String(m).padStart(2,'0')}`;
     const used=new Set(allDates.filter(d=>d.startsWith(ym)&&isBizDay(new Date(d+'T00:00:00')))).size;
-    const total=bizDaysInMonth(year,m);
+    const total=(svcStart&&svcStart>monStart)?countBizDays(svcStart,monEnd):bizDaysInMonth(year,m);
     const distance=trips.filter(t=>(t.isoDate||'').startsWith(ym)).reduce((s,t)=>s+(Number(t.distance)||0),0);
     out.push({month:m,used,total,rate:total>0?Math.min(100,(used/total)*100):0,distance,manual:false});
   }
@@ -2288,8 +2296,8 @@ function availableYears(){
   years.add(String(new Date().getFullYear()));
   return Array.from(years).sort();
 }
-function monthCellHtml(rate,hasAnyTrip){
-  if(!hasAnyTrip) return `<td class="month-cell m-none">–</td>`;
+function monthCellHtml(rate,hasAnyTrip,beforeService){
+  if(!hasAnyTrip||beforeService) return `<td class="month-cell m-none">–</td>`;
   const cls=rate>=60?'m-good':rate>=30?'m-mid':'m-bad';
   return `<td class="month-cell ${cls}">${rate.toFixed(0)}%</td>`;
 }
@@ -2328,11 +2336,13 @@ async function loadData(){
     }
   }
   FLEET_REGISTRY.forEach(v=>{
-    if(!data.vehicles[v.plate]) data.vehicles[v.plate]={model:v.model,branch:v.branch,originalBranch:v.branch,active:true,trips:[]};
+    if(!data.vehicles[v.plate]) data.vehicles[v.plate]={model:v.model,branch:v.branch,originalBranch:v.branch,active:true,trips:[],...(v.fee!==undefined?{fee:v.fee}:{}),...(v.serviceStartDate?{serviceStartDate:v.serviceStartDate}:{})};
     else{
       if(!data.vehicles[v.plate].model) data.vehicles[v.plate].model=v.model;
       if(data.vehicles[v.plate].active===undefined) data.vehicles[v.plate].active=true;
       if(!Array.isArray(data.vehicles[v.plate].trips)) data.vehicles[v.plate].trips=[];
+      if(data.vehicles[v.plate].fee===undefined&&v.fee!==undefined) data.vehicles[v.plate].fee=v.fee;
+      if(data.vehicles[v.plate].serviceStartDate===undefined&&v.serviceStartDate) data.vehicles[v.plate].serviceStartDate=v.serviceStartDate;
     }
   });
   applyRegionViewerFilter();
@@ -2396,11 +2406,13 @@ async function refreshDataFromStorage(){
     if(res && typeof res === 'object') data = res;
   }catch(e){}
   FLEET_REGISTRY.forEach(v=>{
-    if(!data.vehicles[v.plate]) data.vehicles[v.plate]={model:v.model,branch:v.branch,originalBranch:v.branch,active:true,trips:[]};
+    if(!data.vehicles[v.plate]) data.vehicles[v.plate]={model:v.model,branch:v.branch,originalBranch:v.branch,active:true,trips:[],...(v.fee!==undefined?{fee:v.fee}:{}),...(v.serviceStartDate?{serviceStartDate:v.serviceStartDate}:{})};
     else{
       if(!data.vehicles[v.plate].model) data.vehicles[v.plate].model=v.model;
       if(data.vehicles[v.plate].active===undefined) data.vehicles[v.plate].active=true;
       if(!Array.isArray(data.vehicles[v.plate].trips)) data.vehicles[v.plate].trips=[];
+      if(data.vehicles[v.plate].fee===undefined&&v.fee!==undefined) data.vehicles[v.plate].fee=v.fee;
+      if(data.vehicles[v.plate].serviceStartDate===undefined&&v.serviceStartDate) data.vehicles[v.plate].serviceStartDate=v.serviceStartDate;
     }
   });
 }
@@ -2452,9 +2464,10 @@ function renderMonthly(year){
     ps.forEach(p=>{
       const hasAnyTrip=hasMonthlyDataFor(p,monthlyYear);
       const monthly=monthlyUtilForPlate(p,monthlyYear);
-      const avg=hasAnyTrip?monthly.reduce((s,m)=>s+m.rate,0)/12:0;
+      const validMonths=monthly.filter(m=>!m.beforeService);
+      const avg=hasAnyTrip&&validMonths.length?validMonths.reduce((s,m)=>s+m.rate,0)/validMonths.length:0;
       const modelName=modelShort(data.vehicles[p]?.model||'');
-      rowsHtml+=`<tr><td><div class="plate-cell"><span class="plate-num">${p}</span><span class="plate-model">${modelName}</span></div></td>${monthly.map(m=>monthCellHtml(m.rate,hasAnyTrip)).join('')}<td class="month-cell month-avg ${hasAnyTrip?(avg>=60?'m-good':avg>=30?'m-mid':'m-bad'):'m-none'}">${hasAnyTrip?avg.toFixed(0)+'%':'–'}</td></tr>`;
+      rowsHtml+=`<tr><td><div class="plate-cell"><span class="plate-num">${p}</span><span class="plate-model">${modelName}</span></div></td>${monthly.map(m=>monthCellHtml(m.rate,hasAnyTrip,m.beforeService)).join('')}<td class="month-cell month-avg ${hasAnyTrip?(avg>=60?'m-good':avg>=30?'m-mid':'m-bad'):'m-none'}">${hasAnyTrip?avg.toFixed(0)+'%':'–'}</td></tr>`;
     });
   });
   document.getElementById('monthlyArea').innerHTML=`<div class="month-table-wrap"><table class="month-table"><thead><tr><th>차량번호</th>${monthLabels.map(l=>`<th>${l}</th>`).join('')}<th>연평균</th></tr></thead><tbody>${rowsHtml||`<tr><td colspan="14" class="muted" style="text-align:center;padding:20px;">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
@@ -2764,6 +2777,7 @@ function openVehicle(plate){
       <label class="muted" style="font-size:12px;">지역구분</label>
       <span style="font-size:13px;font-weight:600;color:var(--navy);">${escapeHtml(v.branch||'미배정')}</span>
       ${v.originalBranch&&v.originalBranch!==v.branch?`<span class="orig">최초 배정: ${escapeHtml(v.originalBranch)}</span>`:''}
+      ${v.serviceStartDate?`<span class="orig">차량개시일: ${v.serviceStartDate}</span>`:''}
       ${v.active===false?`<span class="badge" style="background:#E5E7EB;color:#9CA3AF;margin-left:auto;">운용중지</span>`:''}
     </div>` : `
     <div class="branch-edit">
@@ -2777,19 +2791,28 @@ function openVehicle(plate){
       ${v.originalBranch&&v.originalBranch!==v.branch?`<span class="orig">최초 배정: ${v.originalBranch}</span>`:''}
       <button class="btn" style="padding:6px 12px;font-size:12px;${v.addedManually?'':'margin-left:auto;'}${v.active===false?'background:var(--good);color:#fff;':'background:none;border:1px solid var(--bad);color:var(--bad);'}" onclick="toggleVehicleActive('${plate}')">${v.active===false?'운용 재개':'운용 중지'}</button>
       ${v.addedManually?`<button class="btn" style="padding:6px 12px;font-size:12px;margin-left:auto;background:var(--bad);color:#fff;border:none;" onclick="deleteVehicleForever('${plate}')" title="수동으로 추가한 테스트 차량을 명단에서 완전히 삭제합니다">🗑 완전 삭제</button>`:''}
+    </div>
+    <div class="branch-edit">
+      <label class="muted" style="font-size:12px;">차량개시일</label>
+      <input type="date" id="svcStart-${plate}" value="${v.serviceStartDate||''}">
+      <button class="btn btn-primary" style="padding:6px 12px;font-size:12px;" onclick="setServiceStartDate('${plate}')">저장</button>
+      ${v.serviceStartDate?`<button class="btn" style="padding:6px 12px;font-size:12px;background:none;border:1px solid var(--line);color:var(--muted);" onclick="clearServiceStartDate('${plate}')">해제</button>`:''}
+      <span class="muted" style="font-size:11px;word-break:keep-all;">설정 시 개시일 이전 월은 가동율 계산에서 제외되고, 개시월은 개시일부터의 업무일만 반영됩니다</span>
     </div>`}
     <div class="modal-stats">
       <div>총 주행거리<b>${totalDist.toLocaleString()} km</b></div>
       <div>총 주유비<b>${totalFuel.toLocaleString()} 원</b></div>
       <div>운행 건수<b>${trips.length}</b></div>
       <div>가동율<b style="color:${utilColor(util.rate)};">${util.rate.toFixed(0)}%</b></div>
+      ${v.fee!=null?`<div>월 대여료<b>${Number(v.fee).toLocaleString()} 원</b></div>`:''}
     </div>
     <div style="margin-bottom:18px;">
       <div class="muted" style="font-size:11px;margin-bottom:4px;">${monthlyYear||new Date().getFullYear()}년 월별 가동율 (업무일 기준)</div>
       <div class="mini-month-row">
         ${monthlyUtilForPlate(plate,monthlyYear||new Date().getFullYear()).map(m=>{
-          const cls=trips.length===0?'m-none':(m.rate>=60?'m-good':m.rate>=30?'m-mid':'m-bad');
-          return `<div class="mini-month-cell ${cls}">${m.month}월<br>${trips.length===0?'–':m.rate.toFixed(0)+'%'}</div>`;
+          const noData=trips.length===0||m.beforeService;
+          const cls=noData?'m-none':(m.rate>=60?'m-good':m.rate>=30?'m-mid':'m-bad');
+          return `<div class="mini-month-cell ${cls}">${m.month}월<br>${noData?'–':m.rate.toFixed(0)+'%'}</div>`;
         }).join('')}
       </div>
     </div>
@@ -3580,6 +3603,30 @@ async function changeBranch(plate){
   renderAll();openVehicle(plate);
 }
 
+// 차량개시일: 기존 차량 중간에 신규 배정/개시되는 차량의 가동율 계산 기준일
+async function setServiceStartDate(plate){
+  const input=document.getElementById('svcStart-'+plate);
+  const val=input?input.value:'';
+  if(!val){ showAdminToast('⚠ 날짜를 선택해주세요.','bad'); return; }
+  const v=data.vehicles[plate];
+  if(!v) return;
+  const prev=v.serviceStartDate;
+  v.serviceStartDate=val;
+  const saved = await saveData();
+  if(!saved){ v.serviceStartDate=prev; showAdminToast('⚠ 저장 실패: 차량개시일이 서버에 반영되지 않았습니다.','bad'); return; }
+  showAdminToast(`'${plate}' 차량개시일이 ${val}로 저장되었습니다.`,'good');
+  renderAll();openVehicle(plate);
+}
+async function clearServiceStartDate(plate){
+  const v=data.vehicles[plate];
+  if(!v) return;
+  const prev=v.serviceStartDate;
+  delete v.serviceStartDate;
+  const saved = await saveData();
+  if(!saved){ v.serviceStartDate=prev; showAdminToast('⚠ 저장 실패: 차량개시일 해제가 서버에 반영되지 않았습니다.','bad'); return; }
+  renderAll();openVehicle(plate);
+}
+
 // ============================================================
 // 데이터 백업 / 복원
 // ============================================================
@@ -3674,9 +3721,9 @@ function showAdminToast(msg, type='good'){
 function exportToExcel(){
   if(!window.XLSX) return;
   const plates=Object.keys(data.vehicles).sort((a,b)=>{const ba=data.vehicles[a].branch||'',bb=data.vehicles[b].branch||'';return compareByOrg(ba,bb)||a.localeCompare(b);});
-  const vehicleRows=plates.map(p=>{const s=vehicleStatsOf(p);return{'차량번호':p,'차종':s.v.model||'','지역구분':s.v.branch||'','최초배정':s.v.originalBranch||'','총주행거리(km)':s.totalDist,'총주유비(원)':s.totalFuel,'운행건수':s.trips.length,'가동율(%)':s.trips.length>0?Number(s.util.rate.toFixed(1)):''};});
+  const vehicleRows=plates.map(p=>{const s=vehicleStatsOf(p);return{'차량번호':p,'차종':s.v.model||'','지역구분':s.v.branch||'','최초배정':s.v.originalBranch||'','총주행거리(km)':s.totalDist,'총주유비(원)':s.totalFuel,'운행건수':s.trips.length,'가동율(%)':s.trips.length>0?Number(s.util.rate.toFixed(1)):'','월대여료(원)':s.v.fee!=null?Number(s.v.fee):''};});
   const ws1=XLSX.utils.json_to_sheet(vehicleRows);
-  ws1['!cols']=[{wch:12},{wch:28},{wch:16},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10}];
+  ws1['!cols']=[{wch:12},{wch:28},{wch:16},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10},{wch:12}];
   const tripRows=[];
   plates.forEach(p=>(data.vehicles[p].trips||[]).slice().sort(tripChronoCompare).forEach(t=>{tripRows.push({'차량번호':p,'지역구분':data.vehicles[p].branch||'','일자(원본)':t.date||'','인식된날짜':t.isoDate||'','시작거리':t.startOdo,'종료거리':t.endOdo,'주행거리(km)':t.distance,'제출자':t.submitter||'','운행자':t.user||'','행선지':t.dest||'','주유비(원)':t.fuel||0,'개인사용여부':t.isPersonal?'개인사용':'','출퇴근사용여부':t.isCommute?(t.commuteDir||'출퇴근사용'):'','출퇴근거리(km)':t.isCommute?(t.distance||0):'','차량상태':t.status||'','비고':t.note||''});}));
   const ws2=XLSX.utils.json_to_sheet(tripRows);
@@ -3685,12 +3732,14 @@ function exportToExcel(){
   const monthlyRows=plates.map(p=>{
     const hasAnyData=hasMonthlyDataFor(p,year);
     const monthly=monthlyUtilForPlate(p,year);
-    const avg=hasAnyData?monthly.reduce((s,m)=>s+m.rate,0)/12:0;
+    const validMonths=monthly.filter(m=>!m.beforeService);
+    const avg=hasAnyData&&validMonths.length?validMonths.reduce((s,m)=>s+m.rate,0)/validMonths.length:0;
     const yearTotalDist=monthly.reduce((s,m)=>s+(Number(m.distance)||0),0);
     const row={'차량번호':p,'차종':modelShort(data.vehicles[p]?.model||''),'지역구분':data.vehicles[p].branch||''};
     monthly.forEach(m=>{
-      row[`${m.month}월가동율(%)`]=hasAnyData?Number(m.rate.toFixed(1)):'';
-      row[`${m.month}월거리(km)`]=hasAnyData?Number((m.distance||0).toFixed(0)):'';
+      const noData=!hasAnyData||m.beforeService;
+      row[`${m.month}월가동율(%)`]=noData?'':Number(m.rate.toFixed(1));
+      row[`${m.month}월거리(km)`]=noData?'':Number((m.distance||0).toFixed(0));
     });
     row['연평균가동율(%)'] = hasAnyData ? Number(avg.toFixed(1)) : '';
     row['연간총거리(km)'] = hasAnyData ? Number(yearTotalDist.toFixed(0)) : '';
