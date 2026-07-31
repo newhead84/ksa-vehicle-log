@@ -65,6 +65,8 @@
   [2026-07-31] 월대여료(fee) 단위 오류 수정: 롯데렌터카 원본 단가가 천원단위였는데 원단위로 그대로 반영되어 실제보다 10배 높게 표시되던 문제(예: 그랜저 5,280,000원→528,000원) → 46대 전체 fee 값을 1/10로 정정 | 변경: FLEET_REGISTRY(fee 46건 정정)
   [2026-07-31] 재배치 이력(branchHistory) 개별 항목 수정/삭제 기능 신규 추가: 기존에는 changeBranch()로 새 이력을 추가만 할 수 있어, 이미 기록된 이력의 날짜가 잘못된 경우 정정할 방법이 없었음(현재 소속을 재선택하면 새 이력이 중복 추가됨) → 관리자 모달 재배치 이력 각 항목에 날짜 입력란·저장 버튼·삭제 버튼(확인 팝업 포함) 추가 | 변경: openVehicle() 모달(재배치 이력 영역), saveBranchHistoryDate()(신규), deleteBranchHistoryEntry()(신규)
   [2026-07-31] ① showAdminToast() 저장 완료 안내가 statStrip 앞(배경 페이지)에 삽입되어, 차량 상세 모달(z-index:50)이 열려 있는 동안은 모달에 가려 실제로는 저장이 됐는데도 "반응 없음"처럼 보이던 버그 수정 → 모달 열림 여부와 무관하게 화면 최상단에 고정 표시(position:fixed, z-index:200)되도록 변경. ② 월대여료 단가 정정(FLEET_REGISTRY) 이후에도, 기존 백필 로직은 Firebase에 이미 저장된 fee 값(정정 전 잘못된 값 포함)은 건너뛰어 실제 반영이 안 되던 문제 → FLEET_REGISTRY 최신값으로 강제 덮어쓰는 1회성 관리자 유틸리티 resyncFleetFees() 및 "💰 월대여료 재동기화" 버튼 신규 추가 | 변경: showAdminToast(), resyncFleetFees()(신규), 관리자 툴바(resyncFeeBtn 버튼)
+  [2026-07-31] "💰 월대여료 재동기화"(1회성 단가 정정용) 버튼을 제거하고 "📋 차량계약정보 관리" 버튼으로 교체: 지정 엑셀 양식(차량번호·차종·지역구분·계약시작일·계약종료일·월대여료·이전차량번호) 업로드로 계약정보 변경을 상시 반영할 수 있도록 개선. 기존 차량번호는 계약 연장(단가·계약기간 변경)으로 처리되어 contractHistory에 변경 전/후 값이 기록되고, 신규 차량번호는 등록으로 처리되며 '이전차량번호' 열을 채우면 반납되는 차량을 자동 운용중지 처리하고 replacedFrom/replacedBy로 상호 연결(차량 교체 시나리오, 대수 증감 모두 지원). 반영 전 변경 내역 확인 팝업 표시, 차량 상세 모달에 계약갱신·교체 이력 표시 | 변경: 관리자 툴바(resyncFeeBtn→contractMgmtBtn 버튼), resyncFleetFees()(삭제), openContractImportModal()(신규), downloadContractTemplate()(신규), handleContractExcelUpload()(신규), applyContractImport()(신규), openVehicle() 모달(계약/차량교체 이력 표시 영역)
+  [2026-07-31] 신규 "📋 차량계약정보 관리" 버튼이 열람전용 URL(전체·지역별 공통)에도 그대로 노출되던 문제 수정. 근본 원인: applyViewerModeUI()가 "숨길 버튼 id"를 블랙리스트로 나열하는 방식이라 새 관리자 버튼을 추가할 때마다 id를 빠뜨리기 쉬웠음(반복되어 온 패턴) → 관리자 툴바(admin-topbar-actions)는 "허용할 버튼 id"만 나열하는 화이트리스트 방식(VIEWER_ALLOWED_TOOLBAR_BTN_IDS=['refreshBtn','exportExcelBtn'])으로 전환하여, 앞으로 툴바에 어떤 버튼이 추가되어도 명시적으로 허용하지 않는 한 열람전용 모드에서 자동으로 숨겨지도록 구조 변경. 툴바 밖의 차량목록 영역 버튼(차량추가/QR PDF)은 기존과 동일하게 개별 숨김 유지 | 변경: exportToExcel 버튼(id="exportExcelBtn" 부여), applyViewerModeUI(), VIEWER_ALLOWED_TOOLBAR_BTN_IDS(신규)
 =================================================================
 -->
 
@@ -862,8 +864,8 @@
     </div>
     <div class="admin-topbar-actions">
       <button class="reset-btn" id="refreshBtn" onclick="adminRefresh()" style="border-color:var(--accent);color:var(--accent);">⟳ 새로고침</button>
-      <button class="reset-btn" id="resyncFeeBtn" onclick="resyncFleetFees()" title="FLEET_REGISTRY 단가 정정 등으로 저장된 월대여료가 실제와 다를 때, 최신값으로 강제 재동기화합니다" style="border-color:#B45309;color:#B45309;">💰 월대여료 재동기화</button>
-      <button class="reset-btn" onclick="exportToExcel()" style="border-color:var(--good);color:var(--good);">엑셀 내보내기</button>
+      <button class="reset-btn" id="contractMgmtBtn" onclick="openContractImportModal()" title="계약 연장(단가·기간 변경) 또는 차량 교체(반납 후 신차 투입)로 계약정보가 바뀌면, 지정 엑셀 양식으로 일괄 반영합니다" style="border-color:#B45309;color:#B45309;">📋 차량계약정보 관리</button>
+      <button class="reset-btn" id="exportExcelBtn" onclick="exportToExcel()" style="border-color:var(--good);color:var(--good);">엑셀 내보내기</button>
       <button class="reset-btn" id="manualUploadBtn" onclick="triggerManualMonthlyUpload()" style="border-color:#7C3AED;color:#7C3AED;">📊 엑셀 업로드</button>
       <input type="file" id="manualMonthlyInput" accept=".xlsx,.xls" style="display:none;" onchange="handleManualMonthlyUpload(this)">
       <button class="reset-btn" id="backupDataBtn" onclick="backupData()" style="border-color:var(--navy);color:var(--navy);">💾 데이터 백업</button>
@@ -1780,7 +1782,12 @@ function enterViewerMode(){
   startAdminPolling();
 }
 
-// 열람 전용 모드일 때 데이터를 변경하는 관리자 전용 버튼들을 숨기고 안내 배지를 표시
+// 열람 전용 모드(전체 열람URL·지역별 열람URL 공통)일 때 관리자 툴바 버튼을 정리하고 안내 배지를 표시.
+// ※ 화이트리스트 방식: 열람 전용 모드에 노출을 "허용"할 버튼 id만 VIEWER_ALLOWED_TOOLBAR_BTN_IDS에 나열하고,
+//   그 외 admin-topbar-actions 안의 모든 버튼(신규로 추가되는 관리자 버튼 포함)은 별도 조치 없이 자동 숨김 처리된다.
+//   과거 블랙리스트 방식(숨길 id를 나열)에서는 새 관리자 기능 버튼을 추가할 때마다 이 함수에 id를
+//   빠뜨리기 쉬워, 편집/삭제/백업 등 관리 기능 버튼이 열람용 URL에 실수로 노출되는 사고가 반복되었음.
+const VIEWER_ALLOWED_TOOLBAR_BTN_IDS = ['refreshBtn','exportExcelBtn'];
 function applyViewerModeUI(){
   const badge = document.getElementById('roleBadge');
   if(badge){
@@ -1788,7 +1795,12 @@ function applyViewerModeUI(){
     badge.textContent = regionInfo ? `열람 전용 · ${regionInfo.label}` : '열람 전용';
     badge.style.background = '#7eb138';
   }
-  ['manualUploadBtn','backupDataBtn','restoreDataBtn','logoutBtn','qrBulkPdfBtn','addVehicleBtn','copyReadonlyUrlBtn','regionUrlBtn'].forEach(id=>{
+  document.querySelectorAll('#adminTopbar .admin-topbar-actions > button').forEach(el=>{
+    if(!VIEWER_ALLOWED_TOOLBAR_BTN_IDS.includes(el.id)) el.style.display = 'none';
+  });
+  // 상단 관리자 툴바(admin-topbar-actions) 밖에 있는 차량목록 영역의 관리 전용 버튼(차량추가/QR PDF)은
+  // 화이트리스트 대상 컨테이너 밖이라 위 로직으로 잡히지 않으므로 별도로 숨김 처리
+  ['addVehicleBtn','qrBulkPdfBtn'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.style.display = 'none';
   });
@@ -2427,22 +2439,166 @@ async function refreshDataFromStorage(){
   });
 }
 
-// 월대여료(fee) 단가 정정 등 FLEET_REGISTRY 값이 바뀐 뒤에도, 기존 백필 로직(loadData/
-// refreshDataFromStorage)은 이미 Firebase에 fee가 저장돼 있으면(값이 틀렸어도) 건너뛰므로
-// 자동으로 반영되지 않는다. 이 함수는 46대 전체 fee를 FLEET_REGISTRY 현재값으로 무조건
-// 덮어써 강제 재동기화한다(1회성 관리자 유틸리티).
-async function resyncFleetFees(){
-  if(!confirm('⚠️ 등록된 모든 차량의 월대여료를 FLEET_REGISTRY의 최신 단가로 덮어씁니다.\n(현재 저장된 월대여료 값과 다르면 모두 교체됩니다)\n\n계속 진행하시겠습니까?')) return;
-  await refreshDataFromStorage();
-  let changed=0;
-  FLEET_REGISTRY.forEach(v=>{
-    if(v.fee===undefined || !data.vehicles[v.plate]) return;
-    if(data.vehicles[v.plate].fee!==v.fee){ data.vehicles[v.plate].fee=v.fee; changed++; }
+// ============================================================
+// 차량계약정보 관리 (엑셀 일괄 업로드)
+// - 계약 연장(같은 차량번호, 단가/계약기간만 변경): 기존 차량 행의 값을 갱신 + contractHistory에 변경 이력 기록
+// - 차량 교체(반납 후 신차 투입, 차량번호가 바뀜): 새 차량번호 행 추가, '이전차량번호' 열을 채우면
+//   해당 이전 차량은 자동으로 운용중지(반납) 처리되고 서로 replacedFrom/replacedBy로 연결됨
+// - 교체 없이 순수 반납만 하는 경우(차량 수 감소)는 이 업로드로 처리하지 않고,
+//   해당 차량 상세 모달의 '운용 중지' 버튼을 사용하도록 안내한다.
+// ============================================================
+const CONTRACT_IMPORT_DATE_RE=/^\d{4}-\d{2}-\d{2}$/;
+
+function openContractImportModal(){
+  document.getElementById('modalBody').innerHTML=`
+    <div class="modal-head">
+      <div class="modal-head-info"><div class="plate-big" style="font-size:20px;">📋 차량계약정보 관리</div><div class="muted" style="font-size:12px;">엑셀 업로드로 계약 연장·차량 교체·신규 등록을 일괄 반영합니다</div></div>
+      <div class="modal-head-actions"><button class="close-x" onclick="closeModal()">✕</button></div>
+    </div>
+    <div style="padding:4px 0 16px;font-size:13px;line-height:1.8;color:var(--muted);word-break:keep-all;">
+      <b style="color:var(--navy);">사용 방법</b><br>
+      1. <b>양식 다운로드</b>로 현재 등록 차량이 채워진 엑셀을 받습니다.<br>
+      2. <b>계약 연장</b>(단가·계약기간 변경)은 기존 행의 값만 수정하세요. 차량번호는 그대로 둡니다.<br>
+      3. <b>차량 교체</b>(반납 후 신차 투입)는 새 차량번호로 행을 추가하고, <b>이전차량번호</b> 열에 반납되는 차량번호를 적어주세요. 신규 투입으로 차량 수가 늘어나는 경우 이전차량번호는 비워두면 됩니다.<br>
+      4. 교체 차량 없이 순수 반납만 하는 경우(차량 수 감소)는 이 화면 대신, 해당 차량 상세 모달의 '운용 중지' 버튼을 사용해 주세요.<br>
+      5. 작성한 엑셀을 아래에 업로드하면 변경 내용을 확인 팝업으로 미리 보여준 뒤 반영합니다.
+    </div>
+    <div style="margin-bottom:14px;">
+      <button class="btn btn-ghost" style="font-size:12px;padding:8px 14px;" onclick="downloadContractTemplate()">📥 양식 다운로드(현재 차량 포함)</button>
+    </div>
+    <div style="border:2px dashed var(--line);border-radius:10px;padding:20px;text-align:center;">
+      <input type="file" id="contractExcelInput" accept=".xlsx,.xls" style="display:block;margin:0 auto 12px;">
+      <button class="btn btn-primary" style="font-size:13px;padding:8px 18px;" onclick="handleContractExcelUpload()">엑셀 업로드 및 반영</button>
+    </div>
+    <div id="contractImportResult" style="margin-top:14px;font-size:12.5px;word-break:keep-all;"></div>
+  `;
+  document.getElementById('modalOverlay').classList.add('show');
+  lockBodyScroll();
+}
+
+function downloadContractTemplate(){
+  if(!window.XLSX) return;
+  const plates=Object.keys(data.vehicles).filter(p=>data.vehicles[p].active!==false)
+    .sort((a,b)=>{const ba=data.vehicles[a].branch||'',bb=data.vehicles[b].branch||'';return compareByOrg(ba,bb)||a.localeCompare(b);});
+  const rows=plates.map(p=>{
+    const v=data.vehicles[p];
+    return {'차량번호':p,'차종':v.model||'','지역구분':v.branch||'','계약시작일':v.contractStartDate||'','계약종료일':v.contractEndDate||'','월대여료(원)':v.fee!=null?Number(v.fee):'','이전차량번호':''};
   });
-  if(changed===0){ showAdminToast('월대여료가 이미 최신 상태입니다. 변경 없음.','good'); return; }
+  rows.push({'차량번호':'(예시)신규차량번호','차종':'AVANTE CN7 (G)1.6 모던 2WD AT','지역구분':'경기강원지역본부','계약시작일':'2029-09-01','계약종료일':'2033-09-01','월대여료(원)':430000,'이전차량번호':'(교체되는 경우만) 기존 차량번호'});
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:16},{wch:30},{wch:18},{wch:12},{wch:12},{wch:12},{wch:20}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'계약정보');
+  XLSX.writeFile(wb,`KSA차량계약정보_${todayLocalISO()}.xlsx`);
+}
+
+function handleContractExcelUpload(){
+  const input=document.getElementById('contractExcelInput');
+  const resultEl=document.getElementById('contractImportResult');
+  const file=input?.files?.[0];
+  if(!file){ resultEl.innerHTML='<span style="color:var(--bad);">⚠ 업로드할 엑셀 파일을 선택해주세요.</span>'; return; }
+  const reader=new FileReader();
+  reader.onload=async function(e){
+    let rows;
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    }catch(err){
+      resultEl.innerHTML=`<span style="color:var(--bad);">⚠ 엑셀 파일을 읽을 수 없습니다: ${escapeHtml(err.message)}</span>`;
+      return;
+    }
+    await applyContractImport(rows,resultEl);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function applyContractImport(rows,resultEl){
+  const errors=[];
+  const plan=[];
+  const seen=new Set();
+  rows.forEach((r,i)=>{
+    const rowNum=i+2; // 1행은 헤더
+    const plate=String(r['차량번호']||'').trim();
+    if(!plate || plate.startsWith('(예시)')) return;
+    if(seen.has(plate)){ errors.push(`${rowNum}행: 차량번호 '${plate}'가 중복됩니다.`); return; }
+    seen.add(plate);
+    const model=String(r['차종']||'').trim();
+    const branch=String(r['지역구분']||'').trim();
+    const contractStartDate=String(r['계약시작일']||'').trim();
+    const contractEndDate=String(r['계약종료일']||'').trim();
+    const feeRaw=r['월대여료(원)'];
+    const feeProvided=!(feeRaw===''||feeRaw===undefined||feeRaw===null);
+    const fee=feeProvided?Number(feeRaw):undefined;
+    const prevPlate=String(r['이전차량번호']||'').trim().replace(/^\(.*\)$/,'');
+    if(contractStartDate&&!CONTRACT_IMPORT_DATE_RE.test(contractStartDate)){ errors.push(`${rowNum}행(${plate}): 계약시작일 형식 오류 (YYYY-MM-DD)`); return; }
+    if(contractEndDate&&!CONTRACT_IMPORT_DATE_RE.test(contractEndDate)){ errors.push(`${rowNum}행(${plate}): 계약종료일 형식 오류 (YYYY-MM-DD)`); return; }
+    if(feeProvided&&(isNaN(fee)||fee<0)){ errors.push(`${rowNum}행(${plate}): 월대여료 값이 올바르지 않습니다.`); return; }
+    const exists=!!data.vehicles[plate];
+    if(!exists&&!branch){ errors.push(`${rowNum}행(${plate}): 신규 차량은 지역구분이 필수입니다.`); return; }
+    if(prevPlate&&prevPlate===plate){ errors.push(`${rowNum}행(${plate}): 이전차량번호가 자기 자신과 같습니다.`); return; }
+    plan.push({rowNum,plate,model,branch,contractStartDate,contractEndDate,fee,feeProvided,prevPlate,exists});
+  });
+  if(errors.length){
+    resultEl.innerHTML=`<div style="color:var(--bad);font-weight:600;margin-bottom:6px;">⚠ ${errors.length}건의 오류로 반영을 중단했습니다. 아래 항목을 수정한 뒤 다시 업로드해주세요.</div>`+errors.map(e=>`<div style="color:var(--bad);">· ${escapeHtml(e)}</div>`).join('');
+    return;
+  }
+  if(!plan.length){ resultEl.innerHTML='<span style="color:var(--bad);">⚠ 반영할 유효한 행이 없습니다.</span>'; return; }
+  const planPlates=new Set(plan.map(p=>p.plate));
+  for(const p of plan){
+    if(p.prevPlate && !data.vehicles[p.prevPlate] && !planPlates.has(p.prevPlate)){
+      resultEl.innerHTML=`<span style="color:var(--bad);">⚠ ${p.rowNum}행(${p.plate}): 이전차량번호 '${p.prevPlate}'에 해당하는 차량을 찾을 수 없습니다.</span>`;
+      return;
+    }
+  }
+  const summary=plan.map(p=>{
+    if(!p.exists) return `➕ 신규 등록: ${p.plate} (${p.branch})${p.prevPlate?` — 반납 처리: ${p.prevPlate}`:''}`;
+    const v=data.vehicles[p.plate];
+    const changes=[];
+    if(p.feeProvided&&p.fee!==v.fee) changes.push(`월대여료 ${v.fee!=null?Number(v.fee).toLocaleString():'–'}→${Number(p.fee).toLocaleString()}원`);
+    if(p.contractStartDate&&p.contractStartDate!==v.contractStartDate) changes.push(`계약시작일 ${v.contractStartDate||'–'}→${p.contractStartDate}`);
+    if(p.contractEndDate&&p.contractEndDate!==v.contractEndDate) changes.push(`계약종료일 ${v.contractEndDate||'–'}→${p.contractEndDate}`);
+    return changes.length?`🔄 계약 갱신: ${p.plate} (${changes.join(', ')})`:`− 변경 없음: ${p.plate}`;
+  });
+  const ok=confirm(`⚠️ 아래 ${plan.length}건을 차량계약정보에 반영합니다.\n\n${summary.join('\n')}\n\n계속 진행하시겠습니까?`);
+  if(!ok) return;
+  await refreshDataFromStorage();
+  const today=todayLocalISO();
+  let updated=0, added=0, retired=0;
+  plan.forEach(p=>{
+    if(!p.exists){
+      data.vehicles[p.plate]={
+        model:p.model||'',branch:p.branch,originalBranch:p.branch,active:true,trips:[],
+        ...(p.contractStartDate?{contractStartDate:p.contractStartDate,serviceStartDate:p.contractStartDate}:{}),
+        ...(p.contractEndDate?{contractEndDate:p.contractEndDate}:{}),
+        ...(p.feeProvided?{fee:p.fee}:{}),
+        ...(p.prevPlate?{replacedFrom:p.prevPlate}:{})
+      };
+      added++;
+    }else{
+      const v=data.vehicles[p.plate];
+      const prevSnapshot={fee:v.fee,contractStartDate:v.contractStartDate,contractEndDate:v.contractEndDate};
+      if(p.model) v.model=p.model;
+      if(p.feeProvided) v.fee=p.fee;
+      if(p.contractStartDate) v.contractStartDate=p.contractStartDate;
+      if(p.contractEndDate) v.contractEndDate=p.contractEndDate;
+      const changed=prevSnapshot.fee!==v.fee||prevSnapshot.contractStartDate!==v.contractStartDate||prevSnapshot.contractEndDate!==v.contractEndDate;
+      if(changed){
+        if(!Array.isArray(v.contractHistory)) v.contractHistory=[];
+        v.contractHistory.push({date:today,prevFee:prevSnapshot.fee,newFee:v.fee,prevContractStartDate:prevSnapshot.contractStartDate,newContractStartDate:v.contractStartDate,prevContractEndDate:prevSnapshot.contractEndDate,newContractEndDate:v.contractEndDate});
+        updated++;
+      }
+    }
+    if(p.prevPlate && data.vehicles[p.prevPlate] && p.prevPlate!==p.plate){
+      data.vehicles[p.prevPlate].active=false;
+      data.vehicles[p.prevPlate].replacedBy=p.plate;
+      retired++;
+    }
+  });
   const saved=await saveData();
-  if(!saved){ showAdminToast('⚠ 저장 실패: 월대여료 재동기화가 서버에 반영되지 않았습니다.','bad'); return; }
-  showAdminToast(`월대여료 ${changed}건이 재동기화되었습니다.`,'good');
+  if(!saved){ resultEl.innerHTML='<span style="color:var(--bad);">⚠ 저장 실패: 변경 내용이 서버에 반영되지 않았습니다. 인터넷 연결을 확인한 후 다시 시도해 주세요.</span>'; return; }
+  resultEl.innerHTML=`<span style="color:var(--good);font-weight:600;">✅ 반영 완료 — 신규 ${added}건, 계약 갱신 ${updated}건, 반납 처리 ${retired}건</span>`;
+  showAdminToast(`차량계약정보가 반영되었습니다. (신규 ${added}, 갱신 ${updated}, 반납 ${retired})`,'good');
   renderAll();
 }
 
@@ -2848,6 +3004,12 @@ function openVehicle(plate){
       ${v.fee!=null?`<div>월 대여료<b>${Number(v.fee).toLocaleString()} 원</b></div>`:''}
       ${v.contractStartDate?`<div>계약기간<b style="font-size:14px;">${v.contractStartDate} ~ ${v.contractEndDate||''}</b></div>`:''}
     </div>
+    ${(v.replacedFrom||v.replacedBy||(v.contractHistory&&v.contractHistory.length))?`<div class="branch-edit" style="flex-direction:column;align-items:stretch;gap:4px;">
+      <label class="muted" style="font-size:12px;">계약/차량교체 이력</label>
+      ${v.replacedFrom?`<span class="orig" style="word-break:keep-all;">🔁 이전 차량번호 ${escapeHtml(v.replacedFrom)}을(를) 반납하고 교체 투입된 차량입니다</span>`:''}
+      ${v.replacedBy?`<span class="orig" style="word-break:keep-all;">🔁 이 차량은 반납되었고, ${escapeHtml(v.replacedBy)}(으)로 교체되었습니다</span>`:''}
+      ${(v.contractHistory&&v.contractHistory.length)?v.contractHistory.map(h=>`<span class="orig" style="word-break:keep-all;">${escapeHtml(h.date||'')} 계약 갱신: ${h.prevFee!=null?Number(h.prevFee).toLocaleString():'–'}원→${h.newFee!=null?Number(h.newFee).toLocaleString():'–'}원, 기간 ${h.prevContractStartDate||'–'}~${h.prevContractEndDate||'–'} → ${h.newContractStartDate||'–'}~${h.newContractEndDate||'–'}</span>`).join(''):''}
+    </div>`:''}
     <div style="margin-bottom:18px;">
       <div class="muted" style="font-size:11px;margin-bottom:4px;">${monthlyYear||new Date().getFullYear()}년 월별 가동율 (업무일 기준)</div>
       <div class="mini-month-row">
