@@ -64,6 +64,7 @@
   [2026-07-31] 계약시작일=차량개시일이라는 확인에 따라, ①번 항목에서 183호5250·181호6175 2대로 한정했던 차량개시일(serviceStartDate)을 46대 전체에 계약시작일과 동일 값으로 반영(FLEET_REGISTRY 데이터만 수정, 로직 변경 없음) → 이제 44대의 2025-08-31도 가동율 계산 기준 개시일로 반영되어, 개시 이전 월은 월별 가동율표·엑셀에서 "–"(데이터없음) 처리됨 | 변경: FLEET_REGISTRY(serviceStartDate 46건 추가/일치화)
   [2026-07-31] 월대여료(fee) 단위 오류 수정: 롯데렌터카 원본 단가가 천원단위였는데 원단위로 그대로 반영되어 실제보다 10배 높게 표시되던 문제(예: 그랜저 5,280,000원→528,000원) → 46대 전체 fee 값을 1/10로 정정 | 변경: FLEET_REGISTRY(fee 46건 정정)
   [2026-07-31] 재배치 이력(branchHistory) 개별 항목 수정/삭제 기능 신규 추가: 기존에는 changeBranch()로 새 이력을 추가만 할 수 있어, 이미 기록된 이력의 날짜가 잘못된 경우 정정할 방법이 없었음(현재 소속을 재선택하면 새 이력이 중복 추가됨) → 관리자 모달 재배치 이력 각 항목에 날짜 입력란·저장 버튼·삭제 버튼(확인 팝업 포함) 추가 | 변경: openVehicle() 모달(재배치 이력 영역), saveBranchHistoryDate()(신규), deleteBranchHistoryEntry()(신규)
+  [2026-07-31] ① showAdminToast() 저장 완료 안내가 statStrip 앞(배경 페이지)에 삽입되어, 차량 상세 모달(z-index:50)이 열려 있는 동안은 모달에 가려 실제로는 저장이 됐는데도 "반응 없음"처럼 보이던 버그 수정 → 모달 열림 여부와 무관하게 화면 최상단에 고정 표시(position:fixed, z-index:200)되도록 변경. ② 월대여료 단가 정정(FLEET_REGISTRY) 이후에도, 기존 백필 로직은 Firebase에 이미 저장된 fee 값(정정 전 잘못된 값 포함)은 건너뛰어 실제 반영이 안 되던 문제 → FLEET_REGISTRY 최신값으로 강제 덮어쓰는 1회성 관리자 유틸리티 resyncFleetFees() 및 "💰 월대여료 재동기화" 버튼 신규 추가 | 변경: showAdminToast(), resyncFleetFees()(신규), 관리자 툴바(resyncFeeBtn 버튼)
 =================================================================
 -->
 
@@ -861,6 +862,7 @@
     </div>
     <div class="admin-topbar-actions">
       <button class="reset-btn" id="refreshBtn" onclick="adminRefresh()" style="border-color:var(--accent);color:var(--accent);">⟳ 새로고침</button>
+      <button class="reset-btn" id="resyncFeeBtn" onclick="resyncFleetFees()" title="FLEET_REGISTRY 단가 정정 등으로 저장된 월대여료가 실제와 다를 때, 최신값으로 강제 재동기화합니다" style="border-color:#B45309;color:#B45309;">💰 월대여료 재동기화</button>
       <button class="reset-btn" onclick="exportToExcel()" style="border-color:var(--good);color:var(--good);">엑셀 내보내기</button>
       <button class="reset-btn" id="manualUploadBtn" onclick="triggerManualMonthlyUpload()" style="border-color:#7C3AED;color:#7C3AED;">📊 엑셀 업로드</button>
       <input type="file" id="manualMonthlyInput" accept=".xlsx,.xls" style="display:none;" onchange="handleManualMonthlyUpload(this)">
@@ -2425,6 +2427,25 @@ async function refreshDataFromStorage(){
   });
 }
 
+// 월대여료(fee) 단가 정정 등 FLEET_REGISTRY 값이 바뀐 뒤에도, 기존 백필 로직(loadData/
+// refreshDataFromStorage)은 이미 Firebase에 fee가 저장돼 있으면(값이 틀렸어도) 건너뛰므로
+// 자동으로 반영되지 않는다. 이 함수는 46대 전체 fee를 FLEET_REGISTRY 현재값으로 무조건
+// 덮어써 강제 재동기화한다(1회성 관리자 유틸리티).
+async function resyncFleetFees(){
+  if(!confirm('⚠️ 등록된 모든 차량의 월대여료를 FLEET_REGISTRY의 최신 단가로 덮어씁니다.\n(현재 저장된 월대여료 값과 다르면 모두 교체됩니다)\n\n계속 진행하시겠습니까?')) return;
+  await refreshDataFromStorage();
+  let changed=0;
+  FLEET_REGISTRY.forEach(v=>{
+    if(v.fee===undefined || !data.vehicles[v.plate]) return;
+    if(data.vehicles[v.plate].fee!==v.fee){ data.vehicles[v.plate].fee=v.fee; changed++; }
+  });
+  if(changed===0){ showAdminToast('월대여료가 이미 최신 상태입니다. 변경 없음.','good'); return; }
+  const saved=await saveData();
+  if(!saved){ showAdminToast('⚠ 저장 실패: 월대여료 재동기화가 서버에 반영되지 않았습니다.','bad'); return; }
+  showAdminToast(`월대여료 ${changed}건이 재동기화되었습니다.`,'good');
+  renderAll();
+}
+
 // ============================================================
 // 렌더 (관리자 전용)
 // ============================================================
@@ -3776,9 +3797,11 @@ function showAdminToast(msg, type='good'){
   const bg=type==='good'?'var(--good-soft)':'var(--bad-soft)';
   const border=type==='good'?'var(--good)':'var(--bad)';
   const color=type==='good'?'var(--good)':'var(--bad)';
-  div.style.cssText=`background:${bg};border:1px solid ${border};color:${color};border-radius:10px;padding:12px 18px;margin-bottom:14px;font-size:13px;font-weight:600;`;
+  // 모달(z-index:50)이 열려 있으면 statStrip 앞에 삽입해도 모달 뒤에 가려 보이지 않으므로,
+  // 화면 상단에 항상 떠 있는 고정 위치로 표시해 모달 열림 여부와 무관하게 보이도록 함
+  div.style.cssText=`position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:200;max-width:90vw;box-shadow:0 6px 20px rgba(0,0,0,.18);background:${bg};border:1px solid ${border};color:${color};border-radius:10px;padding:12px 18px;font-size:13px;font-weight:600;word-break:keep-all;`;
   div.textContent=msg;
-  document.getElementById('statStrip').before(div);
+  document.body.appendChild(div);
   setTimeout(()=>div.remove(),5000);
 }
 
