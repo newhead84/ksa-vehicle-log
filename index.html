@@ -62,6 +62,8 @@
   [2026-07-31] 기존 등록 차량 중 운행 기간 중간에 신규 배정/개시되는 차량(예: 183호5250, 26.5.12 개시)의 가동율이 개시 이전 기간까지 분모(전체 업무일)에 포함되어 부당하게 낮게 계산되던 문제를 위한 "차량개시일" 필드 신규 추가: 차량 상세 모달(관리자)에서 개시일 입력/해제 가능, 개시일 이전 월은 월별 가동율표·모달 미니셀·엑셀 내보내기에서 "–"(데이터없음)로 표시되고 연평균 계산에서 제외되며, 개시월은 개시일부터의 업무일만 분모로 반영 | 변경: monthlyUtilForPlate(), monthCellHtml(), renderMonthly(), openVehicle() 모달(branch-edit 신규 행, 미니 월별 셀), exportToExcel(), setServiceStartDate()(신규), clearServiceStartDate()(신규)
   [2026-07-31] ① 롯데렌터카 계약관리 엑셀 DB 반영: 46대 전체에 계약시작일·계약종료일(F/G열)과 월대여료(K열, 천원단위→원 환산) 필드 추가, 차량개시일(가동율 계산용)은 실제 신규개시 차량인 183호5250·181호6175 2대에만 한정 반영(나머지 44대의 2025-08-31은 일괄 재계약일로 판단해 미반영). 모달에 계약기간·월대여료 표시, 엑셀 차량현황 시트에 계약시작일·계약종료일·월대여료(원) 컬럼 추가. ② 지역구분 재배치 반영 시 재배치 일자를 함께 입력·기록하도록 개선(예: 181호6065 경기→강원 재배치 이력 관리): branchHistory 배열 신규 도입, 재배치 반영 모달에 날짜 입력란 추가, 이미 반영된 재배치를 소급 기록하는 경우(현재 소속과 동일 선택 시)에는 최초배정을 출발점으로 기록 | 변경: FLEET_REGISTRY(fee/contractStartDate/contractEndDate 필드 추가), loadData()·refreshDataFromStorage() 백필 로직, openVehicle() 모달(계약기간/월대여료 표시, 재배치일자 입력란, 재배치 이력 표시), changeBranch(), exportToExcel()
   [2026-07-31] 계약시작일=차량개시일이라는 확인에 따라, ①번 항목에서 183호5250·181호6175 2대로 한정했던 차량개시일(serviceStartDate)을 46대 전체에 계약시작일과 동일 값으로 반영(FLEET_REGISTRY 데이터만 수정, 로직 변경 없음) → 이제 44대의 2025-08-31도 가동율 계산 기준 개시일로 반영되어, 개시 이전 월은 월별 가동율표·엑셀에서 "–"(데이터없음) 처리됨 | 변경: FLEET_REGISTRY(serviceStartDate 46건 추가/일치화)
+  [2026-07-31] 월대여료(fee) 단위 오류 수정: 롯데렌터카 원본 단가가 천원단위였는데 원단위로 그대로 반영되어 실제보다 10배 높게 표시되던 문제(예: 그랜저 5,280,000원→528,000원) → 46대 전체 fee 값을 1/10로 정정 | 변경: FLEET_REGISTRY(fee 46건 정정)
+  [2026-07-31] 재배치 이력(branchHistory) 개별 항목 수정/삭제 기능 신규 추가: 기존에는 changeBranch()로 새 이력을 추가만 할 수 있어, 이미 기록된 이력의 날짜가 잘못된 경우 정정할 방법이 없었음(현재 소속을 재선택하면 새 이력이 중복 추가됨) → 관리자 모달 재배치 이력 각 항목에 날짜 입력란·저장 버튼·삭제 버튼(확인 팝업 포함) 추가 | 변경: openVehicle() 모달(재배치 이력 영역), saveBranchHistoryDate()(신규), deleteBranchHistoryEntry()(신규)
 =================================================================
 -->
 
@@ -1472,52 +1474,52 @@ let sessionSubmits = []; // 이번 세션에서 사용자가 제출한 항목들
 // 보유차량 명단 (차량현황.xls 기준, 공용차량 46대)
 // ============================================================
 const FLEET_REGISTRY = [
-{"plate":"181호6088","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":4590000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6031","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"경기강원지역본부","fee":6270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181하4790","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"강원지부","fee":5260000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6062","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6063","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6064","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6065","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6037","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"경남지역본부","fee":6270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6089","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"경남지역본부","fee":5280000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4154","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"부산지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6039","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"광주전남제주지역본부","fee":6270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6091","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"광주전남제주지역본부","fee":5280000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4157","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"광주전남제주지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4158","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"광주전남제주지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6035","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"대구경북지역본부","fee":6270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6042","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"대구경북지역본부","fee":5280000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4136","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대구경북지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4137","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"울산지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4138","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대구경북지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6033","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"대전세종충남지역본부","fee":6270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181하4792","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"충남지부","fee":5280000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4132","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대전세종충남지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4133","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"충북지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4134","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대전세종충남지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4135","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"충남지부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6036","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"부산지역본부","fee":6270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6043","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"부산지역본부","fee":5280000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4141","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경남지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6038","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"울산지역본부","fee":6270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6090","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"울산지역본부","fee":5280000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4155","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대구경북지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6032","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"인천지역본부","fee":6270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181하4791","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"인천지역본부","fee":5280000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4162","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"퓨처캠","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6040","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"전북지역본부","fee":6270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6092","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"전북지역본부","fee":5280000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4156","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"전북지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6034","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"충북지역본부","fee":6270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6041","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"충북지역본부","fee":5280000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4139","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대전세종충남지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"231호4140","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"충북지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181하4788","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"DT센터","fee":5280000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181하4789","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"DT센터","fee":5280000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181하4793","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"인천지역본부","fee":4270000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
-{"plate":"181호6175","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"DT센터","fee":6270000,"serviceStartDate":"2025-09-15","contractStartDate":"2025-09-15","contractEndDate":"2029-09-15"},
-{"plate":"183호5250","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"국가기술표준원(파견)","fee":5280000,"serviceStartDate":"2026-05-12","contractStartDate":"2026-05-12","contractEndDate":"2030-05-12"}
+{"plate":"181호6088","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":459000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6031","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"경기강원지역본부","fee":627000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181하4790","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"강원지부","fee":526000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6062","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6063","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6064","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6065","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경기강원지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6037","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"경남지역본부","fee":627000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6089","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"경남지역본부","fee":528000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4154","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"부산지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6039","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"광주전남제주지역본부","fee":627000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6091","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"광주전남제주지역본부","fee":528000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4157","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"광주전남제주지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4158","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"광주전남제주지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6035","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"대구경북지역본부","fee":627000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6042","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"대구경북지역본부","fee":528000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4136","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대구경북지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4137","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"울산지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4138","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대구경북지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6033","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"대전세종충남지역본부","fee":627000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181하4792","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"충남지부","fee":528000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4132","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대전세종충남지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4133","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"충북지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4134","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대전세종충남지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4135","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"충남지부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6036","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"부산지역본부","fee":627000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6043","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"부산지역본부","fee":528000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4141","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"경남지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6038","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"울산지역본부","fee":627000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6090","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"울산지역본부","fee":528000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4155","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대구경북지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6032","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"인천지역본부","fee":627000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181하4791","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"인천지역본부","fee":528000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4162","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"퓨처캠","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6040","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"전북지역본부","fee":627000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6092","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"전북지역본부","fee":528000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4156","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"전북지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6034","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"충북지역본부","fee":627000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6041","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"충북지역본부","fee":528000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4139","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"대전세종충남지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"231호4140","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"충북지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181하4788","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"DT센터","fee":528000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181하4789","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"DT센터","fee":528000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181하4793","model":"AVANTE CN7 (G)1.6 모던 2WD AT","branch":"인천지역본부","fee":427000,"contractStartDate":"2025-08-31","contractEndDate":"2029-08-31","serviceStartDate":"2025-08-31"},
+{"plate":"181호6175","model":"GRANDEUR GN7 (G)2.5 프리미엄 2WD AT","branch":"DT센터","fee":627000,"serviceStartDate":"2025-09-15","contractStartDate":"2025-09-15","contractEndDate":"2029-09-15"},
+{"plate":"183호5250","model":"SONATA DN8 디엣지 (G)2.0 프리미엄 2WD AT","branch":"국가기술표준원(파견)","fee":528000,"serviceStartDate":"2026-05-12","contractStartDate":"2026-05-12","contractEndDate":"2030-05-12"}
 ];
 const REGISTRY_MAP = {};
 FLEET_REGISTRY.forEach(v=>REGISTRY_MAP[v.plate]=v);
@@ -2800,7 +2802,16 @@ function openVehicle(plate){
       <button class="btn" style="padding:6px 12px;font-size:12px;${v.addedManually?'':'margin-left:auto;'}${v.active===false?'background:var(--good);color:#fff;':'background:none;border:1px solid var(--bad);color:var(--bad);'}" onclick="toggleVehicleActive('${plate}')">${v.active===false?'운용 재개':'운용 중지'}</button>
       ${v.addedManually?`<button class="btn" style="padding:6px 12px;font-size:12px;margin-left:auto;background:var(--bad);color:#fff;border:none;" onclick="deleteVehicleForever('${plate}')" title="수동으로 추가한 테스트 차량을 명단에서 완전히 삭제합니다">🗑 완전 삭제</button>`:''}
     </div>
-    ${(v.branchHistory&&v.branchHistory.length)?`<div class="branch-edit"><label class="muted" style="font-size:12px;">재배치 이력</label><span class="orig" style="word-break:keep-all;">${v.branchHistory.map(h=>`${escapeHtml(h.date)} : ${escapeHtml(h.from||'')} → ${escapeHtml(h.branch)}`).join(' · ')}</span></div>`:''}
+    ${(v.branchHistory&&v.branchHistory.length)?`<div class="branch-edit" style="flex-direction:column;align-items:stretch;gap:6px;">
+      <label class="muted" style="font-size:12px;">재배치 이력</label>
+      ${v.branchHistory.map((h,idx)=>`
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <span class="orig" style="word-break:keep-all;">${escapeHtml(h.from||'')} → ${escapeHtml(h.branch)}</span>
+          <input type="date" id="branchHistDate-${plate}-${idx}" value="${h.date||''}" style="width:140px;">
+          <button class="btn btn-primary" style="padding:4px 10px;font-size:11px;" onclick="saveBranchHistoryDate('${plate}',${idx})">날짜 저장</button>
+          <button class="btn" style="padding:4px 10px;font-size:11px;background:none;border:1px solid var(--bad);color:var(--bad);" onclick="deleteBranchHistoryEntry('${plate}',${idx})">🗑 이력 삭제</button>
+        </div>`).join('')}
+    </div>`:''}
     <div class="branch-edit">
       <label class="muted" style="font-size:12px;">차량개시일</label>
       <input type="date" id="svcStart-${plate}" value="${v.serviceStartDate||''}">
@@ -3623,6 +3634,36 @@ async function changeBranch(plate){
   const saved = await saveData();
   if(!saved){ v.branch=prevBranch; v.branchHistory=prevHistory; showAdminToast('⚠ 저장 실패: 지역구분 변경이 서버에 반영되지 않았습니다.','bad'); return; }
   showAdminToast(`'${plate}' 재배치가 기록되었습니다. (${fromBranch} → ${newBranch}, ${reassignDate})`,'good');
+  renderAll();openVehicle(plate);
+}
+
+// 재배치 이력 중 특정 항목의 날짜만 정정 (from/branch는 유지, 새 이력 추가가 아닌 기존 항목 값 수정)
+async function saveBranchHistoryDate(plate,idx){
+  const v=data.vehicles[plate];
+  if(!v||!Array.isArray(v.branchHistory)||!v.branchHistory[idx]) return;
+  const input=document.getElementById(`branchHistDate-${plate}-${idx}`);
+  const newDate=input?input.value:'';
+  if(!newDate){ showAdminToast('⚠ 날짜를 선택해주세요.','bad'); if(input) input.focus(); return; }
+  const prevHistory=JSON.parse(JSON.stringify(v.branchHistory));
+  v.branchHistory[idx].date=newDate;
+  const saved=await saveData();
+  if(!saved){ v.branchHistory=prevHistory; showAdminToast('⚠ 저장 실패: 재배치 이력 날짜 수정이 서버에 반영되지 않았습니다.','bad'); return; }
+  showAdminToast(`'${plate}' 재배치 이력 날짜가 ${newDate}(으)로 수정되었습니다.`,'good');
+  renderAll();openVehicle(plate);
+}
+
+// 재배치 이력 항목 삭제 (잘못 기록된 이력을 되돌릴 때 사용)
+async function deleteBranchHistoryEntry(plate,idx){
+  const v=data.vehicles[plate];
+  if(!v||!Array.isArray(v.branchHistory)||!v.branchHistory[idx]) return;
+  const h=v.branchHistory[idx];
+  const warnMsg=`⚠️ '${plate}' 차량의 아래 재배치 이력을 삭제합니다.\n${h.date||''} : ${h.from||''} → ${h.branch}\n이 작업은 되돌릴 수 없습니다.\n\n계속 진행하시겠습니까?`;
+  if(!confirm(warnMsg)) return;
+  const prevHistory=v.branchHistory;
+  v.branchHistory=v.branchHistory.filter((_,i)=>i!==idx);
+  const saved=await saveData();
+  if(!saved){ v.branchHistory=prevHistory; showAdminToast('⚠ 저장 실패: 재배치 이력 삭제가 서버에 반영되지 않았습니다.','bad'); return; }
+  showAdminToast(`'${plate}' 재배치 이력이 삭제되었습니다.`,'good');
   renderAll();openVehicle(plate);
 }
 
