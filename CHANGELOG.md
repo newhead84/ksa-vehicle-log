@@ -71,3 +71,8 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
   - 원인: 8/1 신규 추가된 3개 컬럼(계약개시일·계약종료일·월대여료)이 모바일 전용 `table-layout:fixed` 규칙에 폭 미지정 상태로 남아있어, min-width 560px 내에서 남은 여백을 3개 컬럼이 나눠쓰며 텍스트 겹침 발생
   - 수정: 7/8/9번째 컬럼 폭 지정(78px/78px/90px) + white-space:nowrap 추가, 컨테이너 min-width 560px→790px로 확대
   - 변경 영역: CSS(.region-table th:nth-child(7/8/9), .region-table td:nth-child(7/8/9), .table-scroll .region-table)
+- 차량별 "주사용자"(운행건수 기준 1~3위) 표기 기능 신규 추가
+  - 월별 가동율 표: 차량번호 컬럼 오른쪽(1월 컬럼 왼쪽)에 "주사용자" 컬럼 신규 추가, 순위·이름·건수를 줄바꿈으로 표기(예: `1위 홍길동(12)`), 운행기록 없으면 "–"
+  - 공용차량 현황 카드: ① 모델명 아래 표시되던 지역구분(사업자명)이 상단 지역그룹 제목과 중복되어 제거, ② "최근 운행 YYYY-MM-DD" 옆에 최근운행자명 추가 표기, ③ 하단 상태 배지 중 "운행기록없음"/"정상"이 표시되던 케이스를 주사용자(1~3위) 라벨로 대체(단, "점검필요 N건"·"운용중지" 배지는 기존과 동일하게 유지)
+  - 집계 기준: 차량별 전체 운행기록(trips)의 운행자(t.user) 필드를 건수 기준 내림차순 정렬(동률 시 이름 가나다순), 개인사용·출퇴근사용 건도 포함하여 집계(가동율 계산과는 별개 지표)
+  - 변경 영역: `topDriversForPlate()`(신규), `topDriversCellHtml()`(신규), `topDriversTagHtml()`(신규), `renderMonthly()`, `vcardHtml()`, CSS(`.top-driver-cell`, `.top-drivers-tag`, `.month-table` 컬럼폭 재조정)

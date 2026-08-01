@@ -48,6 +48,7 @@
   [2026-08-01] 지역구분별 가동현황 표 UI 2차 조정: ① 운행건수 헤더 괄호설명 "당시소속 기준, 개인·출퇴근사용 제외"→"개인사용제외"로 축약(데스크탑에서 줄바꿈되어 어긋나 보이던 문제 해소, white-space:nowrap 적용), ② 월대여료(원) 컬럼 우측정렬 누락 수정, ③ 총주유비 컬럼에 우측 패딩 추가 및 가동율 막대를 우측정렬→가운데정렬로 변경해 두 컬럼이 붙어 보이던 문제 해소 | 변경: CSS(.region-table td:nth-child(5), .region-table td:nth-child(9)(신규), .region-table .util-bar-wrap, .region-table th .region-th-note), renderRegionSummary() 헤더 텍스트
   [2026-08-01] 지역구분별 가동현황 표 열 정렬 규칙 재정비: ① 차량대수·운행건수·총주행거리·가동율·계약개시일·계약종료일은 제목 포함 중간맞춤, ② 총주유비·월대여료는 제목만 중간맞춤(내용은 기존 우측맞춤 유지) | 변경: CSS(.region-table th:nth-child(2/3/4/6/7/8)(신규), .region-table td:nth-child(2/3/4/6/7/8)(신규), .region-table th:nth-child(5/9)(신규))
   [2026-08-01] 지역구분별 가동현황 표 모바일 화면 깨짐(계약개시일/계약종료일/월대여료 텍스트 겹침) 수정: 신규 추가된 3개 컬럼(7/8/9번째)이 모바일 전용 table-layout:fixed 규칙에 폭 미지정 상태로 남아있어 발생한 문제 — 컬럼별 폭 지정(78px/78px/90px) 및 min-width 560px→790px로 확대 | 변경: CSS(.region-table th:nth-child(7/8/9), .region-table td:nth-child(7/8/9), .table-scroll .region-table)
+  [2026-08-01] ① 월별 가동율 표에 "주사용자"(운행건수 1~3위) 컬럼을 차량번호 오른쪽(1월 왼쪽)에 신규 추가, ② 공용차량 현황 카드에서 모델명 아래 중복 표시되던 지역구분(사업자명) 제거 및 최근운행 날짜 옆에 최근운행자명 추가, ③ 카드 하단 "운행기록없음/정상" 배지를 주사용자(1~3위) 표기로 대체(점검필요·운용중지 배지는 기존 유지) | 변경: topDriversForPlate()(신규), topDriversCellHtml()(신규), topDriversTagHtml()(신규), renderMonthly(), vcardHtml(), CSS(.top-driver-cell, .top-drivers-tag, .month-table 컬럼폭 재조정)
 =================================================================
 -->
 
@@ -360,11 +361,13 @@
   .month-table-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);}
   .month-table{width:100%;border-collapse:collapse;font-size:12px;min-width:680px;table-layout:fixed;}
   .month-table th{background:var(--paper);padding:8px 4px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;}
-  .month-table th:first-child{text-align:left;padding-left:12px;padding-right:6px;width:20%;}
-  .month-table th:nth-child(n+2):nth-child(-n+13){width:6%;}
-  .month-table th:last-child{width:8%;}
+  .month-table th:first-child{text-align:left;padding-left:12px;padding-right:6px;width:17%;}
+  .month-table th:nth-child(2){width:13%;}
+  .month-table th:nth-child(n+3):nth-child(-n+14){width:5.2%;}
+  .month-table th:last-child{width:7%;}
   .month-table td{padding:6px 3px;text-align:center;border-bottom:1px solid var(--line);}
   .month-table td:first-child{text-align:left;padding-left:12px;padding-right:6px;font-family:'Paperlogy';}
+  .top-driver-cell{text-align:left;padding-left:8px;font-size:10px;line-height:1.6;font-weight:500;font-family:inherit;color:var(--muted);word-break:keep-all;}
   .plate-cell{display:flex;flex-direction:row;align-items:baseline;gap:6px;line-height:1.25;white-space:nowrap;overflow:hidden;}
   .plate-cell .plate-num{font-weight:600;font-size:13px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;}
   .plate-cell .plate-model{font-size:12px;color:var(--muted);font-weight:500;overflow:hidden;text-overflow:ellipsis;}
@@ -386,6 +389,7 @@
   .badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;margin-top:8px;}
   .badge-good{background:var(--good-soft);color:var(--good);}
   .badge-bad{background:var(--bad-soft);color:var(--bad);}
+  .top-drivers-tag{display:block;font-size:10px;font-weight:600;color:#1D4ED8;background:#EFF6FF;padding:3px 8px;border-radius:8px;margin-top:8px;line-height:1.5;word-break:keep-all;width:fit-content;}
   .empty-state{padding:40px;text-align:center;color:var(--muted);font-size:13px;border:1px dashed var(--line);border-radius:var(--radius);}
 
   /* ===== Modal ===== */
@@ -706,11 +710,13 @@
     .util-bar{width:40px;}
 
     /* 월별 가동율 표: 차량번호+차종을 한 줄로 표시 (좌우 스크롤로 확인) */
-    .month-table{min-width:560px;}
+    .month-table{min-width:680px;}
     .month-table th:first-child{width:130px;}
-    .month-table th:nth-child(n+2):nth-child(-n+13){width:auto;}
+    .month-table th:nth-child(2){width:90px;}
+    .month-table th:nth-child(n+3):nth-child(-n+14){width:auto;}
     .month-table th:last-child{width:auto;}
     .month-table td:first-child{padding-left:10px;padding-right:4px;}
+    .top-driver-cell{font-size:9px;padding-left:6px;}
     .plate-cell{gap:5px;}
     .plate-cell .plate-num{font-size:12px;}
     .plate-cell .plate-model{font-size:11px;}
@@ -2660,17 +2666,17 @@ function renderMonthly(year){
       const ma=modelOrder(data.vehicles[a]?.model||''),mb=modelOrder(data.vehicles[b]?.model||'');
       return ma!==mb?ma-mb:a.localeCompare(b);
     });
-    rowsHtml+=`<tr class="month-branch-row"><td colspan="14" style="cursor:pointer;" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleGroup('${branch.replace(/'/g,"\\'")}')">${branch}</td></tr>`;
+    rowsHtml+=`<tr class="month-branch-row"><td colspan="15" style="cursor:pointer;" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleGroup('${branch.replace(/'/g,"\\'")}')">${branch}</td></tr>`;
     ps.forEach(p=>{
       const hasAnyTrip=hasMonthlyDataFor(p,monthlyYear);
       const monthly=monthlyUtilForPlate(p,monthlyYear);
       const validMonths=monthly.filter(m=>!m.beforeService);
       const avg=hasAnyTrip&&validMonths.length?validMonths.reduce((s,m)=>s+m.rate,0)/validMonths.length:0;
       const modelName=modelShort(data.vehicles[p]?.model||'');
-      rowsHtml+=`<tr><td><div class="plate-cell" style="cursor:pointer;" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${p}')"><span class="plate-num">${p}</span><span class="plate-model">${modelName}</span></div></td>${monthly.map(m=>monthCellHtml(m.rate,hasAnyTrip,m.beforeService)).join('')}<td class="month-cell month-avg ${hasAnyTrip?(avg>=60?'m-good':avg>=30?'m-mid':'m-bad'):'m-none'}">${hasAnyTrip?avg.toFixed(0)+'%':'–'}</td></tr>`;
+      rowsHtml+=`<tr><td><div class="plate-cell" style="cursor:pointer;" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${p}')"><span class="plate-num">${p}</span><span class="plate-model">${modelName}</span></div></td>${topDriversCellHtml(p)}${monthly.map(m=>monthCellHtml(m.rate,hasAnyTrip,m.beforeService)).join('')}<td class="month-cell month-avg ${hasAnyTrip?(avg>=60?'m-good':avg>=30?'m-mid':'m-bad'):'m-none'}">${hasAnyTrip?avg.toFixed(0)+'%':'–'}</td></tr>`;
     });
   });
-  document.getElementById('monthlyArea').innerHTML=`<div class="month-table-wrap"><table class="month-table"><thead><tr><th>차량번호</th>${monthLabels.map(l=>`<th>${l}</th>`).join('')}<th>연평균</th></tr></thead><tbody>${rowsHtml||`<tr><td colspan="14" class="muted" style="text-align:center;padding:20px;">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
+  document.getElementById('monthlyArea').innerHTML=`<div class="month-table-wrap"><table class="month-table"><thead><tr><th>차량번호</th><th>주사용자</th>${monthLabels.map(l=>`<th>${l}</th>`).join('')}<th>연평균</th></tr></thead><tbody>${rowsHtml||`<tr><td colspan="15" class="muted" style="text-align:center;padding:20px;">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
 }
 
 function toggleSection(h2){
@@ -2805,6 +2811,38 @@ function driverSummaryMap(){
   return map;
 }
 
+// 특정 차량의 주사용자(운행건수 기준 상위 n명, 기본 3명) 계산 — 전체 운행기록(개인/출퇴근 포함) 기준
+function topDriversForPlate(plate,n){
+  n=n||3;
+  const trips=(data.vehicles[plate]&&data.vehicles[plate].trips)||[];
+  const map={};
+  trips.forEach(t=>{
+    const name=(t.user||'').trim();
+    if(!name) return;
+    map[name]=(map[name]||0)+1;
+  });
+  return Object.keys(map)
+    .sort((a,b)=>map[b]-map[a]||a.localeCompare(b))
+    .slice(0,n)
+    .map(name=>({name,count:map[name]}));
+}
+
+// 월별 가동율 표의 "주사용자" 셀 HTML (순위별 줄바꿈 표기)
+function topDriversCellHtml(plate){
+  const top=topDriversForPlate(plate,3);
+  if(!top.length) return `<td class="month-cell top-driver-cell m-none">–</td>`;
+  const lines=top.map((d,i)=>`${i+1}위 ${escapeHtml(d.name)}(${d.count})`).join('<br>');
+  return `<td class="month-cell top-driver-cell">${lines}</td>`;
+}
+
+// 공용차량 현황 카드의 주사용자 라벨 HTML (운행기록 없으면 빈 문자열 반환)
+function topDriversTagHtml(plate){
+  const top=topDriversForPlate(plate,3);
+  if(!top.length) return '';
+  const label=top.map((d,i)=>`${i+1}위 ${escapeHtml(d.name)}`).join(' · ');
+  return `<div class="top-drivers-tag">주사용자 ${label}</div>`;
+}
+
 function renderDriverSummary(){
   const map=driverSummaryMap();
   const q=(document.getElementById('driverSearchBox')?.value||'').trim();
@@ -2928,9 +2966,15 @@ function renderCommuteUseList(){
 function vcardHtml(p){
   const{v,trips,totalDist,totalFuel,issues,lastDate,util}=vehicleStatsOf(p);
   const inactive=v.active===false;
-  let badge=inactive?`<span class="badge" style="background:#E5E7EB;color:#9CA3AF;">운용중지</span>`:`<span class="badge badge-good">정상</span>`;
-  if(!inactive&&trips.length===0) badge=`<span class="badge" style="background:#EFEFEA;color:var(--muted);">운행기록 없음</span>`;
-  else if(!inactive&&issues>0) badge=`<span class="badge badge-bad">점검필요 ${issues}건</span>`;
+  const lastTrip=trips.length?trips.slice().sort(tripChronoCompare)[trips.length-1]:null;
+  const lastDriverName=lastTrip?(lastTrip.user||'').trim():'';
+  let badge;
+  if(inactive) badge=`<span class="badge" style="background:#E5E7EB;color:#9CA3AF;">운용중지</span>`;
+  else if(issues>0) badge=`<span class="badge badge-bad">점검필요 ${issues}건</span>`;
+  else{
+    const tag=topDriversTagHtml(p);
+    badge=tag||`<span class="badge" style="background:#EFEFEA;color:var(--muted);">운행기록 없음</span>`;
+  }
   return `<div class="vcard" data-plate="${p.replace(/"/g,'&quot;')}" style="${inactive?'opacity:.55;border-style:dashed;':''}" >
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px;">
       <div onclick="openVehicle('${p}')" style="cursor:pointer;flex:1;">
@@ -2941,7 +2985,7 @@ function vcardHtml(p){
         style="background:none;border:1.5px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px;cursor:pointer;flex-shrink:0;color:var(--muted);">QR</button>`}
     </div>
     <div onclick="openVehicle('${p}')" style="cursor:pointer;">
-    <div class="region" style="margin-bottom:10px;">${escapeHtml(v.branch||'미배정')} · 최근 운행 ${lastDate}</div>
+    <div class="region" style="margin-bottom:10px;">최근 운행 ${lastDate}${lastDriverName?` · ${escapeHtml(lastDriverName)}`:''}</div>
     <div class="vstats">
       <div>주행거리<b>${totalDist.toLocaleString()}km</b></div>
       <div>주유비<b>${totalFuel.toLocaleString()}원</b></div>
