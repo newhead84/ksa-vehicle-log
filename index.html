@@ -45,6 +45,7 @@
   [2026-08-01] 변경이력 관리 방식을 CHANGELOG.md 분리 방식으로 전환: 이 파일 상단 블록에는 최근 항목만 남기고, 과거 전체 이력(2026-07-26~08-01, 36건)은 CHANGELOG.md로 이전 | 변경: 문서 구조(코드 변경 없음)
   [2026-08-01] 지역구분별 가동현황 표 UI 조정: ① 가동율(막대바+%)·총주유비 컬럼 우측정렬, ② 운행건수 헤더의 괄호 설명문구가 컬럼 폭을 과도하게 넓히던 문제 수정(설명문구 줄바꿈+최대폭 제한, 다른 표에는 영향 없도록 .region-table 범위로 한정) | 변경: CSS(.region-table td:nth-child(5), .region-table .util-bar-wrap, .region-table th .region-th-note)
   [2026-08-01] 월별 가동율 표에서 지역본부명·차량번호 클릭 시 하단 공용차량 현황의 해당 지역그룹/차량카드로 스크롤 이동하는 기능 추가(지역구분별 가동현황 표의 기존 지역본부 클릭 이동 기능과 동일한 사용성 제공) | 변경: renderMonthly()(클릭 핸들러 추가), scrollToVehicleCard()(신규), vcardHtml()(data-plate 속성 추가)
+  [2026-08-01] 지역구분별 가동현황 표 UI 2차 조정: ① 운행건수 헤더 괄호설명 "당시소속 기준, 개인·출퇴근사용 제외"→"개인사용제외"로 축약(데스크탑에서 줄바꿈되어 어긋나 보이던 문제 해소, white-space:nowrap 적용), ② 월대여료(원) 컬럼 우측정렬 누락 수정, ③ 총주유비 컬럼에 우측 패딩 추가 및 가동율 막대를 우측정렬→가운데정렬로 변경해 두 컬럼이 붙어 보이던 문제 해소 | 변경: CSS(.region-table td:nth-child(5), .region-table td:nth-child(9)(신규), .region-table .util-bar-wrap, .region-table th .region-th-note), renderRegionSummary() 헤더 텍스트
 =================================================================
 -->
 
@@ -325,9 +326,10 @@
   .region-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
   .region-table th{background:var(--paper);}
   .region-table td, .region-table th{padding:9px 12px;font-size:13px;}
-  .region-table td:nth-child(5){text-align:right;}
-  .region-table .util-bar-wrap{justify-content:flex-end;}
-  .region-table th .region-th-note{display:block;font-weight:400;white-space:normal;max-width:150px;margin:3px auto 0;line-height:1.35;}
+  .region-table td:nth-child(5){text-align:right;padding-right:22px;}
+  .region-table td:nth-child(9){text-align:right;}
+  .region-table .util-bar-wrap{justify-content:center;}
+  .region-table th .region-th-note{display:block;font-weight:400;white-space:nowrap;margin:3px auto 0;line-height:1.35;}
   .util-bar-wrap{display:flex;align-items:center;gap:8px;}
   .util-bar{width:70px;height:6px;border-radius:4px;background:var(--line);overflow:hidden;}
   .util-bar-fill{height:100%;border-radius:4px;}
@@ -2772,7 +2774,7 @@ function renderRegionSummary(){
     const feeSum=cb?cb.feeSum:0;
     return `<tr><td title="${branch} · 클릭 시 하단 공용차량 현황으로 이동" style="cursor:pointer;" onclick="scrollToVehicleGroup('${branch.replace(/'/g,"\\'")}')"><b>${branch}</b></td><td class="mono">${cars}대</td><td class="mono">${tb.count}건</td><td class="mono">${tb.dist.toLocaleString()}km</td><td class="mono">${tb.fuel.toLocaleString()}원</td><td>${tb.count>0?utilBar(rate):'<span style="color:var(--muted);font-size:12px;">–</span>'}</td><td class="mono">${repStart?shortYMD(repStart):'<span style="color:var(--muted);">–</span>'}</td><td class="mono">${repEnd?shortYMD(repEnd):'<span style="color:var(--muted);">–</span>'}</td><td class="mono">${feeSum>0?feeSum.toLocaleString()+'원':'<span style="color:var(--muted);">–</span>'}</td></tr>`;
   }).join('');
-  document.getElementById('regionSummary').innerHTML=`<div class="table-scroll"><table class="region-table"><thead><tr><th>지역구분</th><th>차량대수</th><th>운행건수<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (당시소속 기준, 개인·출퇴근사용 제외)</span></th><th>총주행거리</th><th>총주유비</th><th>가동율</th><th>계약개시일<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (대표)</span></th><th>계약종료일<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (대표)</span></th><th>월대여료(원)<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (합계)</span></th></tr></thead><tbody>${rows||`<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
+  document.getElementById('regionSummary').innerHTML=`<div class="table-scroll"><table class="region-table"><thead><tr><th>지역구분</th><th>차량대수</th><th>운행건수<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (개인사용제외)</span></th><th>총주행거리</th><th>총주유비</th><th>가동율</th><th>계약개시일<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (대표)</span></th><th>계약종료일<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (대표)</span></th><th>월대여료(원)<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (합계)</span></th></tr></thead><tbody>${rows||`<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
 }
 
 // 차량 전체를 순회하며 운행기록을 운행자(t.user) 기준으로 집계
