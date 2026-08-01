@@ -43,6 +43,7 @@
   [2026-08-01] 위 변경 시 남아있던 "최신 5건만 표시" 건수 제한 제거: 10일 이내 기록은 건수 제한 없이 전부 표시(최신순 정렬만 적용) | 변경: loadUserEditable()
   [2026-08-01] 지역구분별 가동현황 표 오른쪽에 렌탈계약정보 3개 컬럼 추가: 계약개시일·계약종료일(YY-MM-DD, 지역 내 대수가 가장 많은 대표 계약기간 1건), 월대여료(원, 지역 내 전체 차량 합계, 천단위 구분) | 변경: shortYMD()(신규), renderRegionSummary()
   [2026-08-01] 변경이력 관리 방식을 CHANGELOG.md 분리 방식으로 전환: 이 파일 상단 블록에는 최근 항목만 남기고, 과거 전체 이력(2026-07-26~08-01, 36건)은 CHANGELOG.md로 이전 | 변경: 문서 구조(코드 변경 없음)
+  [2026-08-01] 모바일에서 월별 가동율 표의 차량번호 셀(차량번호+차종) 잘림 수정: 좁은 화면에서 차종명이 차량번호에 밀려 한두 글자만 보이던 문제 해결 — 차량번호/차종을 세로로 배치하고 각각 컬럼 폭 안에서 말줄임(...) 처리 | 변경: CSS(모바일 미디어쿼리 .plate-cell/.plate-num/.plate-model)
   [2026-08-01] 지역구분별 가동현황 표 UI 조정: ① 가동율(막대바+%)·총주유비 컬럼 우측정렬, ② 운행건수 헤더의 괄호 설명문구가 컬럼 폭을 과도하게 넓히던 문제 수정(설명문구 줄바꿈+최대폭 제한, 다른 표에는 영향 없도록 .region-table 범위로 한정) | 변경: CSS(.region-table td:nth-child(5), .region-table .util-bar-wrap, .region-table th .region-th-note)
   [2026-08-01] 월별 가동율 표에서 지역본부명·차량번호 클릭 시 하단 공용차량 현황의 해당 지역그룹/차량카드로 스크롤 이동하는 기능 추가(지역구분별 가동현황 표의 기존 지역본부 클릭 이동 기능과 동일한 사용성 제공) | 변경: renderMonthly()(클릭 핸들러 추가), scrollToVehicleCard()(신규), vcardHtml()(data-plate 속성 추가)
   [2026-08-01] 지역구분별 가동현황 표 UI 2차 조정: ① 운행건수 헤더 괄호설명 "당시소속 기준, 개인·출퇴근사용 제외"→"개인사용제외"로 축약(데스크탑에서 줄바꿈되어 어긋나 보이던 문제 해소, white-space:nowrap 적용), ② 월대여료(원) 컬럼 우측정렬 누락 수정, ③ 총주유비 컬럼에 우측 패딩 추가 및 가동율 막대를 우측정렬→가운데정렬로 변경해 두 컬럼이 붙어 보이던 문제 해소 | 변경: CSS(.region-table td:nth-child(5), .region-table td:nth-child(9)(신규), .region-table .util-bar-wrap, .region-table th .region-th-note), renderRegionSummary() 헤더 텍스트
@@ -720,9 +721,10 @@
     .month-table th:last-child{width:auto;}
     .month-table td:first-child{padding-left:10px;padding-right:2px;}
     .top-driver-cell{font-size:9px;padding-left:6px;}
-    .plate-cell{gap:5px;}
-    .plate-cell .plate-num{font-size:12px;}
-    .plate-cell .plate-model{font-size:11px;}
+    /* 좁은 화면에서는 차량번호 컬럼 폭(90px)이 번호만으로 거의 채워져 차종명이 밀려 잘리므로, 번호/차종을 세로로 쌓아 각각 컬럼 폭 안에서 말줄임 처리 */
+    .plate-cell{flex-direction:column;align-items:stretch;gap:1px;white-space:normal;overflow:hidden;}
+    .plate-cell .plate-num{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .plate-cell .plate-model{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
     .modal{padding:18px 16px;width:94vw;}
     .modal-head .plate-big{font-size:19px;}

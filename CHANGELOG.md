@@ -90,3 +90,8 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
   - 원인: 월별 가동율 표(`renderMonthly()`)는 이미 `modelShort()`로 축약해 표시하고 있었으나, 공용차량 현황 카드(`vcardHtml()`)는 `v.model` 원본 문자열을 축약 없이 그대로 출력하고 있었음
   - 조치: `vcardHtml()`에서도 동일하게 `modelShort(v.model)`을 거치도록 통일 → 카드에 `181호6175 - 그랜저`처럼 축약 모델명만 표시
   - 변경 영역: `vcardHtml()` (`v.model` → `modelShort(v.model)`)
+- 모바일에서 월별 가동율 표 차량번호 셀(차량번호+차종) 잘림 수정
+  - 증상: 좁은 화면에서 차종명(예: 그랜저/소나타 등)이 대부분 잘려 한두 글자만 노출
+  - 원인: 모바일 미디어쿼리에서 `.plate-cell`이 가로(flex-row)로 차량번호+차종을 배치하는데, 첫 컬럼 폭이 90px로 고정되어 있어 차량번호 텍스트만으로 폭이 거의 소진되고 차종명에 남는 공간이 거의 없었음(overflow:hidden으로 인해 말줄임표 없이 그대로 잘림)
+  - 조치: 모바일에서만 `.plate-cell`을 세로(flex-column)로 배치하여 차량번호/차종이 각각 한 줄씩 컬럼 폭 전체를 사용하도록 변경, 각 줄에 `text-overflow:ellipsis` 적용해 실제로 넘칠 경우에도 "..."으로 자연스럽게 표시되도록 개선(데스크탑 레이아웃은 변경 없음)
+  - 변경 영역: CSS(모바일 미디어쿼리 `.plate-cell`, `.plate-cell .plate-num`, `.plate-cell .plate-model`)
