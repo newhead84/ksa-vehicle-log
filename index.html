@@ -70,6 +70,7 @@
   [2026-07-31] 관리자가 운행기록을 수정할 때마다 마지막 수정시각을 기록하는 lastEditedAt 필드 신규 추가(최초 제출시각 submittedAt과 별개, 값은 매 저장 시 최신 시각으로 덮어씀), 엑셀내보내기 '전체운행기록' 시트에 '입력일시'(submittedAt)·'최종수정일시'(lastEditedAt) 2개 컬럼으로 노출 | 변경: saveTripEdits(), exportToExcel()
   [2026-07-31] "💰 월대여료 재동기화"(1회성 단가 정정용) 버튼을 제거하고 "📋 차량계약정보 관리" 버튼으로 교체: 지정 엑셀 양식(차량번호·차종·지역구분·계약시작일·계약종료일·월대여료·이전차량번호) 업로드로 계약정보 변경을 상시 반영할 수 있도록 개선. 기존 차량번호는 계약 연장(단가·계약기간 변경)으로 처리되어 contractHistory에 변경 전/후 값이 기록되고, 신규 차량번호는 등록으로 처리되며 '이전차량번호' 열을 채우면 반납되는 차량을 자동 운용중지 처리하고 replacedFrom/replacedBy로 상호 연결(차량 교체 시나리오, 대수 증감 모두 지원). 반영 전 변경 내역 확인 팝업 표시, 차량 상세 모달에 계약갱신·교체 이력 표시 | 변경: 관리자 툴바(resyncFeeBtn→contractMgmtBtn 버튼), resyncFleetFees()(삭제), openContractImportModal()(신규), downloadContractTemplate()(신규), handleContractExcelUpload()(신규), applyContractImport()(신규), openVehicle() 모달(계약/차량교체 이력 표시 영역)
   [2026-07-31] 신규 "📋 차량계약정보 관리" 버튼이 열람전용 URL(전체·지역별 공통)에도 그대로 노출되던 문제 수정. 근본 원인: applyViewerModeUI()가 "숨길 버튼 id"를 블랙리스트로 나열하는 방식이라 새 관리자 버튼을 추가할 때마다 id를 빠뜨리기 쉬웠음(반복되어 온 패턴) → 관리자 툴바(admin-topbar-actions)는 "허용할 버튼 id"만 나열하는 화이트리스트 방식(VIEWER_ALLOWED_TOOLBAR_BTN_IDS=['refreshBtn','exportExcelBtn'])으로 전환하여, 앞으로 툴바에 어떤 버튼이 추가되어도 명시적으로 허용하지 않는 한 열람전용 모드에서 자동으로 숨겨지도록 구조 변경. 툴바 밖의 차량목록 영역 버튼(차량추가/QR PDF)은 기존과 동일하게 개별 숨김 유지 | 변경: exportToExcel 버튼(id="exportExcelBtn" 부여), applyViewerModeUI(), VIEWER_ALLOWED_TOOLBAR_BTN_IDS(신규)
+  [2026-08-01] "내 제출 기록 수정" 화면의 이름검색 방식이 타인 이름을 알면 누구나 조회·수정 가능한 구조였던 보안 문제 개선: ① 제출 시 브라우저 기기별 임의 토큰(editToken)을 생성해 트립에 함께 저장, ② 본인수정 조회 시 이름이 일치해도 이 기기의 토큰이 함께 일치해야만(=제출 당시 사용한 바로 그 기기) 결과에 노출되도록 필터링, ③ 제출일(submittedAt) 기준 3일(USER_EDIT_WINDOW_DAYS)이 지난 기록은 본인수정 화면에서 제외하고 관리자 문의 안내로 전환(과거 데이터는 editToken이 없어 자동으로 이 규칙에 포함되어 별도 마이그레이션 불필요) | 변경: getDeviceEditToken()(신규), USER_EDIT_WINDOW_DAYS·EDIT_DEVICE_TOKEN_KEY(신규), doSubmit()(editToken 저장), loadUserEditable()(기기토큰·기간 필터링, 안내문구), #userEditWrap 안내문구
 =================================================================
 -->
 
@@ -949,6 +950,9 @@
         <input id="searchSubmitterInput" type="text" style="border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-family:'Paperlogy';font-size:13px;flex:1;min-width:0;" placeholder="이름 입력">
         <button class="btn btn-primary" style="padding:8px 12px;font-size:13px;flex-shrink:0;white-space:nowrap;" onclick="loadUserEditable()">조회</button>
       </div>
+      <div style="font-size:11.5px;color:var(--muted);word-break:keep-all;overflow-wrap:break-word;margin:-4px 0 10px;">
+        ※ 보안을 위해 <b>본인이 제출한 기기</b>에서 <b>제출일 기준 3일 이내</b> 기록만 조회·수정할 수 있습니다.
+      </div>
       <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:8px;">
         <span style="font-size:13px;color:var(--muted);white-space:nowrap;">조회기간</span>
         <button class="btn btn-ghost" style="padding:8px 12px;font-size:12.5px;" onclick="clearUserEditDateRange()">기간 초기화</button>
@@ -1360,6 +1364,33 @@ const FUEL_PRICE_NODE   = 'fuel-price';
 //                        오타/오입력으로 걸러냅니다. (예: 150,000원 이상이면 오류)
 const MAX_TRIP_DISTANCE_KM = 1000;
 const MAX_FUEL_AMOUNT      = 150000;
+
+// ============================================================
+// ★ '내 제출 기록 수정' 보안 기준값 ★
+// USER_EDIT_WINDOW_DAYS : 본인이 제출한 기록이라도, 제출일(submittedAt) 기준 이 일수가
+//                         지나면 본인 수정 화면에서는 더 이상 수정할 수 없고 관리자에게
+//                         문의하도록 안내합니다. (오래된 기록의 무단 수정/조회 노출 최소화)
+// EDIT_DEVICE_TOKEN_KEY : 이름만으로 타인의 기록을 조회·수정하는 것을 막기 위해, 트립을
+//                         제출한 바로 그 브라우저(기기)에만 부여되는 임의 토큰을 저장하는
+//                         localStorage 키입니다. 조회 시 이름이 일치해도 이 토큰이 함께
+//                         일치해야만(=본인이 제출한 바로 그 기기) 수정 화면에 노출됩니다.
+const USER_EDIT_WINDOW_DAYS  = 3;
+const EDIT_DEVICE_TOKEN_KEY  = 'ksaEditDeviceToken';
+
+// 이 기기 고유의 편집 토큰을 반환. 없으면 최초 1회 생성 후 localStorage에 저장(반영구 유지).
+function getDeviceEditToken(){
+  try{
+    let tok = localStorage.getItem(EDIT_DEVICE_TOKEN_KEY);
+    if(!tok){
+      tok = 'dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,12);
+      localStorage.setItem(EDIT_DEVICE_TOKEN_KEY, tok);
+    }
+    return tok;
+  }catch(e){
+    // localStorage 접근 불가(프라이빗 모드 등) 시에도 앱이 죽지 않도록 세션 한정 토큰으로 대체
+    return '__no-storage__';
+  }
+}
 
 // 사용자가 자유 입력하는 텍스트(행선지/비고/운행자명 등)를 HTML에 삽입하기 전
 // 이스케이프 처리하여 저장형 XSS(스크립트 삽입)를 방지합니다.
@@ -5028,7 +5059,8 @@ async function doSubmit(submitter, plate, rows){
       submitter, branchAtTime, imgKey:null, isPersonal:r.isPersonal||false,
       isDaeCha:r.isDaeCha||false, daeChaPate:r.daeChaPate||'',
       isCommute:r.isCommute||false, commuteDir:r.commuteDir||'',
-      submittedAt: new Date().toISOString()
+      submittedAt: new Date().toISOString(),
+      editToken: getDeviceEditToken() // 이 트립을 제출한 기기 식별용(본인수정화면 접근 제어에 사용)
     });
     addedDates.push(isoDate);
     added++;
@@ -5325,6 +5357,22 @@ function loadUserEditable(){
     });
   });
 
+  // 보안: 이름이 일치해도 (1) 이 기기에서 직접 제출한 기록이고 (2) 제출일 기준
+  // USER_EDIT_WINDOW_DAYS일 이내인 경우만 본인수정 화면에 노출한다.
+  // → 타인의 이름을 알아내 임의 기기에서 조회·수정하는 것을 원천 차단.
+  const nameMatchedCount = found.length;
+  const myToken = getDeviceEditToken();
+  const windowMs = USER_EDIT_WINDOW_DAYS * 86400000;
+  const nowMs = Date.now();
+  found = found.filter(f=>{
+    if(f.trip.editToken !== myToken) return false;
+    if(!f.trip.submittedAt) return false; // 이 기능 적용 이전(구버전) 데이터는 기기토큰이 없어 본인수정 불가
+    const submittedMs = new Date(f.trip.submittedAt).getTime();
+    if(isNaN(submittedMs)) return false;
+    return (nowMs - submittedMs) <= windowMs;
+  });
+  const blockedByDeviceOrWindow = nameMatchedCount>0 && found.length===0;
+
   // 조회기간이 설정된 경우, 운행기간(시작일~종료일)이 조회기간과 겹치는 건만 표시
   if(periodFrom || periodTo){
     found=found.filter(f=>{
@@ -5351,9 +5399,18 @@ function loadUserEditable(){
   }
 
   if(found.length===0){
-    body.innerHTML=`<div class="empty-state" style="margin:0;">
-      <b>${name}</b>${(periodFrom||periodTo)?' · 해당 조회기간':''}으로 제출된 기록이 없습니다.
-    </div>`;
+    if(summary) summary.textContent='';
+    if(blockedByDeviceOrWindow){
+      body.innerHTML=`<div class="empty-state" style="margin:0;">
+        <b>${escapeHtml(name)}</b>님 명의로 제출된 기록이 있으나, 본인수정 화면에서는 수정할 수 없습니다.<br><br>
+        본인수정은 <b>제출 당시 사용한 기기</b>에서 <b>제출일 기준 ${USER_EDIT_WINDOW_DAYS}일 이내</b>인 기록만 가능합니다.<br>
+        기간이 지났거나 다른 기기에서 제출한 기록이라면 관리자(${ADMIN_EMAIL})에게 문의해 주세요.
+      </div>`;
+    }else{
+      body.innerHTML=`<div class="empty-state" style="margin:0;">
+        <b>${escapeHtml(name)}</b>${(periodFrom||periodTo)?' · 해당 조회기간':''}으로 제출된 기록이 없습니다.
+      </div>`;
+    }
     return;
   }
 
