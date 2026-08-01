@@ -49,6 +49,8 @@
   [2026-08-01] 지역구분별 가동현황 표 열 정렬 규칙 재정비: ① 차량대수·운행건수·총주행거리·가동율·계약개시일·계약종료일은 제목 포함 중간맞춤, ② 총주유비·월대여료는 제목만 중간맞춤(내용은 기존 우측맞춤 유지) | 변경: CSS(.region-table th:nth-child(2/3/4/6/7/8)(신규), .region-table td:nth-child(2/3/4/6/7/8)(신규), .region-table th:nth-child(5/9)(신규))
   [2026-08-01] 지역구분별 가동현황 표 모바일 화면 깨짐(계약개시일/계약종료일/월대여료 텍스트 겹침) 수정: 신규 추가된 3개 컬럼(7/8/9번째)이 모바일 전용 table-layout:fixed 규칙에 폭 미지정 상태로 남아있어 발생한 문제 — 컬럼별 폭 지정(78px/78px/90px) 및 min-width 560px→790px로 확대 | 변경: CSS(.region-table th:nth-child(7/8/9), .region-table td:nth-child(7/8/9), .table-scroll .region-table)
   [2026-08-01] ① 월별 가동율 표에 "주사용자"(운행건수 1~3위) 컬럼을 차량번호 오른쪽(1월 왼쪽)에 신규 추가, ② 공용차량 현황 카드에서 모델명 아래 중복 표시되던 지역구분(사업자명) 제거 및 최근운행 날짜 옆에 최근운행자명 추가, ③ 카드 하단 "운행기록없음/정상" 배지를 주사용자(1~3위) 표기로 대체(점검필요·운용중지 배지는 기존 유지) | 변경: topDriversForPlate()(신규), topDriversCellHtml()(신규), topDriversTagHtml()(신규), renderMonthly(), vcardHtml(), CSS(.top-driver-cell, .top-drivers-tag, .month-table 컬럼폭 재조정)
+  [2026-08-01] 주사용자 표기 간소화: ① 월별 가동율 표·공용차량 현황 카드 모두에서 "N위" 순위 표현 및 이름 뒤 운행건수(괄호) 표시 제거, 이름만 쉼표로 나열(순서는 기존과 동일하게 운행건수 많은 순), ② 카드 라벨은 "주사용자 : 이름, 이름, 이름" 형식으로 콜론 추가, ③ 월별 가동율 표에서 차량번호와 주사용자 컬럼 사이 간격이 과도하게 떨어져 보이던 문제 수정(차량번호 컬럼 폭 축소 및 우측 패딩 축소, 데스크탑/모바일 모두 반영) | 변경: topDriversCellHtml(), topDriversTagHtml(), CSS(.month-table th:first-child/th:nth-child(2), .month-table td:first-child, 모바일 미디어쿼리 동일 항목)
+  [2026-08-01] 공용차량 현황 카드에서 모델명을 별도 줄(회색 보조텍스트)로 표시하던 것을 차량번호 줄에 병합: "차량번호 - 모델명" 형식(예: 181호6175 - 그랜저), 폰트 크기·색상은 기존 차량번호(.plate 클래스) 스타일 그대로 유지 | 변경: vcardHtml()(모델명 표시용 별도 .region div 제거, .plate 텍스트에 병합)
 =================================================================
 -->
 
@@ -361,12 +363,12 @@
   .month-table-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);}
   .month-table{width:100%;border-collapse:collapse;font-size:12px;min-width:680px;table-layout:fixed;}
   .month-table th{background:var(--paper);padding:8px 4px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;}
-  .month-table th:first-child{text-align:left;padding-left:12px;padding-right:6px;width:17%;}
-  .month-table th:nth-child(2){width:13%;}
+  .month-table th:first-child{text-align:left;padding-left:12px;padding-right:2px;width:11%;}
+  .month-table th:nth-child(2){width:19%;}
   .month-table th:nth-child(n+3):nth-child(-n+14){width:5.2%;}
   .month-table th:last-child{width:7%;}
   .month-table td{padding:6px 3px;text-align:center;border-bottom:1px solid var(--line);}
-  .month-table td:first-child{text-align:left;padding-left:12px;padding-right:6px;font-family:'Paperlogy';}
+  .month-table td:first-child{text-align:left;padding-left:12px;padding-right:2px;font-family:'Paperlogy';}
   .top-driver-cell{text-align:left;padding-left:8px;font-size:10px;line-height:1.6;font-weight:500;font-family:inherit;color:var(--muted);word-break:keep-all;}
   .plate-cell{display:flex;flex-direction:row;align-items:baseline;gap:6px;line-height:1.25;white-space:nowrap;overflow:hidden;}
   .plate-cell .plate-num{font-weight:600;font-size:13px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;}
@@ -711,11 +713,11 @@
 
     /* 월별 가동율 표: 차량번호+차종을 한 줄로 표시 (좌우 스크롤로 확인) */
     .month-table{min-width:680px;}
-    .month-table th:first-child{width:130px;}
-    .month-table th:nth-child(2){width:90px;}
+    .month-table th:first-child{width:90px;}
+    .month-table th:nth-child(2){width:130px;}
     .month-table th:nth-child(n+3):nth-child(-n+14){width:auto;}
     .month-table th:last-child{width:auto;}
-    .month-table td:first-child{padding-left:10px;padding-right:4px;}
+    .month-table td:first-child{padding-left:10px;padding-right:2px;}
     .top-driver-cell{font-size:9px;padding-left:6px;}
     .plate-cell{gap:5px;}
     .plate-cell .plate-num{font-size:12px;}
@@ -2831,16 +2833,16 @@ function topDriversForPlate(plate,n){
 function topDriversCellHtml(plate){
   const top=topDriversForPlate(plate,3);
   if(!top.length) return `<td class="month-cell top-driver-cell m-none">–</td>`;
-  const lines=top.map((d,i)=>`${i+1}위 ${escapeHtml(d.name)}(${d.count})`).join('<br>');
-  return `<td class="month-cell top-driver-cell">${lines}</td>`;
+  const names=top.map(d=>escapeHtml(d.name)).join(', ');
+  return `<td class="month-cell top-driver-cell">${names}</td>`;
 }
 
 // 공용차량 현황 카드의 주사용자 라벨 HTML (운행기록 없으면 빈 문자열 반환)
 function topDriversTagHtml(plate){
   const top=topDriversForPlate(plate,3);
   if(!top.length) return '';
-  const label=top.map((d,i)=>`${i+1}위 ${escapeHtml(d.name)}`).join(' · ');
-  return `<div class="top-drivers-tag">주사용자 ${label}</div>`;
+  const label=top.map(d=>escapeHtml(d.name)).join(', ');
+  return `<div class="top-drivers-tag">주사용자 : ${label}</div>`;
 }
 
 function renderDriverSummary(){
@@ -2978,8 +2980,7 @@ function vcardHtml(p){
   return `<div class="vcard" data-plate="${p.replace(/"/g,'&quot;')}" style="${inactive?'opacity:.55;border-style:dashed;':''}" >
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px;">
       <div onclick="openVehicle('${p}')" style="cursor:pointer;flex:1;">
-        <div class="plate" style="${inactive?'color:var(--muted);':''}">${p}</div>
-        <div class="region">${escapeHtml(v.model||'')}</div>
+        <div class="plate" style="${inactive?'color:var(--muted);':''}">${p}${v.model?` - ${escapeHtml(v.model)}`:''}</div>
       </div>
       ${viewerMode?'':`<button onclick="openQrModal('${p}')" title="QR 출력"
         style="background:none;border:1.5px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px;cursor:pointer;flex-shrink:0;color:var(--muted);">QR</button>`}
