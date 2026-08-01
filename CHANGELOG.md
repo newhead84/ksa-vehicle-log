@@ -65,3 +65,9 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 - 월별 가동율 표에서 지역본부명·차량번호 클릭 시 하단 공용차량 현황의 해당 지역그룹/차량카드로 스크롤 이동하는 기능 추가(지역구분별 가동현황 표의 기존 지역본부 클릭 이동 기능과 동일한 사용성 제공) | 변경: renderMonthly()(클릭 핸들러 추가), scrollToVehicleCard()(신규), vcardHtml()(data-plate 속성 추가)
 - 지역구분별 가동현황 표 UI 2차 조정: ① 운행건수 헤더 괄호설명 "당시소속 기준, 개인·출퇴근사용 제외"→"개인사용제외"로 축약(데스크탑에서 줄바꿈되어 어긋나 보이던 문제 해소, white-space:nowrap 적용), ② 월대여료(원) 컬럼 우측정렬 누락 수정, ③ 총주유비 컬럼에 우측 패딩 추가 및 가동율 막대를 우측정렬→가운데정렬로 변경해 두 컬럼이 붙어 보이던 문제 해소 | 변경: CSS(.region-table td:nth-child(5), .region-table td:nth-child(9)(신규), .region-table .util-bar-wrap, .region-table th .region-th-note), renderRegionSummary() 헤더 텍스트
 - 지역구분별 가동현황 표 열 정렬 규칙 재정비: ① 차량대수·운행건수·총주행거리·가동율·계약개시일·계약종료일은 제목 포함 중간맞춤, ② 총주유비·월대여료는 제목만 중간맞춤(내용은 기존 우측맞춤 유지) | 변경: CSS(.region-table th:nth-child(2/3/4/6/7/8)(신규), .region-table td:nth-child(2/3/4/6/7/8)(신규), .region-table th:nth-child(5/9)(신규))
+
+## 2026-08-01
+- 지역구분별 가동현황 표 모바일 화면 깨짐(계약개시일/계약종료일/월대여료 텍스트 겹침) 수정
+  - 원인: 8/1 신규 추가된 3개 컬럼(계약개시일·계약종료일·월대여료)이 모바일 전용 `table-layout:fixed` 규칙에 폭 미지정 상태로 남아있어, min-width 560px 내에서 남은 여백을 3개 컬럼이 나눠쓰며 텍스트 겹침 발생
+  - 수정: 7/8/9번째 컬럼 폭 지정(78px/78px/90px) + white-space:nowrap 추가, 컨테이너 min-width 560px→790px로 확대
+  - 변경 영역: CSS(.region-table th:nth-child(7/8/9), .region-table td:nth-child(7/8/9), .table-scroll .region-table)
