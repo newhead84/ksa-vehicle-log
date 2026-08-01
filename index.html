@@ -71,6 +71,8 @@
   [2026-07-31] "💰 월대여료 재동기화"(1회성 단가 정정용) 버튼을 제거하고 "📋 차량계약정보 관리" 버튼으로 교체: 지정 엑셀 양식(차량번호·차종·지역구분·계약시작일·계약종료일·월대여료·이전차량번호) 업로드로 계약정보 변경을 상시 반영할 수 있도록 개선. 기존 차량번호는 계약 연장(단가·계약기간 변경)으로 처리되어 contractHistory에 변경 전/후 값이 기록되고, 신규 차량번호는 등록으로 처리되며 '이전차량번호' 열을 채우면 반납되는 차량을 자동 운용중지 처리하고 replacedFrom/replacedBy로 상호 연결(차량 교체 시나리오, 대수 증감 모두 지원). 반영 전 변경 내역 확인 팝업 표시, 차량 상세 모달에 계약갱신·교체 이력 표시 | 변경: 관리자 툴바(resyncFeeBtn→contractMgmtBtn 버튼), resyncFleetFees()(삭제), openContractImportModal()(신규), downloadContractTemplate()(신규), handleContractExcelUpload()(신규), applyContractImport()(신규), openVehicle() 모달(계약/차량교체 이력 표시 영역)
   [2026-07-31] 신규 "📋 차량계약정보 관리" 버튼이 열람전용 URL(전체·지역별 공통)에도 그대로 노출되던 문제 수정. 근본 원인: applyViewerModeUI()가 "숨길 버튼 id"를 블랙리스트로 나열하는 방식이라 새 관리자 버튼을 추가할 때마다 id를 빠뜨리기 쉬웠음(반복되어 온 패턴) → 관리자 툴바(admin-topbar-actions)는 "허용할 버튼 id"만 나열하는 화이트리스트 방식(VIEWER_ALLOWED_TOOLBAR_BTN_IDS=['refreshBtn','exportExcelBtn'])으로 전환하여, 앞으로 툴바에 어떤 버튼이 추가되어도 명시적으로 허용하지 않는 한 열람전용 모드에서 자동으로 숨겨지도록 구조 변경. 툴바 밖의 차량목록 영역 버튼(차량추가/QR PDF)은 기존과 동일하게 개별 숨김 유지 | 변경: exportToExcel 버튼(id="exportExcelBtn" 부여), applyViewerModeUI(), VIEWER_ALLOWED_TOOLBAR_BTN_IDS(신규)
   [2026-08-01] "내 제출 기록 수정" 화면의 이름검색 방식이 타인 이름을 알면 누구나 조회·수정 가능한 구조였던 보안 문제 개선: ① 제출 시 브라우저 기기별 임의 토큰(editToken)을 생성해 트립에 함께 저장, ② 본인수정 조회 시 이름이 일치해도 이 기기의 토큰이 함께 일치해야만(=제출 당시 사용한 바로 그 기기) 결과에 노출되도록 필터링, ③ 제출일(submittedAt) 기준 3일(USER_EDIT_WINDOW_DAYS)이 지난 기록은 본인수정 화면에서 제외하고 관리자 문의 안내로 전환(과거 데이터는 editToken이 없어 자동으로 이 규칙에 포함되어 별도 마이그레이션 불필요) | 변경: getDeviceEditToken()(신규), USER_EDIT_WINDOW_DAYS·EDIT_DEVICE_TOKEN_KEY(신규), doSubmit()(editToken 저장), loadUserEditable()(기기토큰·기간 필터링, 안내문구), #userEditWrap 안내문구
+  [2026-08-01] "내 제출 기록 수정" 화면 안내문구가 "조회기간 지정 시에도 3일만 조회 가능"한 것으로 오인될 소지가 있어, 조회기간 지정 UI 자체를 제거하고 기기+제출일 기준 창을 3일→10일로 확대: ① #searchDateFrom/#searchDateTo 인풋과 "기간 초기화" 버튼 제거, ② loadUserEditable()에서 조회기간 검증·필터링 로직 제거, ③ USER_EDIT_WINDOW_DAYS 3→10 | 변경: USER_EDIT_WINDOW_DAYS, loadUserEditable(), clearUserEditDateRange()(제거), #userEditWrap 안내문구
+  [2026-08-01] 위 변경 시 남아있던 "최신 5건만 표시" 건수 제한 제거: 10일 이내 기록은 건수 제한 없이 전부 표시(최신순 정렬만 적용) | 변경: loadUserEditable()
 =================================================================
 -->
 
@@ -950,17 +952,8 @@
         <input id="searchSubmitterInput" type="text" style="border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-family:'Paperlogy';font-size:13px;flex:1;min-width:0;" placeholder="이름 입력">
         <button class="btn btn-primary" style="padding:8px 12px;font-size:13px;flex-shrink:0;white-space:nowrap;" onclick="loadUserEditable()">조회</button>
       </div>
-      <div style="font-size:11.5px;color:var(--muted);word-break:keep-all;overflow-wrap:break-word;margin:-4px 0 10px;">
-        ※ 보안을 위해 <b>본인이 제출한 기기</b>에서 <b>제출일 기준 3일 이내</b> 기록만 조회·수정할 수 있습니다.
-      </div>
-      <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <span style="font-size:13px;color:var(--muted);white-space:nowrap;">조회기간</span>
-        <button class="btn btn-ghost" style="padding:8px 12px;font-size:12.5px;" onclick="clearUserEditDateRange()">기간 초기화</button>
-      </div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-        <input type="date" id="searchDateFrom" style="border:1.5px solid var(--good);border-radius:7px;padding:6px 8px;font-family:'Paperlogy';font-size:13px;flex:1;background:#fff;">
-        <span style="color:var(--muted);font-size:13px;">~</span>
-        <input type="date" id="searchDateTo" style="border:1.5px solid var(--good);border-radius:7px;padding:6px 8px;font-family:'Paperlogy';font-size:13px;flex:1;background:#fff;">
+      <div style="font-size:11.5px;color:var(--muted);word-break:keep-all;overflow-wrap:break-word;margin:-4px 0 0;">
+        ※ 보안을 위해 <b>본인이 제출한 기기</b>에서 <b>제출일 기준 10일 이내</b> 기록만 조회·수정할 수 있습니다.
       </div>
     </div>
     <div id="userEditErr" class="user-edit-err"></div>
@@ -1374,7 +1367,7 @@ const MAX_FUEL_AMOUNT      = 150000;
 //                         제출한 바로 그 브라우저(기기)에만 부여되는 임의 토큰을 저장하는
 //                         localStorage 키입니다. 조회 시 이름이 일치해도 이 토큰이 함께
 //                         일치해야만(=본인이 제출한 바로 그 기기) 수정 화면에 노출됩니다.
-const USER_EDIT_WINDOW_DAYS  = 3;
+const USER_EDIT_WINDOW_DAYS  = 10;
 const EDIT_DEVICE_TOKEN_KEY  = 'ksaEditDeviceToken';
 
 // 이 기기 고유의 편집 토큰을 반환. 없으면 최초 1회 생성 후 localStorage에 저장(반영구 유지).
@@ -5299,15 +5292,6 @@ async function confirmAddVehicle(){
   closeModal();
 }
 
-// 조회기간 입력값 초기화 후 재조회
-function clearUserEditDateRange(){
-  const fromInp=document.getElementById('searchDateFrom');
-  const toInp=document.getElementById('searchDateTo');
-  if(fromInp) fromInp.value='';
-  if(toInp) toInp.value='';
-  if((document.getElementById('searchSubmitterInput').value||'').trim()) loadUserEditable();
-}
-
 // '내 제출 기록 수정' 조회 기준: 기본값 운행자(user), 버튼으로 제출자(submitter)와 전환
 let userEditSearchType='user';
 function setUserEditSearchType(type,btn){
@@ -5333,19 +5317,6 @@ function loadUserEditable(){
   const body=document.getElementById('userEditBody');
   const summary=document.getElementById('userEditSummary');
   if(!name){err.textContent='이름을 입력해 주세요.';err.style.display='block';if(summary)summary.textContent='';return;}
-  const periodFrom=document.getElementById('searchDateFrom')?.value||'';
-  const periodTo=document.getElementById('searchDateTo')?.value||'';
-  if(periodFrom && periodTo && periodTo<periodFrom){
-    err.textContent='조회기간이 올바르지 않습니다. 종료일이 시작일보다 빠릅니다.';err.style.display='block';if(summary)summary.textContent='';return;
-  }
-  // 조회기간은 최대 3개월 단위까지만 허용 (대량 조회로 인한 성능 저하 방지)
-  if(periodFrom && periodTo){
-    const dFrom=new Date(periodFrom), dTo=new Date(periodTo);
-    const maxTo=new Date(dFrom.getFullYear(), dFrom.getMonth()+3, dFrom.getDate());
-    if(dTo>maxTo){
-      err.textContent='조회기간은 최대 3개월까지만 조회 가능합니다.';err.style.display='block';if(summary)summary.textContent='';return;
-    }
-  }
   err.style.display='none';
 
   // 이름 기준으로 내 제출 기록 검색 (조회기준: 운행자 또는 제출자, 상단 토글로 선택)
@@ -5373,29 +5344,11 @@ function loadUserEditable(){
   });
   const blockedByDeviceOrWindow = nameMatchedCount>0 && found.length===0;
 
-  // 조회기간이 설정된 경우, 운행기간(시작일~종료일)이 조회기간과 겹치는 건만 표시
-  if(periodFrom || periodTo){
-    found=found.filter(f=>{
-      const tFrom=f.trip.isoDate||'';
-      const tTo=f.trip.dateTo||f.trip.isoDate||'';
-      if(periodFrom && tTo<periodFrom) return false;
-      if(periodTo && tFrom>periodTo) return false;
-      return true;
-    });
-  }
-
-  // 조회기간을 지정하지 않은 경우, 최신 5건만 표시 (전체 DB 과다 노출 방지)
-  const totalFoundCount=found.length;
-  let limitedToRecent5=false;
-  if(!periodFrom && !periodTo && found.length>5){
-    found=found.slice().sort((a,b)=>tripChronoCompare(b.trip,a.trip)).slice(0,5);
-    limitedToRecent5=true;
-  }
+  // 10일 이내 기록은 전부 표시 (건수 제한 없음). 최신순 정렬만 적용.
+  found=found.slice().sort((a,b)=>tripChronoCompare(b.trip,a.trip));
 
   if(summary){
-    const periodLabel=(periodFrom||periodTo)?` · 조회기간 ${periodFrom||'제한없음'} ~ ${periodTo||'제한없음'}`:'';
-    const recentNote=limitedToRecent5?` · 최근 5건만 표시 (전체 ${totalFoundCount}건 · 더 보려면 조회기간을 지정하세요)`:'';
-    summary.textContent=found.length?`총 ${found.length}건 조회됨${periodLabel}${recentNote}`:'';
+    summary.textContent=found.length?`총 ${found.length}건 조회됨`:'';
   }
 
   if(found.length===0){
@@ -5408,7 +5361,7 @@ function loadUserEditable(){
       </div>`;
     }else{
       body.innerHTML=`<div class="empty-state" style="margin:0;">
-        <b>${escapeHtml(name)}</b>${(periodFrom||periodTo)?' · 해당 조회기간':''}으로 제출된 기록이 없습니다.
+        <b>${escapeHtml(name)}</b>으로 제출된 기록이 없습니다.
       </div>`;
     }
     return;
