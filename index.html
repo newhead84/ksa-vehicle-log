@@ -51,6 +51,7 @@
   [2026-08-01] ① 월별 가동율 표에 "주사용자"(운행건수 1~3위) 컬럼을 차량번호 오른쪽(1월 왼쪽)에 신규 추가, ② 공용차량 현황 카드에서 모델명 아래 중복 표시되던 지역구분(사업자명) 제거 및 최근운행 날짜 옆에 최근운행자명 추가, ③ 카드 하단 "운행기록없음/정상" 배지를 주사용자(1~3위) 표기로 대체(점검필요·운용중지 배지는 기존 유지) | 변경: topDriversForPlate()(신규), topDriversCellHtml()(신규), topDriversTagHtml()(신규), renderMonthly(), vcardHtml(), CSS(.top-driver-cell, .top-drivers-tag, .month-table 컬럼폭 재조정)
   [2026-08-01] 주사용자 표기 간소화: ① 월별 가동율 표·공용차량 현황 카드 모두에서 "N위" 순위 표현 및 이름 뒤 운행건수(괄호) 표시 제거, 이름만 쉼표로 나열(순서는 기존과 동일하게 운행건수 많은 순), ② 카드 라벨은 "주사용자 : 이름, 이름, 이름" 형식으로 콜론 추가, ③ 월별 가동율 표에서 차량번호와 주사용자 컬럼 사이 간격이 과도하게 떨어져 보이던 문제 수정(차량번호 컬럼 폭 축소 및 우측 패딩 축소, 데스크탑/모바일 모두 반영) | 변경: topDriversCellHtml(), topDriversTagHtml(), CSS(.month-table th:first-child/th:nth-child(2), .month-table td:first-child, 모바일 미디어쿼리 동일 항목)
   [2026-08-01] 공용차량 현황 카드에서 모델명을 별도 줄(회색 보조텍스트)로 표시하던 것을 차량번호 줄에 병합: "차량번호 - 모델명" 형식(예: 181호6175 - 그랜저), 폰트 크기·색상은 기존 차량번호(.plate 클래스) 스타일 그대로 유지 | 변경: vcardHtml()(모델명 표시용 별도 .region div 제거, .plate 텍스트에 병합)
+  [2026-08-01] 위 병합 표시 시 원본 모델명(예: "AVANTE CN7 (G)1.6 모던 2WD AT")이 그대로 노출되던 버그 수정: 월별 가동율 표에서 이미 쓰던 modelShort() 축약 함수(그랜저/소나타/아반떼 매핑)를 카드 표시에도 동일 적용해 "181호6175 - 그랜저"처럼 축약 모델명만 표시되도록 통일 | 변경: vcardHtml()(v.model → modelShort(v.model))
 =================================================================
 -->
 
@@ -2980,7 +2981,7 @@ function vcardHtml(p){
   return `<div class="vcard" data-plate="${p.replace(/"/g,'&quot;')}" style="${inactive?'opacity:.55;border-style:dashed;':''}" >
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px;">
       <div onclick="openVehicle('${p}')" style="cursor:pointer;flex:1;">
-        <div class="plate" style="${inactive?'color:var(--muted);':''}">${p}${v.model?` - ${escapeHtml(v.model)}`:''}</div>
+        <div class="plate" style="${inactive?'color:var(--muted);':''}">${p}${v.model?` - ${escapeHtml(modelShort(v.model))}`:''}</div>
       </div>
       ${viewerMode?'':`<button onclick="openQrModal('${p}')" title="QR 출력"
         style="background:none;border:1.5px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px;cursor:pointer;flex-shrink:0;color:var(--muted);">QR</button>`}
