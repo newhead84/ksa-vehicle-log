@@ -73,6 +73,7 @@
   [2026-08-01] "내 제출 기록 수정" 화면의 이름검색 방식이 타인 이름을 알면 누구나 조회·수정 가능한 구조였던 보안 문제 개선: ① 제출 시 브라우저 기기별 임의 토큰(editToken)을 생성해 트립에 함께 저장, ② 본인수정 조회 시 이름이 일치해도 이 기기의 토큰이 함께 일치해야만(=제출 당시 사용한 바로 그 기기) 결과에 노출되도록 필터링, ③ 제출일(submittedAt) 기준 3일(USER_EDIT_WINDOW_DAYS)이 지난 기록은 본인수정 화면에서 제외하고 관리자 문의 안내로 전환(과거 데이터는 editToken이 없어 자동으로 이 규칙에 포함되어 별도 마이그레이션 불필요) | 변경: getDeviceEditToken()(신규), USER_EDIT_WINDOW_DAYS·EDIT_DEVICE_TOKEN_KEY(신규), doSubmit()(editToken 저장), loadUserEditable()(기기토큰·기간 필터링, 안내문구), #userEditWrap 안내문구
   [2026-08-01] "내 제출 기록 수정" 화면 안내문구가 "조회기간 지정 시에도 3일만 조회 가능"한 것으로 오인될 소지가 있어, 조회기간 지정 UI 자체를 제거하고 기기+제출일 기준 창을 3일→10일로 확대: ① #searchDateFrom/#searchDateTo 인풋과 "기간 초기화" 버튼 제거, ② loadUserEditable()에서 조회기간 검증·필터링 로직 제거, ③ USER_EDIT_WINDOW_DAYS 3→10 | 변경: USER_EDIT_WINDOW_DAYS, loadUserEditable(), clearUserEditDateRange()(제거), #userEditWrap 안내문구
   [2026-08-01] 위 변경 시 남아있던 "최신 5건만 표시" 건수 제한 제거: 10일 이내 기록은 건수 제한 없이 전부 표시(최신순 정렬만 적용) | 변경: loadUserEditable()
+  [2026-08-01] 지역구분별 가동현황 표 오른쪽에 렌탈계약정보 3개 컬럼 추가: 계약개시일·계약종료일(YY-MM-DD, 지역 내 대수가 가장 많은 대표 계약기간 1건), 월대여료(원, 지역 내 전체 차량 합계, 천단위 구분) | 변경: shortYMD()(신규), renderRegionSummary()
 =================================================================
 -->
 
@@ -2732,11 +2733,27 @@ function vehicleStatsOf(plate){
   return{v,trips,totalDist,manualDist,totalFuel,issues,lastDate,util};
 }
 
+// "YYYY-MM-DD" → "YY-MM-DD" (지역구분별 가동현황 표 전용 축약 표기)
+function shortYMD(dateStr){ return dateStr?String(dateStr).slice(2):''; }
+
 function renderRegionSummary(){
   const plates=Object.keys(data.vehicles);
   // 차량수: 현재 배치 기준(활성만)
   const carsByBranch={};
   plates.filter(p=>data.vehicles[p].active!==false).forEach(p=>{const b=data.vehicles[p].branch||'미배정';if(!carsByBranch[b])carsByBranch[b]=0;carsByBranch[b]++;});
+  // 렌탈계약정보: 현재 배치 기준(활성 차량만) 집계
+  // - 계약개시일/종료일: 지역 내 대수가 가장 많은(대표) 계약기간 1건만 표시
+  // - 월대여료(원): 지역 내 전체 차량 월대여료 합계
+  const contractByBranch={};
+  plates.filter(p=>data.vehicles[p].active!==false).forEach(p=>{
+    const v=data.vehicles[p];
+    const b=v.branch||'미배정';
+    if(!contractByBranch[b]) contractByBranch[b]={feeSum:0,periods:{}};
+    contractByBranch[b].feeSum+=Number(v.fee)||0;
+    const key=`${v.contractStartDate||''}~${v.contractEndDate||''}`;
+    if(!contractByBranch[b].periods[key]) contractByBranch[b].periods[key]={count:0,start:v.contractStartDate||'',end:v.contractEndDate||''};
+    contractByBranch[b].periods[key].count++;
+  });
   // 운행통계: branchAtTime 기준 (당시 소속)
   // 개인사용(주말·공휴일)·출퇴근사용(단신부임자 급여공제) 건은 공식 업무용 가동현황에서 전체 제외
   const tripsByBranch={};
@@ -2758,9 +2775,17 @@ function renderRegionSummary(){
     const sorted=tb.usageDates.slice().sort();
     const spanDays=sorted.length?Math.max(1,countBizDays(sorted[0],sorted[sorted.length-1])):1;
     const rate=tb.usageDates.length?Math.min(100,(bizUsed/spanDays)*100):0;
-    return `<tr><td title="${branch} · 클릭 시 하단 공용차량 현황으로 이동" style="cursor:pointer;" onclick="scrollToVehicleGroup('${branch.replace(/'/g,"\\'")}')"><b>${branch}</b></td><td class="mono">${cars}대</td><td class="mono">${tb.count}건</td><td class="mono">${tb.dist.toLocaleString()}km</td><td class="mono">${tb.fuel.toLocaleString()}원</td><td>${tb.count>0?utilBar(rate):'<span style="color:var(--muted);font-size:12px;">–</span>'}</td></tr>`;
+    const cb=contractByBranch[branch];
+    let repStart='',repEnd='';
+    if(cb){
+      const repPeriod=Object.values(cb.periods).sort((a,b)=>b.count-a.count)[0];
+      repStart=repPeriod?repPeriod.start:'';
+      repEnd=repPeriod?repPeriod.end:'';
+    }
+    const feeSum=cb?cb.feeSum:0;
+    return `<tr><td title="${branch} · 클릭 시 하단 공용차량 현황으로 이동" style="cursor:pointer;" onclick="scrollToVehicleGroup('${branch.replace(/'/g,"\\'")}')"><b>${branch}</b></td><td class="mono">${cars}대</td><td class="mono">${tb.count}건</td><td class="mono">${tb.dist.toLocaleString()}km</td><td class="mono">${tb.fuel.toLocaleString()}원</td><td>${tb.count>0?utilBar(rate):'<span style="color:var(--muted);font-size:12px;">–</span>'}</td><td class="mono">${repStart?shortYMD(repStart):'<span style="color:var(--muted);">–</span>'}</td><td class="mono">${repEnd?shortYMD(repEnd):'<span style="color:var(--muted);">–</span>'}</td><td class="mono">${feeSum>0?feeSum.toLocaleString()+'원':'<span style="color:var(--muted);">–</span>'}</td></tr>`;
   }).join('');
-  document.getElementById('regionSummary').innerHTML=`<div class="table-scroll"><table class="region-table"><thead><tr><th>지역구분</th><th>차량대수</th><th>운행건수<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (당시소속 기준, 개인·출퇴근사용 제외)</span></th><th>총주행거리</th><th>총주유비</th><th>가동율</th></tr></thead><tbody>${rows||`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted);">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
+  document.getElementById('regionSummary').innerHTML=`<div class="table-scroll"><table class="region-table"><thead><tr><th>지역구분</th><th>차량대수</th><th>운행건수<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (당시소속 기준, 개인·출퇴근사용 제외)</span></th><th>총주행거리</th><th>총주유비</th><th>가동율</th><th>계약개시일<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (대표)</span></th><th>계약종료일<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (대표)</span></th><th>월대여료(원)<span class="region-th-note" style="font-size:10px;color:var(--muted);font-weight:400;"> (합계)</span></th></tr></thead><tbody>${rows||`<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
 }
 
 // 차량 전체를 순회하며 운행기록을 운행자(t.user) 기준으로 집계
