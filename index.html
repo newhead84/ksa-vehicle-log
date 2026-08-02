@@ -38,6 +38,10 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-02] 공용차량 현황 카드 운행기록 표 수정모드에서 "정렬 안 됨" 재신고 재조사 결과, 실제 원인은 세로(vertical-align)가 아니라
+  가로 정렬이었음을 확인: 입력창(input.edit-inp)이 width:100%로 셀을 꽉 채워서 부모 td의 text-align은 입력창 "박스 위치"에만 적용되고
+  박스 "안의 텍스트"는 계속 좌측정렬로 보이던 문제. 운행자·행선지·상태·대차번호 input에 text-align:center, 주유비 input에 text-align:right를
+  직접 지정, 운행기간의 시작/종료 입력줄(.trip-date-row, flex 좌측정렬)에는 justify-content:center 추가 | 변경: CSS(.trip-table td[data-label=...] input.edit-inp, .trip-table td.trip-period .trip-date-row)
   [2026-08-02] 공용차량 현황 카드의 운행기록 표(관리자 수정모드·열람전용 URL 공통) 잔여 정렬/천단위 이슈 보강: ① 행 높이가 다른 컬럼(운행기간 시작/종료, 구분 체크박스+출퇴근버튼)보다 짧은 셀들이 상단정렬로 보이던 문제 수정 — 모든 셀 vertical-align:middle 명시 적용, ② 수정모드 진입 시 시작거리·종료거리 입력창이 천단위 구분기호 없이 원본 숫자로 표시되던 문제 수정: 입력창 최초 렌더값에도 콤마 적용 + 타이핑 중 실시간 콤마 반영(formatOdoInput 신규, formatFuelInput 재사용) + 거리(누계) 자동계산값도 콤마 표기, 저장 시(saveTripEdits)·재계산 시(recalcModalDist) 콤마 제거 후 파싱하도록 보정 | 변경: CSS(.trip-table th,td vertical-align), 시작거리/종료거리/거리(누계) 렌더링, recalcModalDist(), formatOdoInput()(신규), saveTripEdits()
   [2026-08-02] 공용차량 현황 카드의 운행기록 표 레이아웃 조정(관리자 수정모드·열람전용 URL 공통): ① 시작거리·종료거리·거리(누계) 표시값에 천단위 구분기호(,) 적용, ② 컬럼 폭 재배분(운행기간 15%→13%, 구분 15%→11%, 대차번호 6%→13%: 대차번호 내용 잘림 및 구분 열의 출퇴근 버튼 과확대 완화), ③ 관리자 수정모드의 기간(시작/종료일자) 입력창을 컬럼 폭에 맞춰 고정폭(최대 88px)으로 축소, ④ 헤더(제목)와 셀 내용의 정렬 기준을 통일: 헤더 전체 가운데정렬 + 시작거리·종료거리·거리(누계)·제출자·상태·구분·대차번호는 내용도 가운데정렬, 주유비는 내용 우측정렬 유지 | 변경: CSS(.trip-table th/td:nth-child 폭, .trip-table td.trip-period .adm-date-from/.adm-date-to, .trip-table th, .trip-table td[data-label=...] 신규), 운행기록 표 렌더링(시작거리/종료거리/거리(누계) view-val)
   [2026-08-01] "내 제출 기록 수정" 화면의 이름검색 방식이 타인 이름을 알면 누구나 조회·수정 가능한 구조였던 보안 문제 개선: ① 제출 시 브라우저 기기별 임의 토큰(editToken)을 생성해 트립에 함께 저장, ② 본인수정 조회 시 이름이 일치해도 이 기기의 토큰이 함께 일치해야만(=제출 당시 사용한 바로 그 기기) 결과에 노출되도록 필터링, ③ 제출일(submittedAt) 기준 3일(USER_EDIT_WINDOW_DAYS)이 지난 기록은 본인수정 화면에서 제외하고 관리자 문의 안내로 전환(과거 데이터는 editToken이 없어 자동으로 이 규칙에 포함되어 별도 마이그레이션 불필요) | 변경: getDeviceEditToken()(신규), USER_EDIT_WINDOW_DAYS·EDIT_DEVICE_TOKEN_KEY(신규), doSubmit()(editToken 저장), loadUserEditable()(기기토큰·기간 필터링, 안내문구), #userEditWrap 안내문구
@@ -460,6 +464,16 @@
     .trip-table td[data-label="구분"],
     .trip-table td[data-label="대차번호"]{text-align:center;}
     .trip-table td[data-label="주유비"]{text-align:right;}
+    /* 2026-08-02 보강: 수정모드 입력창(input.edit-inp)이 width:100%로 셀을 꽉 채우기 때문에,
+       부모 td에 text-align:center를 줘도 "입력창 박스 자체"의 위치만 영향을 받을 뿐 입력창 "안의 텍스트"는
+       그대로 좌측정렬로 보이던 문제 — input 요소 자신에게 직접 text-align을 지정해 실제 값이 가운데(주유비는 우측)로 보이도록 보정 */
+    .trip-table td[data-label="운행자"] input.edit-inp,
+    .trip-table td[data-label="행선지"] input.edit-inp,
+    .trip-table td[data-label="상태"] input.edit-inp,
+    .trip-table td[data-label="대차번호"] input.edit-inp{text-align:center;}
+    .trip-table td[data-label="주유비"] input.edit-inp{text-align:right;}
+    /* 운행기간 수정모드: "시작/종료" 라벨+입력창 한 줄(.trip-date-row)이 flex로 좌측정렬되어 있어 컬럼 안에서 블록 전체가 왼쪽으로 치우쳐 보이던 것을 가운데로 정렬 */
+    .trip-table td.trip-period .trip-date-row{justify-content:center;}
   }
   @media (min-width:1000px){
 

@@ -111,3 +111,8 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
   - 증상 2: 관리자 수정모드로 전환해 시작거리·종료거리를 수정하려 할 때, 입력창에는 여전히 콤마 없는 원본 숫자(예: `22286`)만 표시됨 — 바로 위 항목에서 적용한 천단위 구분기호는 조회(view-val) 상태에만 반영되고, 수정모드 입력창(edit-inp)에는 반영되지 않았던 것
     - 조치: 시작거리·종료거리·거리(누계) 입력창의 최초 렌더값에도 `toLocaleString()` 적용, 타이핑 중에도 실시간으로 콤마가 반영되도록 신규 함수 `formatOdoInput()`(기존 `formatFuelInput()`의 자릿수 그룹핑 로직 재사용) 연결, 콤마가 포함된 입력값을 저장/재계산 시 올바르게 숫자로 파싱하도록 `recalcModalDist()`·`saveTripEdits()`에서 콤마 제거 후 `Number()` 변환하도록 보정
   - 변경 영역: CSS(`.trip-table th,td` vertical-align), 시작거리/종료거리/거리(누계) 렌더링(edit-inp value), `recalcModalDist()`, `formatOdoInput()`(신규), `saveTripEdits()`
+- 공용차량 현황 카드 운행기록 표 정렬 재신고 재조사 — 실제 원인은 세로가 아니라 가로 정렬이었음
+  - 증상: 수정모드에서 운행기간·운행자·행선지·주유비·상태·대차번호 값이 컬럼 가운데로 안 맞고 좌측에 치우쳐 보임
+  - 원인: 입력창(`input.edit-inp`)이 `width:100%`로 셀을 꽉 채우고 있어, 부모 `<td>`에 준 `text-align:center`는 "입력창 박스의 위치"에만 영향을 줄 뿐 입력창 "안의 텍스트"는 계속 브라우저 기본값(좌측정렬)로 보였음. 운행기간은 시작/종료 줄(`.trip-date-row`)이 `display:flex`로 좌측정렬되어 있어 블록 전체가 왼쪽으로 붙어 보였음
+  - 조치: 운행자·행선지·상태·대차번호 `input.edit-inp`에 `text-align:center`, 주유비 `input.edit-inp`에는 기존 컨벤션대로 `text-align:right` 직접 지정. 운행기간 `.trip-date-row`에 `justify-content:center` 추가
+  - 변경 영역: CSS(`.trip-table td[data-label="..."] input.edit-inp`, `.trip-table td.trip-period .trip-date-row`)
