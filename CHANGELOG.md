@@ -116,3 +116,7 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
   - 원인: 입력창(`input.edit-inp`)이 `width:100%`로 셀을 꽉 채우고 있어, 부모 `<td>`에 준 `text-align:center`는 "입력창 박스의 위치"에만 영향을 줄 뿐 입력창 "안의 텍스트"는 계속 브라우저 기본값(좌측정렬)로 보였음. 운행기간은 시작/종료 줄(`.trip-date-row`)이 `display:flex`로 좌측정렬되어 있어 블록 전체가 왼쪽으로 붙어 보였음
   - 조치: 운행자·행선지·상태·대차번호 `input.edit-inp`에 `text-align:center`, 주유비 `input.edit-inp`에는 기존 컨벤션대로 `text-align:right` 직접 지정. 운행기간 `.trip-date-row`에 `justify-content:center` 추가
   - 변경 영역: CSS(`.trip-table td[data-label="..."] input.edit-inp`, `.trip-table td.trip-period .trip-date-row`)
+
+## 2026-08-03
+
+- 공용차량 현황 카드 운행기록 표(뷰모드): 이전에 입력창(edit-inp)에만 적용됐던 가운데정렬이 조회 상태(view-val, 수정모드 진입 전)의 운행자·행선지 셀에는 반영되지 않아 여전히 좌측정렬로 보이던 문제 수정 | 변경: CSS(`.trip-table td[data-label="운행자"]`, `.trip-table td[data-label="행선지"]`에 `text-align:center` 추가)

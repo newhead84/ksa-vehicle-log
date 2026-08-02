@@ -38,6 +38,9 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-03] 공용차량 현황 카드 운행기록 표 뷰모드(조회 상태, 수정모드 진입 전)의 운행자·행선지 셀이 여전히 좌측정렬로 보이던 문제 수정:
+  직전(08-02) 수정은 수정모드 입력창(input.edit-inp)에만 text-align:center를 적용했고 조회 상태의 view-val에는 적용되지 않았던 것 |
+  변경: CSS(.trip-table td[data-label="운행자"], .trip-table td[data-label="행선지"] text-align:center 추가)
   [2026-08-02] 공용차량 현황 카드 운행기록 표 수정모드에서 "정렬 안 됨" 재신고 재조사 결과, 실제 원인은 세로(vertical-align)가 아니라
   가로 정렬이었음을 확인: 입력창(input.edit-inp)이 width:100%로 셀을 꽉 채워서 부모 td의 text-align은 입력창 "박스 위치"에만 적용되고
   박스 "안의 텍스트"는 계속 좌측정렬로 보이던 문제. 운행자·행선지·상태·대차번호 input에 text-align:center, 주유비 input에 text-align:right를
@@ -460,6 +463,8 @@
     .trip-table td[data-label="종료거리"],
     .trip-table td[data-label="거리(누계, 자동계산)"],
     .trip-table td[data-label="제출자"],
+    .trip-table td[data-label="운행자"],
+    .trip-table td[data-label="행선지"],
     .trip-table td[data-label="상태"],
     .trip-table td[data-label="구분"],
     .trip-table td[data-label="대차번호"]{text-align:center;}
