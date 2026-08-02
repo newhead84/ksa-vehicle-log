@@ -38,6 +38,7 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-02] 공용차량 현황 카드의 운행기록 표 레이아웃 조정(관리자 수정모드·열람전용 URL 공통): ① 시작거리·종료거리·거리(누계) 표시값에 천단위 구분기호(,) 적용, ② 컬럼 폭 재배분(운행기간 15%→13%, 구분 15%→11%, 대차번호 6%→13%: 대차번호 내용 잘림 및 구분 열의 출퇴근 버튼 과확대 완화), ③ 관리자 수정모드의 기간(시작/종료일자) 입력창을 컬럼 폭에 맞춰 고정폭(최대 88px)으로 축소, ④ 헤더(제목)와 셀 내용의 정렬 기준을 통일: 헤더 전체 가운데정렬 + 시작거리·종료거리·거리(누계)·제출자·상태·구분·대차번호는 내용도 가운데정렬, 주유비는 내용 우측정렬 유지 | 변경: CSS(.trip-table th/td:nth-child 폭, .trip-table td.trip-period .adm-date-from/.adm-date-to, .trip-table th, .trip-table td[data-label=...] 신규), 운행기록 표 렌더링(시작거리/종료거리/거리(누계) view-val)
   [2026-08-01] "내 제출 기록 수정" 화면의 이름검색 방식이 타인 이름을 알면 누구나 조회·수정 가능한 구조였던 보안 문제 개선: ① 제출 시 브라우저 기기별 임의 토큰(editToken)을 생성해 트립에 함께 저장, ② 본인수정 조회 시 이름이 일치해도 이 기기의 토큰이 함께 일치해야만(=제출 당시 사용한 바로 그 기기) 결과에 노출되도록 필터링, ③ 제출일(submittedAt) 기준 3일(USER_EDIT_WINDOW_DAYS)이 지난 기록은 본인수정 화면에서 제외하고 관리자 문의 안내로 전환(과거 데이터는 editToken이 없어 자동으로 이 규칙에 포함되어 별도 마이그레이션 불필요) | 변경: getDeviceEditToken()(신규), USER_EDIT_WINDOW_DAYS·EDIT_DEVICE_TOKEN_KEY(신규), doSubmit()(editToken 저장), loadUserEditable()(기기토큰·기간 필터링, 안내문구), #userEditWrap 안내문구
   [2026-08-01] "내 제출 기록 수정" 화면 안내문구가 "조회기간 지정 시에도 3일만 조회 가능"한 것으로 오인될 소지가 있어, 조회기간 지정 UI 자체를 제거하고 기기+제출일 기준 창을 3일→10일로 확대: ① #searchDateFrom/#searchDateTo 인풋과 "기간 초기화" 버튼 제거, ② loadUserEditable()에서 조회기간 검증·필터링 로직 제거, ③ USER_EDIT_WINDOW_DAYS 3→10 | 변경: USER_EDIT_WINDOW_DAYS, loadUserEditable(), clearUserEditDateRange()(제거), #userEditWrap 안내문구
   [2026-08-01] 위 변경 시 남아있던 "최신 5건만 표시" 건수 제한 제거: 10일 이내 기록은 건수 제한 없이 전부 표시(최신순 정렬만 적용) | 변경: loadUserEditable()
@@ -424,7 +425,7 @@
   @media (min-width:641px){
     .trip-table{min-width:0;width:100%;table-layout:fixed;font-size:11.5px;}
     .trip-table th,.trip-table td{padding:5px 3px;overflow-wrap:break-word;word-break:break-word;}
-    .trip-table th:nth-child(1),.trip-table td:nth-child(1){width:15%;}
+    .trip-table th:nth-child(1),.trip-table td:nth-child(1){width:13%;}
     .trip-table th:nth-child(2),.trip-table td:nth-child(2){width:6%;}
     .trip-table th:nth-child(3),.trip-table td:nth-child(3){width:6%;}
     .trip-table th:nth-child(4),.trip-table td:nth-child(4){width:6%;}
@@ -433,8 +434,8 @@
     .trip-table th:nth-child(7),.trip-table td:nth-child(7){width:9%;}
     .trip-table th:nth-child(8),.trip-table td:nth-child(8){width:7%;}
     .trip-table th:nth-child(9),.trip-table td:nth-child(9){width:5%;}
-    .trip-table th:nth-child(10),.trip-table td:nth-child(10){width:15%;}
-    .trip-table th:nth-child(11),.trip-table td:nth-child(11){width:6%;}
+    .trip-table th:nth-child(10),.trip-table td:nth-child(10){width:11%;}
+    .trip-table th:nth-child(11),.trip-table td:nth-child(11){width:13%;}
     .trip-table th:nth-child(12),.trip-table td:nth-child(12){width:7%;}
     .trip-table th:nth-child(13),.trip-table td:nth-child(13){width:4%;}
     .trip-table td input.edit-inp{width:100%!important;max-width:100%!important;box-sizing:border-box;}
@@ -446,8 +447,18 @@
     .trip-table td.trip-period .trip-date-row+.trip-date-row{margin-top:3px;}
     .trip-table td.trip-period .trip-date-lbl{flex:0 0 auto;font-size:9px;color:var(--muted);font-weight:700;}
     .trip-table td.trip-period .adm-date-from,
-    .trip-table td.trip-period .adm-date-to{flex:1 1 auto;width:100%;min-width:0;box-sizing:border-box;font-size:11px;padding:3px 4px;border:1.5px solid var(--good);border-radius:6px;text-align:center;}
+    .trip-table td.trip-period .adm-date-to{flex:0 1 auto;width:auto;max-width:88px;min-width:0;box-sizing:border-box;font-size:10.5px;padding:2px 3px;border:1.5px solid var(--good);border-radius:6px;text-align:center;}
     .trip-table td.trip-usage-cell .edit-inp{width:100%;max-width:100%;box-sizing:border-box;}
+    /* 타이틀(제목)과 내용이 같은 정렬 기준(중간맞춤)을 갖도록 헤더는 전체 가운데정렬, 내용은 컬럼 성격에 맞춰 가운데/우측 정렬 */
+    .trip-table th{text-align:center;}
+    .trip-table td[data-label="시작거리"],
+    .trip-table td[data-label="종료거리"],
+    .trip-table td[data-label="거리(누계, 자동계산)"],
+    .trip-table td[data-label="제출자"],
+    .trip-table td[data-label="상태"],
+    .trip-table td[data-label="구분"],
+    .trip-table td[data-label="대차번호"]{text-align:center;}
+    .trip-table td[data-label="주유비"]{text-align:right;}
   }
   @media (min-width:1000px){
 
@@ -3197,9 +3208,9 @@ function openVehicle(plate){
               </span>
             </span>
           </td>
-          <td class="mono" data-label="시작거리"><span class="view-val">${t.startOdo??''}</span><input class="edit-inp mono" value="${t.startOdo??''}" data-f="startOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
-          <td class="mono" data-label="종료거리"><span class="view-val">${t.endOdo??''}</span><input class="edit-inp mono" value="${t.endOdo??''}" data-f="endOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
-          <td class="mono" data-label="거리(누계, 자동계산)"><span class="view-val dist-view">${t.distance??''}</span><input class="edit-inp mono dist-inp" value="${t.distance??''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1" title="종료거리-시작거리로 자동계산되며 직접 수정할 수 없습니다."></td>
+          <td class="mono" data-label="시작거리"><span class="view-val">${t.startOdo!=null&&t.startOdo!==''?Number(t.startOdo).toLocaleString():''}</span><input class="edit-inp mono" value="${t.startOdo??''}" data-f="startOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
+          <td class="mono" data-label="종료거리"><span class="view-val">${t.endOdo!=null&&t.endOdo!==''?Number(t.endOdo).toLocaleString():''}</span><input class="edit-inp mono" value="${t.endOdo??''}" data-f="endOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
+          <td class="mono" data-label="거리(누계, 자동계산)"><span class="view-val dist-view">${t.distance!=null&&t.distance!==''?Number(t.distance).toLocaleString():''}</span><input class="edit-inp mono dist-inp" value="${t.distance??''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1" title="종료거리-시작거리로 자동계산되며 직접 수정할 수 없습니다."></td>
           <td data-label="제출자"><span class="view-val" style="color:var(--accent);font-size:11px;">${escapeHtml(t.submitter||'')}</span></td>
           <td data-label="운행자"><span class="view-val">${escapeHtml(t.user||'')}</span><input class="edit-inp" value="${escapeHtml(t.user||'')}" data-f="user" style="display:none;width:60px;"></td>
           <td data-label="행선지"><span class="view-val">${escapeHtml(t.dest||'')}</span><input class="edit-inp" value="${escapeHtml(t.dest||'')}" data-f="dest" style="display:none;width:90px;"></td>
