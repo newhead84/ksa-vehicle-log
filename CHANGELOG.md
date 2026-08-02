@@ -104,3 +104,10 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
   - 관리자 수정모드 기간(시작/종료일자) 입력창을 부모 컬럼 전체 폭에 맞춰 늘어나던 방식(`width:100%`)에서 고정 최대폭(88px)으로 축소해 입력창이 과도하게 커 보이던 문제 수정
   - 헤더(제목)와 셀 내용의 정렬 기준 통일: 헤더 전체 가운데정렬, 시작거리·종료거리·거리(누계)·제출자·상태·구분·대차번호는 내용도 가운데정렬(제목 포함 중간맞춤), 주유비는 기존과 같이 내용 우측정렬 유지
   - 변경 영역: CSS(`.trip-table th/td:nth-child` 폭, `.trip-table td.trip-period .adm-date-from/.adm-date-to`, `.trip-table th`, `.trip-table td[data-label="..."]`(신규)), 운행기록 표 렌더링(시작거리/종료거리/거리(누계) `view-val` 표시부)
+- 공용차량 현황 카드 운행기록 표 잔여 이슈 보강 (위 항목에서 놓친 부분)
+  - 증상 1: 행 높이가 다른 컬럼(운행기간의 시작/종료 2줄, 구분의 체크박스 2개+출퇴근 버튼 2개)보다 짧은 셀들(시작거리·종료거리·제출자 등)이 세로 방향으로 상단에 붙어 보임(중간맞춤 아님)
+    - 원인: `.trip-table th,td`에 `vertical-align`이 명시되어 있지 않았음
+    - 조치: `.trip-table th,.trip-table td`에 `vertical-align:middle` 명시 적용
+  - 증상 2: 관리자 수정모드로 전환해 시작거리·종료거리를 수정하려 할 때, 입력창에는 여전히 콤마 없는 원본 숫자(예: `22286`)만 표시됨 — 바로 위 항목에서 적용한 천단위 구분기호는 조회(view-val) 상태에만 반영되고, 수정모드 입력창(edit-inp)에는 반영되지 않았던 것
+    - 조치: 시작거리·종료거리·거리(누계) 입력창의 최초 렌더값에도 `toLocaleString()` 적용, 타이핑 중에도 실시간으로 콤마가 반영되도록 신규 함수 `formatOdoInput()`(기존 `formatFuelInput()`의 자릿수 그룹핑 로직 재사용) 연결, 콤마가 포함된 입력값을 저장/재계산 시 올바르게 숫자로 파싱하도록 `recalcModalDist()`·`saveTripEdits()`에서 콤마 제거 후 `Number()` 변환하도록 보정
+  - 변경 영역: CSS(`.trip-table th,td` vertical-align), 시작거리/종료거리/거리(누계) 렌더링(edit-inp value), `recalcModalDist()`, `formatOdoInput()`(신규), `saveTripEdits()`

@@ -38,6 +38,7 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-02] 공용차량 현황 카드의 운행기록 표(관리자 수정모드·열람전용 URL 공통) 잔여 정렬/천단위 이슈 보강: ① 행 높이가 다른 컬럼(운행기간 시작/종료, 구분 체크박스+출퇴근버튼)보다 짧은 셀들이 상단정렬로 보이던 문제 수정 — 모든 셀 vertical-align:middle 명시 적용, ② 수정모드 진입 시 시작거리·종료거리 입력창이 천단위 구분기호 없이 원본 숫자로 표시되던 문제 수정: 입력창 최초 렌더값에도 콤마 적용 + 타이핑 중 실시간 콤마 반영(formatOdoInput 신규, formatFuelInput 재사용) + 거리(누계) 자동계산값도 콤마 표기, 저장 시(saveTripEdits)·재계산 시(recalcModalDist) 콤마 제거 후 파싱하도록 보정 | 변경: CSS(.trip-table th,td vertical-align), 시작거리/종료거리/거리(누계) 렌더링, recalcModalDist(), formatOdoInput()(신규), saveTripEdits()
   [2026-08-02] 공용차량 현황 카드의 운행기록 표 레이아웃 조정(관리자 수정모드·열람전용 URL 공통): ① 시작거리·종료거리·거리(누계) 표시값에 천단위 구분기호(,) 적용, ② 컬럼 폭 재배분(운행기간 15%→13%, 구분 15%→11%, 대차번호 6%→13%: 대차번호 내용 잘림 및 구분 열의 출퇴근 버튼 과확대 완화), ③ 관리자 수정모드의 기간(시작/종료일자) 입력창을 컬럼 폭에 맞춰 고정폭(최대 88px)으로 축소, ④ 헤더(제목)와 셀 내용의 정렬 기준을 통일: 헤더 전체 가운데정렬 + 시작거리·종료거리·거리(누계)·제출자·상태·구분·대차번호는 내용도 가운데정렬, 주유비는 내용 우측정렬 유지 | 변경: CSS(.trip-table th/td:nth-child 폭, .trip-table td.trip-period .adm-date-from/.adm-date-to, .trip-table th, .trip-table td[data-label=...] 신규), 운행기록 표 렌더링(시작거리/종료거리/거리(누계) view-val)
   [2026-08-01] "내 제출 기록 수정" 화면의 이름검색 방식이 타인 이름을 알면 누구나 조회·수정 가능한 구조였던 보안 문제 개선: ① 제출 시 브라우저 기기별 임의 토큰(editToken)을 생성해 트립에 함께 저장, ② 본인수정 조회 시 이름이 일치해도 이 기기의 토큰이 함께 일치해야만(=제출 당시 사용한 바로 그 기기) 결과에 노출되도록 필터링, ③ 제출일(submittedAt) 기준 3일(USER_EDIT_WINDOW_DAYS)이 지난 기록은 본인수정 화면에서 제외하고 관리자 문의 안내로 전환(과거 데이터는 editToken이 없어 자동으로 이 규칙에 포함되어 별도 마이그레이션 불필요) | 변경: getDeviceEditToken()(신규), USER_EDIT_WINDOW_DAYS·EDIT_DEVICE_TOKEN_KEY(신규), doSubmit()(editToken 저장), loadUserEditable()(기기토큰·기간 필터링, 안내문구), #userEditWrap 안내문구
   [2026-08-01] "내 제출 기록 수정" 화면 안내문구가 "조회기간 지정 시에도 3일만 조회 가능"한 것으로 오인될 소지가 있어, 조회기간 지정 UI 자체를 제거하고 기기+제출일 기준 창을 3일→10일로 확대: ① #searchDateFrom/#searchDateTo 인풋과 "기간 초기화" 버튼 제거, ② loadUserEditable()에서 조회기간 검증·필터링 로직 제거, ③ USER_EDIT_WINDOW_DAYS 3→10 | 변경: USER_EDIT_WINDOW_DAYS, loadUserEditable(), clearUserEditDateRange()(제거), #userEditWrap 안내문구
@@ -424,7 +425,7 @@
   /* 데스크탑 전용: 가로 스크롤 최소화를 위한 고정 표 레이아웃(모바일은 640px 이하 별도 규칙에서 카드형으로 전환됨) */
   @media (min-width:641px){
     .trip-table{min-width:0;width:100%;table-layout:fixed;font-size:11.5px;}
-    .trip-table th,.trip-table td{padding:5px 3px;overflow-wrap:break-word;word-break:break-word;}
+    .trip-table th,.trip-table td{padding:5px 3px;overflow-wrap:break-word;word-break:break-word;vertical-align:middle;}
     .trip-table th:nth-child(1),.trip-table td:nth-child(1){width:13%;}
     .trip-table th:nth-child(2),.trip-table td:nth-child(2){width:6%;}
     .trip-table th:nth-child(3),.trip-table td:nth-child(3){width:6%;}
@@ -3208,9 +3209,9 @@ function openVehicle(plate){
               </span>
             </span>
           </td>
-          <td class="mono" data-label="시작거리"><span class="view-val">${t.startOdo!=null&&t.startOdo!==''?Number(t.startOdo).toLocaleString():''}</span><input class="edit-inp mono" value="${t.startOdo??''}" data-f="startOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
-          <td class="mono" data-label="종료거리"><span class="view-val">${t.endOdo!=null&&t.endOdo!==''?Number(t.endOdo).toLocaleString():''}</span><input class="edit-inp mono" value="${t.endOdo??''}" data-f="endOdo" oninput="recalcModalDist(this)" style="display:none;width:65px;"></td>
-          <td class="mono" data-label="거리(누계, 자동계산)"><span class="view-val dist-view">${t.distance!=null&&t.distance!==''?Number(t.distance).toLocaleString():''}</span><input class="edit-inp mono dist-inp" value="${t.distance??''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1" title="종료거리-시작거리로 자동계산되며 직접 수정할 수 없습니다."></td>
+          <td class="mono" data-label="시작거리"><span class="view-val">${t.startOdo!=null&&t.startOdo!==''?Number(t.startOdo).toLocaleString():''}</span><input class="edit-inp mono" value="${t.startOdo!=null&&t.startOdo!==''?Number(t.startOdo).toLocaleString():''}" data-f="startOdo" oninput="formatOdoInput(this)" style="display:none;width:65px;"></td>
+          <td class="mono" data-label="종료거리"><span class="view-val">${t.endOdo!=null&&t.endOdo!==''?Number(t.endOdo).toLocaleString():''}</span><input class="edit-inp mono" value="${t.endOdo!=null&&t.endOdo!==''?Number(t.endOdo).toLocaleString():''}" data-f="endOdo" oninput="formatOdoInput(this)" style="display:none;width:65px;"></td>
+          <td class="mono" data-label="거리(누계, 자동계산)"><span class="view-val dist-view">${t.distance!=null&&t.distance!==''?Number(t.distance).toLocaleString():''}</span><input class="edit-inp mono dist-inp" value="${t.distance!=null&&t.distance!==''?Number(t.distance).toLocaleString():''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1" title="종료거리-시작거리로 자동계산되며 직접 수정할 수 없습니다."></td>
           <td data-label="제출자"><span class="view-val" style="color:var(--accent);font-size:11px;">${escapeHtml(t.submitter||'')}</span></td>
           <td data-label="운행자"><span class="view-val">${escapeHtml(t.user||'')}</span><input class="edit-inp" value="${escapeHtml(t.user||'')}" data-f="user" style="display:none;width:60px;"></td>
           <td data-label="행선지"><span class="view-val">${escapeHtml(t.dest||'')}</span><input class="edit-inp" value="${escapeHtml(t.dest||'')}" data-f="dest" style="display:none;width:90px;"></td>
@@ -3597,10 +3598,17 @@ async function viewOriginalImage(plate, idx, imgKey){
 
 function recalcModalDist(inp){
   const tr=inp.closest('tr');
-  const s=Number(tr.querySelector('[data-f="startOdo"]').value)||0;
-  const e=Number(tr.querySelector('[data-f="endOdo"]').value)||0;
+  const s=Number((tr.querySelector('[data-f="startOdo"]').value||'').replace(/,/g,''))||0;
+  const e=Number((tr.querySelector('[data-f="endOdo"]').value||'').replace(/,/g,''))||0;
   const distInp=tr.querySelector('.dist-inp');
-  if(distInp) distInp.value=Math.max(0,e-s);
+  if(distInp) distInp.value=Math.max(0,e-s).toLocaleString();
+}
+
+// 관리자 수정모드: 시작/종료거리 입력값에 천단위 구분기호(,)를 실시간 반영 후 거리(누계) 재계산
+// (formatFuelInput과 동일한 자릿수 그룹핑 로직을 재사용 — 커서 위치 보정 포함)
+function formatOdoInput(inp){
+  formatFuelInput(inp);
+  recalcModalDist(inp);
 }
 
 // 관리자 수정모드: 날짜 텍스트 입력 자동 포맷 (숫자만 입력 → YYYY-MM-DD 자동 삽입)
@@ -3709,8 +3717,8 @@ async function saveTripEdits(plate){
       showAdminToast('저장 실패: 대차 운행으로 체크된 건은 대차 차량번호를 반드시 입력해야 합니다. (과태료·범칙금 발생 시 운행자 확인용)','bad');
       return;
     }
-    const s=Number(startInp?.value)||0;
-    const e=Number(endInp?.value)||0;
+    const s=Number((startInp?.value||'').replace(/,/g,''))||0;
+    const e=Number((endInp?.value||'').replace(/,/g,''))||0;
     const dist=Math.max(0, e-s);
     const fuel=fuelInp?parseFuelAmount(fuelInp.value):0;
     const fromVal=fromInp?.value||'';
@@ -3761,7 +3769,7 @@ async function saveTripEdits(plate){
     tr.querySelectorAll('.edit-inp').forEach(inp=>{
       const f=inp.dataset.f;
       if(!f) return;
-      if(f==='startOdo'||f==='endOdo'||f==='distance') target[f]=Number(inp.value)||0;
+      if(f==='startOdo'||f==='endOdo'||f==='distance') target[f]=Number((inp.value||'').replace(/,/g,''))||0;
       else if(f==='fuel') target[f]=parseFuelAmount(inp.value);
       else target[f]=inp.value;
     });
