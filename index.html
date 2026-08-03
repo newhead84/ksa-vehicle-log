@@ -38,6 +38,14 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-03] 차량 상세 모달 "건별 운행거리 추이" 스파크라인이 모달 폭이 넓을 때(최대 1040px) height:auto로
+  세로 크기까지 함께 커져(최대 약 198px) 다른 항목들이 상대적으로 작아 보이던 문제 수정: 5:1 비율 자체는
+  유지하되, .sparkline-wrap에 max-width:640px을 적용해 세로 크기 상한을 약 128px로 고정(찌그러짐 없이 크기만
+  제한) | 변경: CSS(.sparkline-wrap)
+  [2026-08-03] "사업장별 차량 가동율 운행거리 비교차트"(및 동일 데이터를 쓰는 월별 가동율 표·엑셀 내보내기)의
+  운행거리 집계가 가동율과 달리 주말·공휴일 개인사용(isPersonal)/출퇴근사용(isCommute) 건을 제외하지 않아
+  가동율과 운행거리가 서로 다른 모수로 계산되던 불일치 수정: monthlyUtilForPlate()의 월별 distance 집계에도
+  가동율 계산과 동일하게 !isCommute && !isPersonal 필터를 적용 | 변경: monthlyUtilForPlate()(distance 필터링)
   [2026-08-03] 차량 상세 모달 "건별 운행거리 추이" 스파크라인 그래프가 비율이 깨져(찌그러져) 보이던 버그 수정:
   원인은 <svg width="100%" height="${h}"(고정 112px)>에 preserveAspectRatio="none"까지 겹쳐, 실제 표시폭(모달
   폭, viewBox 기준 560px와 다를 수 있음)과 viewBox(560x112, 5:1) 비율이 달라도 그 차이를 그대로 강제로 늘려
@@ -506,7 +514,7 @@
   .modal-head-actions .btn{white-space:nowrap;}
   .modal-head .plate-big{font-family:'Paperlogy';font-size:22px;color:var(--navy);font-weight:600;}
   .close-x{background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);}
-  .sparkline-wrap{margin:14px 0 18px;}
+  .sparkline-wrap{margin:14px 0 18px;max-width:640px;}
   .modal-stats{display:flex;gap:20px;margin-bottom:18px;flex-wrap:wrap;}
   .modal-stats div{font-size:11px;color:var(--muted);}
   .modal-stats b{display:block;font-family:'Paperlogy';font-size:18px;color:var(--ink);}
@@ -2495,7 +2503,7 @@ function monthlyUtilForPlate(plate,year){
     const ym=`${year}-${String(m).padStart(2,'0')}`;
     const used=new Set(allDates.filter(d=>d.startsWith(ym)&&isBizDay(new Date(d+'T00:00:00')))).size;
     const total=(svcStart&&svcStart>monStart)?countBizDays(svcStart,monEnd):bizDaysInMonth(year,m);
-    const distance=trips.filter(t=>(t.isoDate||'').startsWith(ym)).reduce((s,t)=>s+(Number(t.distance)||0),0);
+    const distance=trips.filter(t=>(t.isoDate||'').startsWith(ym)&&!t.isCommute&&!t.isPersonal).reduce((s,t)=>s+(Number(t.distance)||0),0);
     out.push({month:m,used,total,rate:total>0?Math.min(100,(used/total)*100):0,distance,manual:false});
   }
   return out;
