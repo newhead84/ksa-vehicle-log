@@ -38,11 +38,11 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
-  [2026-08-04] 공용차량 현황 카드(차량 상세 모달) 내 "월별 가동율" 1~12월 미니표(.mini-month-row)가
-  아래쪽 "건별 운행거리 추이" 스파크라인(.sparkline-wrap, max-width:640px)보다 폭이 넓어 x축(1~12월)
-  위치가 서로 어긋나 보이던 문제 수정: 미니표를 감싸는 컨테이너에 동일한 max-width:640px을 적용해
-  두 영역의 가로 폭을 일치시킴(스파크라인 SVG는 기존과 동일하게 width:100%/height:auto+viewBox로
-  비율 유지, 변경 없음) | 변경: openVehicle()(월별 가동율 컨테이너 인라인 style)
+  [2026-08-04] 공용차량 현황 카드(차량 상세 모달) 내 "월별 가동율" 1~12월 미니표(.mini-month-row, 카드
+  가로폭 전체 사용)와 아래쪽 "건별 운행거리 추이" 스파크라인(.sparkline-wrap, max-width:640px)의 x축
+  위치가 서로 어긋나 보이던 문제 수정: 미니표는 기존 가로폭(카드 전체)을 그대로 유지하고, 대신 폭이
+  좁은 스파크라인 쪽을 margin:auto로 카드 내 가운데 정렬해 시각적 균형을 맞춤(스파크라인 SVG 크기·
+  비율은 기존과 동일, 변경 없음) | 변경: CSS(.sparkline-wrap)
   [2026-08-03] 월별 가동율 및 운행거리 표에 틀고정(제목행 sticky) 적용: 표 영역(.month-table-wrap)에
   세로 스크롤(max-height:70vh, overflow-y:auto)을 부여하고 thead th에 position:sticky;top:0을 적용해,
   차량 수가 많아 표가 길어져도 아래로 스크롤 시 "차량번호/주사용자/1월~12월/연평균" 제목행이 항상
@@ -542,7 +542,7 @@
   .modal-head-actions .btn{white-space:nowrap;}
   .modal-head .plate-big{font-family:'Paperlogy';font-size:22px;color:var(--navy);font-weight:600;}
   .close-x{background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);}
-  .sparkline-wrap{margin:14px 0 18px;max-width:640px;}
+  .sparkline-wrap{margin:14px auto 18px;max-width:640px;}
   .modal-stats{display:flex;gap:20px;margin-bottom:18px;flex-wrap:wrap;}
   .modal-stats div{font-size:11px;color:var(--muted);}
   .modal-stats b{display:block;font-family:'Paperlogy';font-size:18px;color:var(--ink);}
@@ -3482,7 +3482,7 @@ function openVehicle(plate){
       ${v.replacedBy?`<span class="orig" style="word-break:keep-all;">🔁 이 차량은 반납되었고, ${escapeHtml(v.replacedBy)}(으)로 교체되었습니다</span>`:''}
       ${(v.contractHistory&&v.contractHistory.length)?v.contractHistory.map(h=>`<span class="orig" style="word-break:keep-all;">${escapeHtml(h.date||'')} 계약 갱신: ${h.prevFee!=null?Number(h.prevFee).toLocaleString():'–'}원→${h.newFee!=null?Number(h.newFee).toLocaleString():'–'}원, 기간 ${h.prevContractStartDate||'–'}~${h.prevContractEndDate||'–'} → ${h.newContractStartDate||'–'}~${h.newContractEndDate||'–'}</span>`).join(''):''}
     </div>`:''}
-    <div style="margin-bottom:18px;max-width:640px;">
+    <div style="margin-bottom:18px;">
       <div class="muted" style="font-size:11px;margin-bottom:4px;">${monthlyYear||new Date().getFullYear()}년 월별 가동율 (업무일 기준)</div>
       <div class="mini-month-row">
         ${monthlyUtilForPlate(plate,monthlyYear||new Date().getFullYear()).map(m=>{
