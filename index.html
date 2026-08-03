@@ -38,6 +38,9 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-03] 지역별 열람전용 링크(?view=readonly&r=토큰)에서 "사업장별 차량 가동율 운행거리 비교차트" 섹션을
+  숨김 처리: 해당 차트는 15개 사업장 전체를 비교하는 성격이라 단일 지역 스코프의 열람모드에는 맞지 않음
+  (전체 열람 링크에서는 계속 노출) | 변경: HTML(#mccSectionHead id 추가), applyViewerModeUI()
   [2026-08-03] "월별 차량 가동율·운행거리 비교차트"를 "사업장별 차량 가동율 운행거리 비교차트"로 개편: 기존에는
   15개 사업장별로 하위 차트를 나누고 각 하위 차트 안에 소속 차량마다 개별 추이선을 그리는 방식(차량 단위 비교)
   이었으나, 요청 취지는 사업장 단위 비교였음 → 사업장별 하위 차트 분리를 없애고 하나의 차트에 15개 사업장을
@@ -1093,7 +1096,7 @@
       <div id="monthlyArea"></div>
     </div>
 
-    <div class="section-head">
+    <div class="section-head" id="mccSectionHead">
       <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>사업장별 차량 가동율 운행거리 비교차트</h2>
       <div class="month-controls">
         <button type="button" class="btn btn-ghost mcc-metric-btn active" data-metric="rate" onclick="setMccMetric('rate')">가동율(%)</button>
@@ -1958,6 +1961,15 @@ function applyViewerModeUI(){
     const el = document.getElementById(id);
     if(el) el.style.display = 'none';
   });
+  // 지역별 열람전용 링크(?view=readonly&r=토큰)에서는 15개 사업장 전체를 비교하는
+  // "사업장별 차량 가동율 운행거리 비교차트"가 다른 사업장 정보까지 노출/비교되어
+  // 지역 스코프에 맞지 않으므로 숨긴다. (전체 열람 링크에서는 계속 노출)
+  if(viewerRegionToken){
+    ['mccSectionHead','monthlyCompareChartWrap'].forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) el.style.display = 'none';
+    });
+  }
 }
 
 function enterUserMode(){

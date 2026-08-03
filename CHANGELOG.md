@@ -177,3 +177,8 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
   - 운행거리 축도 차량 개별 최댓값이 아닌 사업장 평균값 기준 전체 공통 최댓값으로 스케일링
   - 범례는 차량번호 대신 사업장명으로 표시(클릭 시 기존과 동일하게 하단 공용차량 현황의 해당 사업장 그룹으로 스크롤)
   - 변경: `renderMonthlyCompareChart()`(사업장 평균 집계 로직 추가, 단일 차트로 재작성), `MCC_LINE_COLORS`(15개 사업장 대응 위해 10→15색 확장), HTML(섹션 `<h2>` 제목, 안내문구)
+
+- [2026-08-03] 지역별 열람전용 링크(`?view=readonly&r=토큰`)에서 "사업장별 차량 가동율 운행거리 비교차트" 섹션 숨김 처리
+  - 사유: 해당 차트는 15개 사업장 전체를 한 화면에서 비교하는 성격이라 단일 지역 스코프로 제한된 열람모드 취지에 맞지 않음
+  - 전체 열람 링크(`?view=readonly`, 토큰 없음)에서는 기존과 동일하게 계속 노출됨
+  - 변경: HTML(`.section-head`에 `id="mccSectionHead"` 추가), `applyViewerModeUI()`(viewerRegionToken 존재 시 `#mccSectionHead`·`#monthlyCompareChartWrap` display:none 처리)
