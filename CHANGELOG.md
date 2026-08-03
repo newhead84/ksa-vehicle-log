@@ -4,6 +4,10 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 형식: 각 항목은 `요청내용 요약 | 변경: 함수/영역`
 
+## 2026-08-04
+
+- 공용차량 현황 카드(차량 상세 모달) 내 "월별 가동율" 1~12월 미니표(.mini-month-row)가 아래쪽 "건별 운행거리 추이" 스파크라인(.sparkline-wrap, max-width:640px)보다 폭이 넓어 x축(1~12월) 위치가 서로 어긋나 보이던 문제 수정: 미니표를 감싸는 컨테이너에 동일한 max-width:640px을 적용해 두 영역의 가로 폭을 일치시킴(스파크라인 SVG는 기존과 동일하게 width:100%/height:auto+viewBox로 비율 유지, 변경 없음) | 변경: openVehicle()(월별 가동율 컨테이너 인라인 style)
+
 ## 2026-07-26
 
 - 제출완료 팝업 2줄 표시(차량·건수 / 기간 분리), 완료 팝업·토스트 한글 keep-all 줄바꿈 적용 | 변경: .done-modal-msg, .submitted-notice p, showSubmitSuccess(), rangeMsg(라인 ~4234)
