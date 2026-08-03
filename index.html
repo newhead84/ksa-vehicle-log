@@ -38,6 +38,12 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-03] 차량 상세 모달 "건별 운행거리 추이" 스파크라인 그래프가 비율이 깨져(찌그러져) 보이던 버그 수정:
+  원인은 <svg width="100%" height="${h}"(고정 112px)>에 preserveAspectRatio="none"까지 겹쳐, 실제 표시폭(모달
+  폭, viewBox 기준 560px와 다를 수 있음)과 viewBox(560x112, 5:1) 비율이 달라도 그 차이를 그대로 강제로 늘려
+  채웠기 때문(앞서 "사업장별 비교차트"에서 있었던 것과 동일한 버그 패턴) → height 속성과
+  preserveAspectRatio="none"을 제거하고 CSS(height:auto)만 지정해, viewBox의 원래 5:1 비율을 그대로 유지한 채
+  폭에 맞춰 자동으로 세로 크기가 계산되도록 수정 | 변경: openVehicle() (svg 태그, sparkline-wrap)
   [2026-08-03] "사업장별 차량 가동율 운행거리 비교차트"가 전체화면(광폭) 상태에서 컨테이너 폭을 그대로
   따라가 세로로도 지나치게 커 보이던 문제 수정: viewBox 비율(640:280)은 그대로 유지한 채(찌그러짐 없음),
   차트를 측정하는 컨테이너 자체(.mcc-wrap)에 max-width:820px + margin:0 auto를 적용해 전체화면에서도
@@ -3441,7 +3447,7 @@ function openVehicle(plate){
     </div>
     <div class="sparkline-wrap">
       <div class="muted" style="font-size:11px;margin-bottom:4px;">${sparkYear}년 건별 운행거리 추이 (km)</div>
-      <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none">
+      <svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block;height:auto;">
         ${sparkGridSvg}
         ${sparkMonthGridSvg}
         ${yearTrips.length?`<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/>${sparkDotsSvg}`
