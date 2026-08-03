@@ -38,6 +38,21 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-03] 차량별 월별 가동율·운행거리 비교 차트를 X축=1~12월 고정 라인차트로 전면 개편: 기존에는
+  차량마다 "가동율(연평균%) vs 운행거리(연간합계km)" 두 막대를 나란히 비교하는 방식이었으나, 요청 취지는
+  월별로 비교하는 것이었음(X축이 월이어야 함) → 상단에 가동율(%)/운행거리(km) 전환 탭 버튼을 추가하고,
+  지역본부별로 그룹핑된 차량마다 1~12월 추이선(라인차트)+범례를 표시하도록 변경. 가동율 축은 0~100% 고정,
+  운행거리 축은 전체 차량의 "월별" 최댓값 기준(연간 합계 아님)으로 스케일링해 지역본부 간에도 비교 가능하도록 함
+  | 변경: renderMonthlyCompareChart()(라인차트로 재작성), setMccMetric()(신규), mccMetric/MCC_LINE_COLORS(신규),
+  HTML(#monthlyCompareChartWrap 상단 탭 버튼), CSS(.mcc-chart-block/.mcc-svg-wrap/.mcc-legend*/.mcc-metric-btn 신규,
+  미사용된 .mcc-row/.mcc-label/.mcc-bars/.mcc-bar-line/.mcc-bar-tag/.mcc-bar/.mcc-km-val 제거)
+  [2026-08-03] 차량 상세 모달 "건별 운행거리 추이" 스파크라인 x축을 달력(월별) 기준으로 재변경: 기존에는
+  실제 운행일자의 최소~최대 범위에만 비례해 배치되어, 데이터가 실제로는 7·8월 두 건뿐이어도 그래프 전체
+  폭에 걸쳐 그려져 위쪽 "월별 가동율" 표와 달 위치가 대응되지 않는 것처럼 보였음 → 위쪽 표와 동일한
+  monthlyYear(선택 연도) 1/1~12/31 전체를 x축으로 고정하고, 해당 연도의 운행 건만 표시하도록 변경. 데이터
+  없는 달(예: 1~6월)은 빈 공간으로 남고, 실제 운행일이 있는 달(예: 7월·8월)에만 그 위치에 정확히 점이 찍힘.
+  월 구분 점선+1~12월 라벨을 하단에 추가해 위쪽 표와 시각적으로 대응되도록 함 | 변경: openVehicle()
+  (sparkYear/yearTrips 기준 x좌표 재계산, sparkMonthGridSvg 신규, 안내문구에 연도 표기)
   [2026-08-03] 차량 상세 모달 "건별 운행거리 추이" 스파크라인에 Y축 정보 추가: 기존에는 축/눈금 없이
   선만 그려져 그래프가 어떤 값 범위를 나타내는지 알 수 없었음(예: 27~30km 소량 데이터가 축 정보 없이
   표시되어 이해 불가) → 차량별 실제 입력된 건별 거리의 최댓값 기준으로 동적 스케일링(1/2/5×10^n 단위로
@@ -842,30 +857,25 @@
   .month-cell{line-height:1.3;}
   .month-cell-km{display:block;font-size:9px;font-weight:400;opacity:.8;}
 
-  /* ===== 차량별 가동율·운행거리 비교 차트 ===== */
+  /* ===== 차량별 월별 가동율·운행거리 비교 차트 (X축=월, 지역본부별 라인차트) ===== */
   .mcc-wrap{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;}
   .mcc-branch-head{font-size:13px;font-weight:700;color:var(--navy);padding:10px 4px 6px;border-bottom:1px solid var(--line);margin-bottom:4px;cursor:pointer;}
   .mcc-branch-head:first-child{padding-top:0;}
-  .mcc-row{display:flex;align-items:center;gap:12px;padding:8px 4px;border-bottom:1px solid var(--line);cursor:pointer;}
-  .mcc-row:last-child{border-bottom:none;}
-  .mcc-row:hover{background:var(--paper);}
-  .mcc-label{flex:0 0 140px;display:flex;flex-direction:column;line-height:1.25;min-width:0;}
-  .mcc-label .plate-num{font-family:'Paperlogy';font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .mcc-label .plate-model{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .mcc-bars{flex:1 1 auto;display:flex;flex-direction:column;gap:4px;min-width:0;}
-  .mcc-bar-line{display:flex;align-items:center;gap:6px;}
-  .mcc-bar-tag{flex:0 0 34px;font-size:10px;color:var(--muted);}
-  .mcc-bar{width:100%;max-width:220px;}
-  .mcc-km-val{font-family:'Paperlogy';font-size:12px;font-weight:600;width:60px;text-align:right;flex-shrink:0;}
+  .mcc-chart-block{margin-bottom:16px;}
+  .mcc-chart-block:last-child{margin-bottom:0;}
+  .mcc-svg-wrap{width:100%;}
+  .mcc-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:4px;padding:0 4px;}
+  .mcc-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink);cursor:pointer;white-space:nowrap;}
+  .mcc-legend-item:hover{color:var(--navy);}
+  .mcc-legend-swatch{width:10px;height:10px;border-radius:50%;flex-shrink:0;display:inline-block;}
+  .mcc-legend-model{color:var(--muted);}
+  .mcc-metric-btn{padding:5px 12px;font-size:12px;}
+  .mcc-metric-btn.active{background:var(--navy);color:#fff;border-color:var(--navy);}
 
   @media (max-width:640px){
     .month-cell-km{font-size:8px;}
-    .mcc-label{flex:0 0 96px;}
-    .mcc-label .plate-num{font-size:11.5px;}
-    .mcc-label .plate-model{font-size:9.5px;}
-    .mcc-bar-tag{flex:0 0 28px;font-size:9px;}
-    .mcc-bar{max-width:none;}
-    .mcc-km-val{width:50px;font-size:11px;}
+    .mcc-legend-item{font-size:10px;}
+    .mcc-metric-btn{padding:4px 9px;font-size:11px;}
   }
 
 </style>
@@ -1075,10 +1085,14 @@
     </div>
 
     <div class="section-head">
-      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>차량별 가동율·운행거리 비교 차트</h2>
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>월별 차량 가동율·운행거리 비교차트</h2>
+      <div class="month-controls">
+        <button type="button" class="btn btn-ghost mcc-metric-btn active" data-metric="rate" onclick="setMccMetric('rate')">가동율(%)</button>
+        <button type="button" class="btn btn-ghost mcc-metric-btn" data-metric="dist" onclick="setMccMetric('dist')">운행거리(km)</button>
+      </div>
     </div>
     <div class="section-body collapsed" id="monthlyCompareChartWrap">
-      <div class="muted" style="font-size:11px;margin-bottom:8px;">선택한 연도의 차량별 연평균 가동율과 연간 총 운행거리를 나란히 비교합니다 (운행거리 막대는 전체 차량 중 최댓값 기준으로 스케일링).</div>
+      <div class="muted" style="font-size:11px;margin-bottom:8px;">선택한 연도의 1~12월 추이를 지역본부별로 차량마다 선으로 비교합니다 (버튼으로 가동율/운행거리 전환, 운행거리는 전체 차량 공통 최댓값 기준 스케일).</div>
       <div class="mcc-wrap" id="monthlyCompareChart"></div>
     </div>
 
@@ -2803,8 +2817,16 @@ function renderMonthly(year){
   renderMonthlyCompareChart(monthlyYear);
 }
 
-// 차량별 가동율·운행거리 비교 차트: 선택 연도의 연평균 가동율(%)과 연간 총 운행거리(km)를 차량별로 나란히 표시
-// 운행거리 막대는 (스파크라인의 차량별 동적 스케일과 달리) 차량 간 비교가 목적이므로 전체 차량 공통 최댓값 기준으로 스케일링한다.
+// 차량별 월별 가동율·운행거리 비교 차트: X축은 항상 1~12월 고정, 지역본부별로 그룹핑해 차량마다 월별 추이선을 그린다.
+// 가동율(%)과 운행거리(km)는 성격이 달라 한 차트에 나란히 놓지 않고, 상단 탭(mccMetric)으로 지표를 전환해서 본다.
+// 운행거리 축은 (모달 스파크라인의 차량별 동적 스케일과 달리) 차량/지역본부 간 비교가 목적이므로 전체 차량 공통 "월간" 최댓값 기준으로 스케일링한다.
+let mccMetric='rate'; // 'rate'(가동율%) | 'dist'(운행거리km)
+const MCC_LINE_COLORS=['#17593d','#e81657','#2f6690','#e67e22','#7eb138','#8e44ad','#c0392b','#1abc9c','#5b6ee1','#a3742d'];
+function setMccMetric(metric){
+  mccMetric=metric;
+  document.querySelectorAll('.mcc-metric-btn').forEach(b=>b.classList.toggle('active',b.dataset.metric===metric));
+  renderMonthlyCompareChart(monthlyYear);
+}
 function renderMonthlyCompareChart(year){
   const el=document.getElementById('monthlyCompareChart');
   if(!el) return;
@@ -2812,41 +2834,65 @@ function renderMonthlyCompareChart(year){
   const byBranch={};
   plates.forEach(p=>{const b=data.vehicles[p].branch||'미배정';if(!byBranch[b])byBranch[b]=[];byBranch[b].push(p);});
   const branches=Object.keys(byBranch).sort(compareByOrg);
-  const perVehicle=plates.map(p=>{
-    const hasAnyTrip=hasMonthlyDataFor(p,year);
-    const monthly=monthlyUtilForPlate(p,year);
-    const validMonths=monthly.filter(m=>!m.beforeService);
-    const avg=hasAnyTrip&&validMonths.length?validMonths.reduce((s,m)=>s+m.rate,0)/validMonths.length:0;
-    const dist=hasAnyTrip?validMonths.reduce((s,m)=>s+(m.distance||0),0):0;
-    return{plate:p,hasAnyTrip,avg,dist};
-  });
-  const distMax=Math.max(1,...perVehicle.map(x=>x.dist));
+  const perVehicleMonthly={};
+  plates.forEach(p=>{ perVehicleMonthly[p]=monthlyUtilForPlate(p,year); });
+  // 운행거리 축 공통 최댓값: 전체 차량의 "월별" 거리값 중 최댓값 기준(연간 합계가 아님 — 월별 비교이므로)
+  let distMonthMax=0;
+  plates.forEach(p=>{ perVehicleMonthly[p].forEach(m=>{ if(!m.beforeService) distMonthMax=Math.max(distMonthMax,m.distance||0); }); });
+  const distStep=sparklineNiceStep(distMonthMax||1,4);
+  const distAxisMax=Math.max(distStep,Math.ceil((distMonthMax||1)/distStep)*distStep);
+  const w=640,h=150,padTop=10,padBottom=20,padLeft=40,padRight=10;
+  const plotW=w-padLeft-padRight, plotH=h-padTop-padBottom;
+  const xOfMonth=m=>padLeft+((m-1)/11)*plotW;
+  const axisMax=mccMetric==='rate'?100:distAxisMax;
+  const yOf=v=>padTop+plotH-(Math.min(v,axisMax)/axisMax)*plotH;
+  const ticks=mccMetric==='rate'?[0,25,50,75,100]:(()=>{const arr=[];for(let tv=0;tv<=distAxisMax+0.001;tv+=distStep)arr.push(Math.round(tv));return arr;})();
+  const gridSvg=ticks.map(tv=>{
+    const y=yOf(tv);
+    return `<line x1="${padLeft}" y1="${y}" x2="${w-padRight}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`
+         + `<text x="${padLeft-6}" y="${y+3}" font-size="9" fill="var(--muted)" text-anchor="end">${mccMetric==='rate'?tv+'%':tv.toLocaleString()}</text>`;
+  }).join('');
+  const monthGridSvg=Array.from({length:12},(_,i)=>{
+    const x=xOfMonth(i+1);
+    const line=i===0?'':`<line x1="${x}" y1="${padTop}" x2="${x}" y2="${padTop+plotH}" stroke="var(--line)" stroke-width="1" stroke-dasharray="2,2"/>`;
+    const anchor=i===0?'start':(i===11?'end':'middle');
+    return `${line}<text x="${x}" y="${h-4}" font-size="9" fill="var(--ink)" text-anchor="${anchor}">${i+1}월</text>`;
+  }).join('');
   let html='';
   branches.forEach(branch=>{
     const ps=byBranch[branch].sort((a,b)=>{
       const ma=modelOrder(data.vehicles[a]?.model||''),mb=modelOrder(data.vehicles[b]?.model||'');
       return ma!==mb?ma-mb:a.localeCompare(b);
     });
+    const withData=ps.filter(p=>hasMonthlyDataFor(p,year));
     html+=`<div class="mcc-branch-head" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleGroup('${branch.replace(/'/g,"\\'")}')">${branch}</div>`;
-    ps.forEach(p=>{
-      const info=perVehicle.find(x=>x.plate===p);
-      const modelName=modelShort(data.vehicles[p]?.model||'');
-      if(!info.hasAnyTrip){
-        html+=`<div class="mcc-row" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${p}')">
-          <div class="mcc-label"><span class="plate-num">${p}</span><span class="plate-model">${modelName}</span></div>
-          <div class="mcc-bars muted" style="font-size:11px;">데이터 없음</div>
-        </div>`;
-        return;
+    if(!withData.length){
+      html+=`<div class="mcc-chart-block muted" style="font-size:11px;padding:8px 4px;">데이터 없음</div>`;
+      return;
+    }
+    let linesSvg='';
+    const legendItems=[];
+    withData.forEach((p,idx)=>{
+      const color=MCC_LINE_COLORS[idx%MCC_LINE_COLORS.length];
+      const validPts=perVehicleMonthly[p].filter(m=>!m.beforeService).map(m=>({x:xOfMonth(m.month),y:yOf(mccMetric==='rate'?m.rate:(m.distance||0))}));
+      if(validPts.length){
+        const ptsStr=validPts.map(pt=>`${pt.x},${pt.y}`).join(' ');
+        const dots=validPts.map(pt=>`<circle cx="${pt.x}" cy="${pt.y}" r="2.3" fill="${color}"/>`).join('');
+        linesSvg+=`<polyline points="${ptsStr}" fill="none" stroke="${color}" stroke-width="2"/>${dots}`;
       }
-      const distPct=(info.dist/distMax)*100;
-      html+=`<div class="mcc-row" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${p}')">
-        <div class="mcc-label"><span class="plate-num">${p}</span><span class="plate-model">${modelName}</span></div>
-        <div class="mcc-bars">
-          <div class="mcc-bar-line"><span class="mcc-bar-tag">가동율</span><div class="util-bar-wrap"><div class="util-bar mcc-bar"><div class="util-bar-fill" style="width:${info.avg}%;background:${utilColor(info.avg)};"></div></div><span class="util-pct mono">${info.avg.toFixed(0)}%</span></div></div>
-          <div class="mcc-bar-line"><span class="mcc-bar-tag">거리</span><div class="util-bar-wrap"><div class="util-bar mcc-bar"><div class="util-bar-fill" style="width:${distPct}%;background:var(--navy-2);"></div></div><span class="mcc-km-val">${Math.round(info.dist).toLocaleString()}km</span></div></div>
-        </div>
-      </div>`;
+      const modelName=modelShort(data.vehicles[p]?.model||'');
+      legendItems.push(`<span class="mcc-legend-item" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${p}')"><span class="mcc-legend-swatch" style="background:${color};"></span>${p} <span class="mcc-legend-model">${modelName}</span></span>`);
     });
+    html+=`<div class="mcc-chart-block">
+      <div class="mcc-svg-wrap">
+        <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none">
+          ${gridSvg}
+          ${monthGridSvg}
+          ${linesSvg}
+        </svg>
+      </div>
+      <div class="mcc-legend">${legendItems.join('')}</div>
+    </div>`;
   });
   el.innerHTML=html||`<div class="muted" style="text-align:center;padding:20px;">데이터가 없습니다</div>`;
 }
@@ -3221,9 +3267,19 @@ function openVehicle(plate){
   const trips=(v.trips||[]).slice().sort(tripChronoCompare);
   const totalDist=trips.reduce((s,t)=>s+(Number(t.distance)||0),0);
   const totalFuel=trips.reduce((s,t)=>s+(Number(t.fuel)||0),0);
-  const w=560,h=100,padTop=8,padBottom=8,padLeft=40,padRight=8;
+  const w=560,h=112,padTop=8,padBottom=20,padLeft=40,padRight=8;
   const plotW=w-padLeft-padRight, plotH=h-padTop-padBottom;
-  const distances=trips.map(t=>Number(t.distance)||0);
+  // x축 기준 연도: 위쪽 "월별 가동율" 표와 동일한 monthlyYear를 사용해 두 영역의 달 위치가 항상 서로 대응되도록 한다.
+  const sparkYear=Number(monthlyYear)||new Date().getFullYear();
+  // isoDate가 비어있는 예외 데이터도 원본 date 텍스트로 실효 날짜를 복구해서 연도 필터링/좌표계산 모두에 일관되게 사용한다.
+  // (기존에는 isoDate만 보고 걸러서, isoDate가 비어있으면 해당 연도 데이터인지 여부와 무관하게 통째로 제외되던 문제가 있었음)
+  const resolveTripIsoForSpark=(t)=>{
+    if(t.isoDate) return t.isoDate;
+    if(t.date){ const parsed=parseTripDateField(t.date, sparkYear); if(parsed&&parsed.isoDate) return parsed.isoDate; }
+    return '';
+  };
+  const yearTrips=trips.filter(t=>resolveTripIsoForSpark(t).startsWith(String(sparkYear)));
+  const distances=yearTrips.map(t=>Number(t.distance)||0);
   // Y축: 차량별 실제 입력된 건별 거리 기준으로 동적 스케일링 (고정 상한 없음, 500km 등 임의 단위 강제하지 않음)
   const rawMax=Math.max(0,...distances);
   const sparkStep=sparklineNiceStep(rawMax||1,4);
@@ -3231,25 +3287,28 @@ function openVehicle(plate){
   const sparkTicks=[];
   for(let tv=0;tv<=sparkAxisMax+0.001;tv+=sparkStep) sparkTicks.push(Math.round(tv));
   const yOf=d=>padTop+plotH-(d/sparkAxisMax)*plotH;
-  // x축: 건수 등간격이 아니라 실제 운행일자 간격에 비례해 배치한다.
-  // isoDate가 없거나(구버전 데이터) 모든 날짜가 동일해 구간폭이 0이 되는 경우에는
-  // 0으로 나누기/겹침을 피하기 위해 기존 건수 등간격 방식으로 안전하게 대체한다.
-  const tripTimes=trips.map(t=>t.isoDate?new Date(t.isoDate+'T00:00:00').getTime():NaN);
-  const validTimes=tripTimes.filter(t=>!isNaN(t));
-  const useDateAxis=distances.length>1 && validTimes.length===distances.length && Math.max(...validTimes)>Math.min(...validTimes);
-  let xs;
-  if(useDateAxis){
-    const minT=Math.min(...validTimes),maxT=Math.max(...validTimes);
-    xs=tripTimes.map(t=>padLeft+((t-minT)/(maxT-minT))*plotW);
-  }else{
-    const stepX=distances.length>1?plotW/(distances.length-1):0;
-    xs=distances.map((d,i)=>i*stepX+padLeft);
-  }
+  // x축: 건수/실제 데이터범위 비례가 아니라 sparkYear 1/1~12/31 달력 전체를 기준으로 배치한다.
+  // → 데이터 없는 달은 빈 공간으로 남고, 실제 운행일이 있는 달에만 점이 그 달 위치에 정확히 찍힌다.
+  const yearStartMs=new Date(sparkYear,0,1).getTime();
+  const yearEndMs=new Date(sparkYear+1,0,1).getTime();
+  const xOfTime=tms=>padLeft+((tms-yearStartMs)/(yearEndMs-yearStartMs))*plotW;
+  const xs=yearTrips.map((t,i)=>{
+    const eff=resolveTripIsoForSpark(t);
+    const tms=eff?new Date(eff+'T00:00:00').getTime():NaN;
+    // 그래도 복구 불가한 경우에만 최후 수단으로 균등 분산 배치(정확한 달력 위치를 알 수 없는 예외 케이스)
+    return isNaN(tms)?padLeft+(yearTrips.length>1?i/(yearTrips.length-1):0)*plotW:xOfTime(tms);
+  });
   const pts=distances.map((d,i)=>`${xs[i]},${yOf(d)}`).join(' ');
   const sparkGridSvg=sparkTicks.map(tv=>{
     const y=yOf(tv);
     return `<line x1="${padLeft}" y1="${y}" x2="${w-padRight}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`
          + `<text x="${padLeft-6}" y="${y+3}" font-size="9" fill="var(--muted)" text-anchor="end">${tv.toLocaleString()}</text>`;
+  }).join('');
+  // 월 구분 세로선(점선) + 하단 1~12월 라벨 — 위쪽 월별 가동율 표와 x축 위치를 시각적으로 대응시킴
+  const sparkMonthGridSvg=Array.from({length:12},(_,mi)=>{
+    const x=xOfTime(new Date(sparkYear,mi,1).getTime());
+    const line=mi===0?'':`<line x1="${x}" y1="${padTop}" x2="${x}" y2="${padTop+plotH}" stroke="var(--line)" stroke-width="1" stroke-dasharray="2,2"/>`;
+    return `${line}<text x="${x}" y="${h-4}" font-size="9" fill="var(--ink)" text-anchor="start">${mi+1}월</text>`;
   }).join('');
   const sparkDotsSvg=distances.map((d,i)=>`<circle cx="${xs[i]}" cy="${yOf(d)}" r="2.5" fill="var(--accent)"/>`).join('');
   const util=calcUtilization(trips);
@@ -3326,11 +3385,12 @@ function openVehicle(plate){
       </div>
     </div>
     <div class="sparkline-wrap">
-      <div class="muted" style="font-size:11px;margin-bottom:4px;">건별 운행거리 추이 (km)</div>
+      <div class="muted" style="font-size:11px;margin-bottom:4px;">${sparkYear}년 건별 운행거리 추이 (km)</div>
       <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none">
         ${sparkGridSvg}
-        ${trips.length?`<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/>${sparkDotsSvg}`
-          :`<text x="${w/2}" y="${padTop+plotH/2}" font-size="11" fill="var(--muted)" text-anchor="middle">운행 기록 없음</text>`}
+        ${sparkMonthGridSvg}
+        ${yearTrips.length?`<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/>${sparkDotsSvg}`
+          :`<text x="${w/2}" y="${padTop+plotH/2}" font-size="11" fill="var(--muted)" text-anchor="middle">${sparkYear}년 운행 기록 없음</text>`}
       </svg>
     </div>
     ${(()=>{
