@@ -182,3 +182,10 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
   - 사유: 해당 차트는 15개 사업장 전체를 한 화면에서 비교하는 성격이라 단일 지역 스코프로 제한된 열람모드 취지에 맞지 않음
   - 전체 열람 링크(`?view=readonly`, 토큰 없음)에서는 기존과 동일하게 계속 노출됨
   - 변경: HTML(`.section-head`에 `id="mccSectionHead"` 추가), `applyViewerModeUI()`(viewerRegionToken 존재 시 `#mccSectionHead`·`#monthlyCompareChartWrap` display:none 처리)
+
+- [2026-08-03] "사업장별 차량 가동율 운행거리 비교차트"가 데스크탑 화면에서 가로로 눌려 찌그러져 보이던 버그 수정
+  - 원인: `<svg width="100%" height="${h}">`(h는 고정 280px)에 `preserveAspectRatio="none"`까지 겹쳐서, 실제 표시폭(컨테이너 100%, 데스크탑에서 640px보다 훨씬 넓음)과 viewBox(640x280) 비율이 달라도 그 차이를 그대로 강제로 늘려 채웠기 때문
+  - 수정: viewBox를 실제 렌더링될 컨테이너 폭에 맞춰 동적으로 계산(기존 비율 640:280 유지)하도록 변경하고 `preserveAspectRatio="none"`을 제거해 항상 1:1로 그려지도록 함
+  - 보완: 비교차트 섹션이 접힘 상태(폭 0)로 최초 렌더링되는 구조라, `toggleSection()`에서 이 섹션이 펼쳐질 때 폭을 재측정해 다시 그리도록 추가. 창 크기 변경 시에도 재측정하도록 디바운스 리사이즈 핸들러 신규 추가
+  - 함께 요청된 폰트 확대 반영: 안내문구 11px→13px, 범례 11px→13px(스와치 10px→12px), 월별 가동율 표 "주사용자" 컬럼 10px→11.5px(모바일 9px→10.5px)
+  - 변경: `renderMonthlyCompareChart()`(컨테이너 폭 측정 로직, svg 태그), `toggleSection()`(펼침 시 재렌더 추가), `initMccChartResize()`(신규), CSS(`.mcc-caption` 신규, `.mcc-legend`/`.mcc-legend-item`/`.mcc-legend-swatch`, `.top-driver-cell`)

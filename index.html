@@ -38,6 +38,16 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-03] "사업장별 차량 가동율 운행거리 비교차트"가 데스크탑 화면에서 가로로 눌려 찌그러져 보이던 버그 수정:
+  원인은 <svg width="100%" height="${h}"(고정 280px)>에 preserveAspectRatio="none"까지 겹쳐, 실제 표시폭(컨테이너
+  100%, 데스크탑에서 640px보다 훨씬 넓음)과 viewBox(640x280) 비율이 달라도 그 차이를 그대로 강제로 늘려 채웠기
+  때문 → viewBox를 실제 렌더링될 컨테이너 폭에 맞춰 동적으로 계산(비율 640:280 유지)하도록 변경하고
+  preserveAspectRatio="none"을 제거해 항상 1:1로 그려지도록 수정. 비교차트 섹션이 접힘 상태(폭 0)로 최초
+  렌더링되는 점을 보완해 펼침 시 재측정 렌더링을 추가했고, 창 크기 변경 시에도 재측정하도록 리사이즈
+  핸들러(디바운스) 추가. 함께 요청된 안내문구·범례·"주사용자" 컬럼 폰트 확대도 반영(각각 11px→13px,
+  11px→13px, 10px→11.5px) | 변경: renderMonthlyCompareChart()(폭 측정 로직, svg 태그), toggleSection()
+  (펼침 시 재렌더), initMccChartResize()(신규), CSS(.mcc-caption 신규, .mcc-legend/.mcc-legend-item/
+  .mcc-legend-swatch, .top-driver-cell)
   [2026-08-03] 지역별 열람전용 링크(?view=readonly&r=토큰)에서 "사업장별 차량 가동율 운행거리 비교차트" 섹션을
   숨김 처리: 해당 차트는 15개 사업장 전체를 비교하는 성격이라 단일 지역 스코프의 열람모드에는 맞지 않음
   (전체 열람 링크에서는 계속 노출) | 변경: HTML(#mccSectionHead id 추가), applyViewerModeUI()
@@ -442,7 +452,7 @@
   .month-table th:last-child{width:7%;}
   .month-table td{padding:6px 3px;text-align:center;border-bottom:1px solid var(--line);}
   .month-table td:first-child{text-align:left;padding-left:12px;padding-right:2px;font-family:'Paperlogy';}
-  .top-driver-cell{text-align:left;padding-left:8px;font-size:10px;line-height:1.6;font-weight:500;font-family:inherit;color:var(--muted);word-break:keep-all;}
+  .top-driver-cell{text-align:left;padding-left:8px;font-size:11.5px;line-height:1.6;font-weight:500;font-family:inherit;color:var(--muted);word-break:keep-all;}
   .plate-cell{display:flex;flex-direction:row;align-items:baseline;gap:6px;line-height:1.25;white-space:nowrap;overflow:hidden;}
   .plate-cell .plate-num{font-weight:600;font-size:13px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;}
   .plate-cell .plate-model{font-size:12px;color:var(--muted);font-weight:500;overflow:hidden;text-overflow:ellipsis;}
@@ -814,7 +824,7 @@
     .month-table th:nth-child(n+3):nth-child(-n+14){width:auto;}
     .month-table th:last-child{width:auto;}
     .month-table td:first-child{padding-left:10px;padding-right:2px;}
-    .top-driver-cell{font-size:9px;padding-left:6px;}
+    .top-driver-cell{font-size:10.5px;padding-left:6px;}
     /* 좁은 화면에서는 차량번호 컬럼 폭(90px)이 번호만으로 거의 채워져 차종명이 밀려 잘리므로, 번호/차종을 세로로 쌓아 각각 컬럼 폭 안에서 말줄임 처리 */
     .plate-cell{flex-direction:column;align-items:stretch;gap:1px;white-space:normal;overflow:hidden;}
     .plate-cell .plate-num{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -876,17 +886,20 @@
   .mcc-chart-block{margin-bottom:16px;}
   .mcc-chart-block:last-child{margin-bottom:0;}
   .mcc-svg-wrap{width:100%;}
-  .mcc-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:4px;padding:0 4px;}
-  .mcc-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink);cursor:pointer;white-space:nowrap;}
+  .mcc-svg-wrap svg{display:block;width:100%;}
+  .mcc-caption{font-size:13px;line-height:1.5;}
+  .mcc-legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:8px;padding:0 4px;}
+  .mcc-legend-item{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;white-space:nowrap;}
   .mcc-legend-item:hover{color:var(--navy);}
-  .mcc-legend-swatch{width:10px;height:10px;border-radius:50%;flex-shrink:0;display:inline-block;}
+  .mcc-legend-swatch{width:12px;height:12px;border-radius:50%;flex-shrink:0;display:inline-block;}
   .mcc-legend-model{color:var(--muted);}
   .mcc-metric-btn{padding:5px 12px;font-size:12px;}
   .mcc-metric-btn.active{background:var(--navy);color:#fff;border-color:var(--navy);}
 
   @media (max-width:640px){
     .month-cell-km{font-size:8px;}
-    .mcc-legend-item{font-size:10px;}
+    .mcc-caption{font-size:12px;}
+    .mcc-legend-item{font-size:12px;}
     .mcc-metric-btn{padding:4px 9px;font-size:11px;}
   }
 
@@ -1104,7 +1117,7 @@
       </div>
     </div>
     <div class="section-body collapsed" id="monthlyCompareChartWrap">
-      <div class="muted" style="font-size:11px;margin-bottom:8px;">선택한 연도의 1~12월 추이를 15개 사업장별 차량 평균 가동율·평균 운행거리로 비교합니다 (버튼으로 가동율/운행거리 전환, 운행거리는 전체 사업장 공통 최댓값 기준 스케일).</div>
+      <div class="muted mcc-caption" style="margin-bottom:10px;">선택한 연도의 1~12월 추이를 15개 사업장별 차량 평균 가동율·평균 운행거리로 비교합니다 (버튼으로 가동율/운행거리 전환, 운행거리는 전체 사업장 공통 최댓값 기준 스케일).</div>
       <div class="mcc-wrap" id="monthlyCompareChart"></div>
     </div>
 
@@ -2878,7 +2891,14 @@ function renderMonthlyCompareChart(year){
   branches.forEach(branch=>{ perBranchMonthly[branch].forEach(m=>{ if(m.distance!=null) distMonthMax=Math.max(distMonthMax,m.distance); }); });
   const distStep=sparklineNiceStep(distMonthMax||1,4);
   const distAxisMax=Math.max(distStep,Math.ceil((distMonthMax||1)/distStep)*distStep);
-  const w=640,h=280,padTop=10,padBottom=20,padLeft=44,padRight=10;
+  // 실제 렌더링될 컨테이너 폭을 측정해 viewBox를 그 폭에 맞춤(비율 640:280 유지) — 그래야
+  // width:100%로 늘어난 실제 표시 크기와 viewBox 비율이 항상 일치해 가로로 눌리는(찌그러지는) 현상이 없음.
+  // 접힘 상태(display:none) 등으로 폭 측정이 안 되면 데스크탑 기본값으로 폴백.
+  const wrapStyle=getComputedStyle(el);
+  const padL=parseFloat(wrapStyle.paddingLeft)||0, padR=parseFloat(wrapStyle.paddingRight)||0;
+  const measuredW=el.clientWidth?(el.clientWidth-padL-padR):0;
+  const w=Math.round(measuredW>200?measuredW:900), h=Math.round(w*(280/640));
+  const padTop=10,padBottom=20,padLeft=44,padRight=10;
   const plotW=w-padLeft-padRight, plotH=h-padTop-padBottom;
   const xOfMonth=m=>padLeft+((m-1)/11)*plotW;
   const axisMax=mccMetric==='rate'?100:distAxisMax;
@@ -2913,7 +2933,7 @@ function renderMonthlyCompareChart(year){
   }
   el.innerHTML=`<div class="mcc-chart-block">
     <div class="mcc-svg-wrap">
-      <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none">
+      <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}">
         ${gridSvg}
         ${monthGridSvg}
         ${linesSvg}
@@ -2927,6 +2947,10 @@ function toggleSection(h2){
   const wrap=h2.closest('.section-head').nextElementSibling;
   wrap.classList.toggle('collapsed');
   h2.querySelector('.chevron').classList.toggle('rot');
+  // 비교차트 섹션은 접힌 상태(폭 0)로 최초 렌더링되므로, 펼쳐질 때 실제 폭 기준으로 다시 그림
+  if(wrap.id==='monthlyCompareChartWrap' && !wrap.classList.contains('collapsed')){
+    renderMonthlyCompareChart(monthlyYear);
+  }
 }
 
 let viewMode='grouped';
@@ -6034,6 +6058,19 @@ function scrollToTop(){
   reposition();
   new MutationObserver(reposition).observe(bar,{attributes:true,attributeFilter:['style']});
   window.addEventListener('resize', reposition);
+})();
+
+// 사업장별 차량 가동율 운행거리 비교차트: 창 크기 변경 시(가로폭 변경) 실제 폭 기준으로 다시 그려
+// viewBox 비율이 항상 실제 표시폭과 일치하도록 유지(찌그러짐 방지)
+(function initMccChartResize(){
+  let t=null;
+  window.addEventListener('resize', ()=>{
+    clearTimeout(t);
+    t=setTimeout(()=>{
+      const wrap=document.getElementById('monthlyCompareChartWrap');
+      if(wrap && !wrap.classList.contains('collapsed')) renderMonthlyCompareChart(monthlyYear);
+    }, 200);
+  });
 })();
 
 // 초기 제출 로그 렌더
