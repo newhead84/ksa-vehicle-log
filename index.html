@@ -38,6 +38,15 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-03] "월별 차량 가동율·운행거리 비교차트"를 "사업장별 차량 가동율 운행거리 비교차트"로 개편: 기존에는
+  15개 사업장별로 하위 차트를 나누고 각 하위 차트 안에 소속 차량마다 개별 추이선을 그리는 방식(차량 단위 비교)
+  이었으나, 요청 취지는 사업장 단위 비교였음 → 사업장별 하위 차트 분리를 없애고 하나의 차트에 15개 사업장을
+  각각 한 선으로 표시. 각 사업장 선의 월별 값은 해당 사업장 소속 차량들의 평균(평균 가동율%, 평균 운행거리km,
+  당월 beforeService 아닌 차량만 반영)이며, 운행거리 축도 차량 개별 최댓값이 아닌 사업장 평균값 기준 전체
+  공통 최댓값으로 스케일링하도록 변경. 범례는 차량번호 대신 사업장명으로 표시(클릭 시 기존과 동일하게 하단
+  공용차량 현황의 해당 사업장 그룹으로 스크롤) | 변경: renderMonthlyCompareChart()(사업장 평균 집계 로직 추가,
+  단일 차트로 재작성), MCC_LINE_COLORS(15개 사업장 대응 위해 10→15색으로 확장), HTML(섹션 제목, 안내문구),
+  section-head 타이틀
   [2026-08-03] 차량별 월별 가동율·운행거리 비교 차트를 X축=1~12월 고정 라인차트로 전면 개편: 기존에는
   차량마다 "가동율(연평균%) vs 운행거리(연간합계km)" 두 막대를 나란히 비교하는 방식이었으나, 요청 취지는
   월별로 비교하는 것이었음(X축이 월이어야 함) → 상단에 가동율(%)/운행거리(km) 전환 탭 버튼을 추가하고,
@@ -1085,14 +1094,14 @@
     </div>
 
     <div class="section-head">
-      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>월별 차량 가동율·운행거리 비교차트</h2>
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>사업장별 차량 가동율 운행거리 비교차트</h2>
       <div class="month-controls">
         <button type="button" class="btn btn-ghost mcc-metric-btn active" data-metric="rate" onclick="setMccMetric('rate')">가동율(%)</button>
         <button type="button" class="btn btn-ghost mcc-metric-btn" data-metric="dist" onclick="setMccMetric('dist')">운행거리(km)</button>
       </div>
     </div>
     <div class="section-body collapsed" id="monthlyCompareChartWrap">
-      <div class="muted" style="font-size:11px;margin-bottom:8px;">선택한 연도의 1~12월 추이를 지역본부별로 차량마다 선으로 비교합니다 (버튼으로 가동율/운행거리 전환, 운행거리는 전체 차량 공통 최댓값 기준 스케일).</div>
+      <div class="muted" style="font-size:11px;margin-bottom:8px;">선택한 연도의 1~12월 추이를 15개 사업장별 차량 평균 가동율·평균 운행거리로 비교합니다 (버튼으로 가동율/운행거리 전환, 운행거리는 전체 사업장 공통 최댓값 기준 스케일).</div>
       <div class="mcc-wrap" id="monthlyCompareChart"></div>
     </div>
 
@@ -2817,11 +2826,12 @@ function renderMonthly(year){
   renderMonthlyCompareChart(monthlyYear);
 }
 
-// 차량별 월별 가동율·운행거리 비교 차트: X축은 항상 1~12월 고정, 지역본부별로 그룹핑해 차량마다 월별 추이선을 그린다.
+// 사업장별 월별 가동율·운행거리 비교 차트: X축은 항상 1~12월 고정, 15개 사업장 각각을 한 선으로 그린다.
+// 각 사업장의 월별 값은 해당 사업장 소속 차량들의 "평균"(가동율 평균, 운행거리 평균)이며, 차량 단위가 아닌 사업장 단위 비교가 목적이다.
 // 가동율(%)과 운행거리(km)는 성격이 달라 한 차트에 나란히 놓지 않고, 상단 탭(mccMetric)으로 지표를 전환해서 본다.
-// 운행거리 축은 (모달 스파크라인의 차량별 동적 스케일과 달리) 차량/지역본부 간 비교가 목적이므로 전체 차량 공통 "월간" 최댓값 기준으로 스케일링한다.
+// 운행거리 축은 (모달 스파크라인의 차량별 동적 스케일과 달리) 사업장 간 비교가 목적이므로 전체 사업장 공통 "월간 평균" 최댓값 기준으로 스케일링한다.
 let mccMetric='rate'; // 'rate'(가동율%) | 'dist'(운행거리km)
-const MCC_LINE_COLORS=['#17593d','#e81657','#2f6690','#e67e22','#7eb138','#8e44ad','#c0392b','#1abc9c','#5b6ee1','#a3742d'];
+const MCC_LINE_COLORS=['#17593d','#e81657','#2f6690','#e67e22','#7eb138','#8e44ad','#c0392b','#1abc9c','#5b6ee1','#a3742d','#0e7c86','#b8860b','#455a64','#d6336c','#5c940d'];
 function setMccMetric(metric){
   mccMetric=metric;
   document.querySelectorAll('.mcc-metric-btn').forEach(b=>b.classList.toggle('active',b.dataset.metric===metric));
@@ -2836,12 +2846,27 @@ function renderMonthlyCompareChart(year){
   const branches=Object.keys(byBranch).sort(compareByOrg);
   const perVehicleMonthly={};
   plates.forEach(p=>{ perVehicleMonthly[p]=monthlyUtilForPlate(p,year); });
-  // 운행거리 축 공통 최댓값: 전체 차량의 "월별" 거리값 중 최댓값 기준(연간 합계가 아님 — 월별 비교이므로)
+  // 사업장별 월간 평균: 해당 월에 유효 데이터(beforeService 아님)가 있는 소속 차량들만 평균에 반영
+  const perBranchMonthly={};
+  branches.forEach(branch=>{
+    const ps=byBranch[branch].filter(p=>hasMonthlyDataFor(p,year));
+    const monthsArr=[];
+    for(let m=1;m<=12;m++){
+      let rateSum=0,distSum=0,cnt=0;
+      ps.forEach(p=>{
+        const rec=perVehicleMonthly[p][m-1];
+        if(rec&&!rec.beforeService){ rateSum+=rec.rate||0; distSum+=rec.distance||0; cnt++; }
+      });
+      monthsArr.push({month:m,rate:cnt?rateSum/cnt:null,distance:cnt?distSum/cnt:null,count:cnt});
+    }
+    perBranchMonthly[branch]=monthsArr;
+  });
+  // 운행거리 축 공통 최댓값: 전체 사업장의 "월별 평균" 거리값 중 최댓값 기준(연간 합계가 아님 — 월별 비교이므로)
   let distMonthMax=0;
-  plates.forEach(p=>{ perVehicleMonthly[p].forEach(m=>{ if(!m.beforeService) distMonthMax=Math.max(distMonthMax,m.distance||0); }); });
+  branches.forEach(branch=>{ perBranchMonthly[branch].forEach(m=>{ if(m.distance!=null) distMonthMax=Math.max(distMonthMax,m.distance); }); });
   const distStep=sparklineNiceStep(distMonthMax||1,4);
   const distAxisMax=Math.max(distStep,Math.ceil((distMonthMax||1)/distStep)*distStep);
-  const w=640,h=150,padTop=10,padBottom=20,padLeft=40,padRight=10;
+  const w=640,h=280,padTop=10,padBottom=20,padLeft=44,padRight=10;
   const plotW=w-padLeft-padRight, plotH=h-padTop-padBottom;
   const xOfMonth=m=>padLeft+((m-1)/11)*plotW;
   const axisMax=mccMetric==='rate'?100:distAxisMax;
@@ -2858,43 +2883,32 @@ function renderMonthlyCompareChart(year){
     const anchor=i===0?'start':(i===11?'end':'middle');
     return `${line}<text x="${x}" y="${h-4}" font-size="9" fill="var(--ink)" text-anchor="${anchor}">${i+1}월</text>`;
   }).join('');
-  let html='';
-  branches.forEach(branch=>{
-    const ps=byBranch[branch].sort((a,b)=>{
-      const ma=modelOrder(data.vehicles[a]?.model||''),mb=modelOrder(data.vehicles[b]?.model||'');
-      return ma!==mb?ma-mb:a.localeCompare(b);
-    });
-    const withData=ps.filter(p=>hasMonthlyDataFor(p,year));
-    html+=`<div class="mcc-branch-head" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleGroup('${branch.replace(/'/g,"\\'")}')">${branch}</div>`;
-    if(!withData.length){
-      html+=`<div class="mcc-chart-block muted" style="font-size:11px;padding:8px 4px;">데이터 없음</div>`;
-      return;
+  let linesSvg='';
+  const legendItems=[];
+  branches.forEach((branch,idx)=>{
+    const color=MCC_LINE_COLORS[idx%MCC_LINE_COLORS.length];
+    const validPts=perBranchMonthly[branch].filter(m=>m.count>0).map(m=>({x:xOfMonth(m.month),y:yOf(mccMetric==='rate'?m.rate:m.distance)}));
+    if(validPts.length){
+      const ptsStr=validPts.map(pt=>`${pt.x},${pt.y}`).join(' ');
+      const dots=validPts.map(pt=>`<circle cx="${pt.x}" cy="${pt.y}" r="2.3" fill="${color}"/>`).join('');
+      linesSvg+=`<polyline points="${ptsStr}" fill="none" stroke="${color}" stroke-width="2"/>${dots}`;
     }
-    let linesSvg='';
-    const legendItems=[];
-    withData.forEach((p,idx)=>{
-      const color=MCC_LINE_COLORS[idx%MCC_LINE_COLORS.length];
-      const validPts=perVehicleMonthly[p].filter(m=>!m.beforeService).map(m=>({x:xOfMonth(m.month),y:yOf(mccMetric==='rate'?m.rate:(m.distance||0))}));
-      if(validPts.length){
-        const ptsStr=validPts.map(pt=>`${pt.x},${pt.y}`).join(' ');
-        const dots=validPts.map(pt=>`<circle cx="${pt.x}" cy="${pt.y}" r="2.3" fill="${color}"/>`).join('');
-        linesSvg+=`<polyline points="${ptsStr}" fill="none" stroke="${color}" stroke-width="2"/>${dots}`;
-      }
-      const modelName=modelShort(data.vehicles[p]?.model||'');
-      legendItems.push(`<span class="mcc-legend-item" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${p}')"><span class="mcc-legend-swatch" style="background:${color};"></span>${p} <span class="mcc-legend-model">${modelName}</span></span>`);
-    });
-    html+=`<div class="mcc-chart-block">
-      <div class="mcc-svg-wrap">
-        <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none">
-          ${gridSvg}
-          ${monthGridSvg}
-          ${linesSvg}
-        </svg>
-      </div>
-      <div class="mcc-legend">${legendItems.join('')}</div>
-    </div>`;
+    legendItems.push(`<span class="mcc-legend-item" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleGroup('${branch.replace(/'/g,"\\'")}')"><span class="mcc-legend-swatch" style="background:${color};"></span>${branch}</span>`);
   });
-  el.innerHTML=html||`<div class="muted" style="text-align:center;padding:20px;">데이터가 없습니다</div>`;
+  if(!legendItems.length){
+    el.innerHTML=`<div class="muted" style="text-align:center;padding:20px;">데이터가 없습니다</div>`;
+    return;
+  }
+  el.innerHTML=`<div class="mcc-chart-block">
+    <div class="mcc-svg-wrap">
+      <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none">
+        ${gridSvg}
+        ${monthGridSvg}
+        ${linesSvg}
+      </svg>
+    </div>
+    <div class="mcc-legend">${legendItems.join('')}</div>
+  </div>`;
 }
 
 function toggleSection(h2){
