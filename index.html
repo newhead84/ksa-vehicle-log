@@ -38,6 +38,13 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-03] 차량 상세 모달의 "건별 운행거리 추이" 스파크라인 그래프 2건 수정.
+  ① x축 변경: 기존에는 건수 기준 등간격(순번)으로 점을 배치해 실제 날짜 간격과 무관하게 그려졌음 →
+  trips[].isoDate 기반으로 실제 운행일자 간격에 비례하도록 변경(날짜가 없거나 전부 동일해 구간폭이 0인
+  경우에만 기존 등간격 방식으로 안전하게 대체). ② 렌더링 버그 수정: <svg>에 preserveAspectRatio 미지정으로
+  기본값(xMidYMid meet) 적용 → viewBox(560x80, 7:1)와 실제 렌더링 박스 비율이 달라 그래프가 중앙 일부 폭에만
+  축소되어 그려지고, 그 여백 위치가 우연히 상단 월별 가동율 바의 특정 월과 겹쳐 보이던 문제 → 
+  preserveAspectRatio="none" 추가로 박스 전체 폭을 채우도록 수정 | 변경: openVehicle() (x좌표 계산 로직), svg 태그(sparkline-wrap)
   [2026-08-03] 개인사용(주말·공휴일) 체크 시 주행거리 기준 예상 최소 유류비 안내문구를 주유비 미입력 상태에서도
   즉시 표시하도록 개선: 기존에는 checkFuelVsDistance()가 주유비 입력값이 있어야만 경고를 계산해, 체크 직후에는
   아무 안내도 보이지 않고 숫자를 입력해야 비로소 나타나는 문제가 있었음. 개인사용 체크박스 안내(personal-notice)
@@ -3111,8 +3118,21 @@ function openVehicle(plate){
   const w=560,h=80,pad=8;
   const distances=trips.map(t=>Number(t.distance)||0);
   const max=Math.max(1,...distances);
-  const stepX=distances.length>1?(w-2*pad)/(distances.length-1):0;
-  const pts=distances.map((d,i)=>`${pad+i*stepX},${h-pad-(d/max)*(h-2*pad)}`).join(' ');
+  // x축: 건수 등간격이 아니라 실제 운행일자 간격에 비례해 배치한다.
+  // isoDate가 없거나(구버전 데이터) 모든 날짜가 동일해 구간폭이 0이 되는 경우에는
+  // 0으로 나누기/겹침을 피하기 위해 기존 건수 등간격 방식으로 안전하게 대체한다.
+  const tripTimes=trips.map(t=>t.isoDate?new Date(t.isoDate+'T00:00:00').getTime():NaN);
+  const validTimes=tripTimes.filter(t=>!isNaN(t));
+  const useDateAxis=distances.length>1 && validTimes.length===distances.length && Math.max(...validTimes)>Math.min(...validTimes);
+  let xs;
+  if(useDateAxis){
+    const minT=Math.min(...validTimes),maxT=Math.max(...validTimes);
+    xs=tripTimes.map(t=>pad+((t-minT)/(maxT-minT))*(w-2*pad));
+  }else{
+    const stepX=distances.length>1?(w-2*pad)/(distances.length-1):0;
+    xs=distances.map((d,i)=>i*stepX+pad);
+  }
+  const pts=distances.map((d,i)=>`${xs[i]},${h-pad-(d/max)*(h-2*pad)}`).join(' ');
   const util=calcUtilization(trips);
   const allBranches=Array.from(new Set(FLEET_REGISTRY.map(r=>r.branch).concat(Object.values(data.vehicles).map(x=>x.branch||'')))).filter(Boolean).sort(compareByOrg);
   document.getElementById('modalBody').innerHTML=`
@@ -3187,7 +3207,7 @@ function openVehicle(plate){
       </div>
     </div>
     <div class="sparkline-wrap">
-      <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}">
+      <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none">
         <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/>
       </svg>
       <div class="muted" style="font-size:11px;">건별 운행거리 추이</div>
