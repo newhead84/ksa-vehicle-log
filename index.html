@@ -38,6 +38,11 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-03] "사업장별 차량 가동율 운행거리 비교차트"가 전체화면(광폭) 상태에서 컨테이너 폭을 그대로
+  따라가 세로로도 지나치게 커 보이던 문제 수정: viewBox 비율(640:280)은 그대로 유지한 채(찌그러짐 없음),
+  차트를 측정하는 컨테이너 자체(.mcc-wrap)에 max-width:820px + margin:0 auto를 적용해 전체화면에서도
+  일정 크기 이상 커지지 않도록 상한을 두고 가운데 정렬. 함께 요청된 하단 범례(.mcc-legend) 가운데 정렬도
+  반영(justify-content:center 추가) | 변경: CSS(.mcc-wrap, .mcc-legend)
   [2026-08-03] "사업장별 차량 가동율 운행거리 비교차트"가 데스크탑 화면에서 가로로 눌려 찌그러져 보이던 버그 수정:
   원인은 <svg width="100%" height="${h}"(고정 280px)>에 preserveAspectRatio="none"까지 겹쳐, 실제 표시폭(컨테이너
   100%, 데스크탑에서 640px보다 훨씬 넓음)과 viewBox(640x280) 비율이 달라도 그 차이를 그대로 강제로 늘려 채웠기
@@ -880,7 +885,7 @@
   .month-cell-km{display:block;font-size:9px;font-weight:400;opacity:.8;}
 
   /* ===== 차량별 월별 가동율·운행거리 비교 차트 (X축=월, 지역본부별 라인차트) ===== */
-  .mcc-wrap{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;}
+  .mcc-wrap{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;max-width:820px;margin:0 auto;}
   .mcc-branch-head{font-size:13px;font-weight:700;color:var(--navy);padding:10px 4px 6px;border-bottom:1px solid var(--line);margin-bottom:4px;cursor:pointer;}
   .mcc-branch-head:first-child{padding-top:0;}
   .mcc-chart-block{margin-bottom:16px;}
@@ -888,7 +893,7 @@
   .mcc-svg-wrap{width:100%;}
   .mcc-svg-wrap svg{display:block;width:100%;}
   .mcc-caption{font-size:13px;line-height:1.5;}
-  .mcc-legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:8px;padding:0 4px;}
+  .mcc-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 16px;margin-top:8px;padding:0 4px;}
   .mcc-legend-item{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;white-space:nowrap;}
   .mcc-legend-item:hover{color:var(--navy);}
   .mcc-legend-swatch{width:12px;height:12px;border-radius:50%;flex-shrink:0;display:inline-block;}
