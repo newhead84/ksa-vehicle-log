@@ -38,6 +38,13 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-03] 공용차량 현황 카드 운행기록 표의 운행기간이 월이 바뀌는 기간(예: 7/31~8/3)에서 종료일의 "일"만 이어붙여
+  "7/31~3"으로 잘못 표기되던 버그 수정. 표기 형식을 "YY-MM-DD" (시작=종료 시) / "YY-MM-DD~YY-MM-DD" (기간)로 통일:
+  ① 신규 공용 함수 formatTripDateDisplay(fromISO,toISO) 추가, ② doSubmit()·saveTripEdits()·saveUserEdits()의 중복된
+  잘못된 표기 생성 로직을 모두 이 함수 호출로 교체, ③ 운행기록 표 렌더링은 저장된 t.date 문자열 대신 isoDate/dateTo로
+  재계산하여 표시하므로 과거에 이미 잘못 저장된 기존 데이터도 별도 마이그레이션 없이 화면에서 정상 표기됨,
+  ④ 차량카드 상단 "최근 운행"(vehicleStatsOf의 lastDate)도 동일 원인의 버그가 있어 함께 수정
+  | 변경: formatTripDateDisplay()(신규), doSubmit(), saveTripEdits(), saveUserEdits(), vehicleStatsOf(), 운행기록 표 렌더링(트립기간 view-val)
   [2026-08-03] 공용차량 현황 카드 운행기록 표 뷰모드(조회 상태, 수정모드 진입 전)의 운행자·행선지 셀이 여전히 좌측정렬로 보이던 문제 수정:
   직전(08-02) 수정은 수정모드 입력창(input.edit-inp)에만 text-align:center를 적용했고 조회 상태의 view-val에는 적용되지 않았던 것 |
   변경: CSS(.trip-table td[data-label="운행자"], .trip-table td[data-label="행선지"] text-align:center 추가)
@@ -2142,6 +2149,16 @@ const KR_HOLIDAY_NAMES = {
   '2028-12-25':'크리스마스',
 };
 function iso(d){ return d.toISOString().slice(0,10); }
+
+// 운행기간 표시 문자열 생성: 시작/종료가 같으면 "YY-MM-DD", 다르면 "YY-MM-DD~YY-MM-DD"
+// fromISO/toISO는 항상 YYYY-MM-DD 형식이므로 앞 두 자리(연도 앞자리)만 잘라 YY-MM-DD로 축약합니다.
+// (기존에는 종료일의 "일"만 이어붙여 월이 바뀌는 기간(예: 7/31~8/3)이 "7/31~3"으로 잘못 표기되던 버그가 있었습니다.)
+function formatTripDateDisplay(fromISO, toISO){
+  if(!fromISO) return '';
+  const to = toISO || fromISO;
+  const shortY = s => s.length===10 ? s.slice(2) : s;
+  return fromISO===to ? shortY(fromISO) : `${shortY(fromISO)}~${shortY(to)}`;
+}
 // 로컬(한국) 기준 YYYY-MM-DD 키를 반환합니다. iso()는 UTC 기준이라 KST 자정 Date를 넣으면
 // 하루 전 날짜로 밀리는 문제가 있어(예: 8/17 00:00 KST → UTC 8/16 15:00), 공휴일 매칭처럼
 // "그 날짜 자체"와 정확히 일치해야 하는 곳(isHoliday 등)은 반드시 이 함수를 사용합니다.
@@ -2770,7 +2787,8 @@ function vehicleStatsOf(plate){
   const totalFuel=trips.reduce((s,t)=>s+(Number(t.fuel)||0),0);
   const issues=trips.filter(t=>t.status&&t.status!=='정상').length;
   const sortedByDate=trips.slice().sort(tripChronoCompare);
-  const lastDate=sortedByDate.length?sortedByDate[sortedByDate.length-1].date:'-';
+  const lastTripSorted=sortedByDate.length?sortedByDate[sortedByDate.length-1]:null;
+  const lastDate=lastTripSorted?(lastTripSorted.isoDate?formatTripDateDisplay(lastTripSorted.isoDate,lastTripSorted.dateTo):(lastTripSorted.date||'-')):'-';
   const util=calcUtilization(trips);
   return{v,trips,totalDist,manualDist,totalFuel,issues,lastDate,util};
 }
@@ -3224,7 +3242,7 @@ function openVehicle(plate){
         ${visible.map(({t,i})=>`<tr data-trip-idx="${i}">
           <td class="trip-period" data-label="운행기간">
             <span class="trip-date-wrap">
-              <span class="view-val">${t.date||''}</span>
+              <span class="view-val">${t.isoDate?formatTripDateDisplay(t.isoDate,t.dateTo):(t.date||'')}</span>
               <span class="edit-inp" style="display:none;">
                 <span class="trip-date-row"><span class="trip-date-lbl">시작</span><input type="text" inputmode="numeric" class="mono adm-date-from" value="${t.isoDate||''}" maxlength="10" placeholder="YYYY-MM-DD" title="시작일자 (YYYY-MM-DD)" oninput="autoFormatAdminDate(this)"></span>
                 <span class="trip-date-row"><span class="trip-date-lbl">종료</span><input type="text" inputmode="numeric" class="mono adm-date-to" value="${t.dateTo||t.isoDate||''}" maxlength="10" placeholder="YYYY-MM-DD" title="종료일자 (YYYY-MM-DD, 기간이 아니면 시작일과 동일하게)" oninput="autoFormatAdminDate(this)"></span>
@@ -3819,9 +3837,7 @@ async function saveTripEdits(plate){
       const endD=new Date(dateTo+'T00:00:00');
       if(!isNaN(d) && !isNaN(endD)){
         while(d<=endD){ allDates.push(iso(d)); d=new Date(d.getTime()+86400000); }
-        const fm=Number(fromVal.slice(5,7)), fd=Number(fromVal.slice(8,10));
-        const td=Number(dateTo.slice(8,10));
-        target.date = fromVal===dateTo ? `${fm}/${fd}` : `${fm}/${fd}~${td}`;
+        target.date = formatTripDateDisplay(fromVal, dateTo);
         target.isoDate = fromVal;
         target.dateTo = dateTo;
         target.usageDates = allDates;
@@ -5150,9 +5166,7 @@ async function doSubmit(submitter, plate, rows){
     let d = new Date(r.dateFrom + 'T00:00:00');
     const endD = new Date(dateTo + 'T00:00:00');
     while(d <= endD){ allDates.push(iso(d)); d = new Date(d.getTime()+86400000); }
-    const fm = Number(r.dateFrom.slice(5,7)), fd = Number(r.dateFrom.slice(8,10));
-    const tm = Number(dateTo.slice(5,7)), td = Number(dateTo.slice(8,10));
-    const dateDisplay = r.dateFrom===dateTo ? `${fm}/${fd}` : `${fm}/${fd}~${td}`;
+    const dateDisplay = formatTripDateDisplay(r.dateFrom, dateTo);
     const key = `${isoDate}|${r.startOdo}|${r.endOdo}`;
     if(existingKeys.has(key)){ skipped++; return; }
     existingKeys.add(key);
@@ -5726,9 +5740,7 @@ async function saveUserEdits(name){
       const endD=new Date(dateTo+'T00:00:00');
       if(!isNaN(d) && !isNaN(endD)){
         while(d<=endD){ allDates.push(iso(d)); d=new Date(d.getTime()+86400000); }
-        const fm=Number(fromVal.slice(5,7)), fd=Number(fromVal.slice(8,10));
-        const td=Number(dateTo.slice(8,10));
-        t.date = fromVal===dateTo ? `${fm}/${fd}` : `${fm}/${fd}~${td}`;
+        t.date = formatTripDateDisplay(fromVal, dateTo);
         t.isoDate = fromVal;
         t.dateTo = dateTo;
         t.usageDates = allDates;

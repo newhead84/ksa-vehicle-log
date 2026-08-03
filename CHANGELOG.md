@@ -120,3 +120,8 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 ## 2026-08-03
 
 - 공용차량 현황 카드 운행기록 표(뷰모드): 이전에 입력창(edit-inp)에만 적용됐던 가운데정렬이 조회 상태(view-val, 수정모드 진입 전)의 운행자·행선지 셀에는 반영되지 않아 여전히 좌측정렬로 보이던 문제 수정 | 변경: CSS(`.trip-table td[data-label="운행자"]`, `.trip-table td[data-label="행선지"]`에 `text-align:center` 추가)
+- 운행기간 표기 버그 수정 및 형식 통일
+  - 증상: 월이 바뀌는 운행기간(예: 7/31~8/3)이 종료일의 "일"만 이어붙여져 `7/31~3`으로 잘못 표기됨
+  - 원인: `doSubmit()`/`saveTripEdits()`/`saveUserEdits()` 3곳에 동일한 버그 로직(종료월 없이 종료일만 문자열에 이어붙임)이 중복 존재
+  - 조치: 표기 형식을 `YY-MM-DD`(시작=종료 시) / `YY-MM-DD~YY-MM-DD`(기간)로 통일한 공용 함수 `formatTripDateDisplay(fromISO,toISO)`를 신설하고, 위 3개 함수의 중복 로직을 모두 이 함수 호출로 교체. 운행기록 표 렌더링도 저장된 `t.date` 문자열 그대로 쓰지 않고 `isoDate`/`dateTo`로 즉시 재계산해서 표시하도록 변경 — 과거에 이미 잘못 저장된 기존 데이터도 별도 마이그레이션 없이 화면에서 정상 표기됨. 차량카드 상단 "최근 운행"(`vehicleStatsOf()`의 `lastDate`)도 동일 원인의 버그가 있어 함께 수정
+  - 변경 영역: `formatTripDateDisplay()`(신규), `doSubmit()`, `saveTripEdits()`, `saveUserEdits()`, `vehicleStatsOf()`, 운행기록 표 렌더링(트립기간 `view-val`)
