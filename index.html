@@ -38,6 +38,11 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-03] 상단 통계 카드(statStrip)에 "총대여료 합계" 카드 신규 추가: 누적 주유비 카드 바로 옆에 배치,
+  현재 화면에 노출된 차량(plates) 기준 v.fee(월대여료) 합계를 표시. 별도 지역 필터링 로직 없이도
+  applyRegionViewerFilter()가 이미 data.vehicles 자체를 지역별로 제한해두므로, 지역본부별 열람전용
+  링크(?view=readonly&r=토큰)에서는 자동으로 해당 사업장 소속 차량 합계만 표시됨 | 변경: renderStats()
+  (totalFee 집계·카드 마크업 추가), CSS(.stat-strip grid-template-columns 4열→5열 확장)
   [2026-08-03] "사업장별 차량 가동율 운행거리 비교차트"를 15개 사업장 라인차트(선+범례)에서 연평균 기준
   내림차순 순위 막대차트로 개편: 선이 많아 비교가 어렵던 문제 해소를 위해 1~12월 월별 추이 표시는 없애고
   연평균 가동율(%)·평균 운행거리(km)로 요약해 막대로 순위 비교. 막대 클릭 시 해당 사업장만 강조(나머지는
@@ -368,7 +373,7 @@
   .submitted-notice p{font-size:13px;color:var(--good);margin:0;white-space:pre-line;word-break:keep-all;overflow-wrap:break-word;}
 
   /* ===== Stat strip ===== */
-  .stat-strip{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:14px;margin-bottom:26px;}
+  .stat-strip{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1fr;gap:14px;margin-bottom:26px;}
   .stat-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;}
   .stat-card .label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:8px;}
   .odometer{display:flex;gap:3px;flex-wrap:wrap;}
@@ -2838,11 +2843,16 @@ function renderStats(){
   const plates=Object.keys(data.vehicles);
   let totalDist=0,totalTrips=0,totalFuel=0;
   plates.forEach(p=>(data.vehicles[p].trips||[]).forEach(t=>{totalDist+=Number(t.distance)||0;totalFuel+=Number(t.fuel)||0;totalTrips++;}));
+  // 총대여료 합계: 현재 화면에 노출된 차량(plates) 기준 월대여료 합산.
+  // 지역본부별 열람전용 링크는 applyRegionViewerFilter()가 data.vehicles 자체를 해당 지역 차량으로
+  // 이미 제한해두므로, 여기서 별도 지역 필터링 없이 plates만 순회해도 자동으로 해당 사업장 기준 합계가 됨.
+  const totalFee=plates.reduce((s,p)=>s+(Number(data.vehicles[p].fee)||0),0);
   document.getElementById('statStrip').innerHTML=`
     <div class="stat-card stat-wide"><div class="label">총 누적 운행거리</div><div class="odometer">${digits(totalDist)}<span class="odo-unit">km</span></div></div>
     <div class="stat-card"><div class="label">관리 차량</div><div class="stat-plain">${plates.length}<span style="font-size:13px;color:var(--muted);"> 대</span></div></div>
     <div class="stat-card"><div class="label">누적 운행 건수</div><div class="stat-plain">${totalTrips}<span style="font-size:13px;color:var(--muted);"> 건</span></div></div>
     <div class="stat-card stat-wide"><div class="label">누적 주유비</div><div class="stat-plain">${totalFuel.toLocaleString()}<span style="font-size:13px;color:var(--muted);"> 원</span></div></div>
+    <div class="stat-card stat-wide"><div class="label">총대여료 합계</div><div class="stat-plain">${totalFee.toLocaleString()}<span style="font-size:13px;color:var(--muted);"> 원</span></div></div>
   `;
   document.getElementById('vehicleCount').textContent=plates.length;
 }

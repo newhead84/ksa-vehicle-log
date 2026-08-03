@@ -189,3 +189,9 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
   - 보완: 비교차트 섹션이 접힘 상태(폭 0)로 최초 렌더링되는 구조라, `toggleSection()`에서 이 섹션이 펼쳐질 때 폭을 재측정해 다시 그리도록 추가. 창 크기 변경 시에도 재측정하도록 디바운스 리사이즈 핸들러 신규 추가
   - 함께 요청된 폰트 확대 반영: 안내문구 11px→13px, 범례 11px→13px(스와치 10px→12px), 월별 가동율 표 "주사용자" 컬럼 10px→11.5px(모바일 9px→10.5px)
   - 변경: `renderMonthlyCompareChart()`(컨테이너 폭 측정 로직, svg 태그), `toggleSection()`(펼침 시 재렌더 추가), `initMccChartResize()`(신규), CSS(`.mcc-caption` 신규, `.mcc-legend`/`.mcc-legend-item`/`.mcc-legend-swatch`, `.top-driver-cell`)
+
+- [2026-08-03] 상단 통계 카드(statStrip)에 "총대여료 합계" 카드 신규 추가
+  - 위치: 누적 주유비 카드 바로 옆(오른쪽)에 배치
+  - 집계 기준: 현재 화면에 노출된 차량(`plates`) 기준 `v.fee`(월대여료) 합계
+  - 지역 스코프: 별도 지역 필터링 로직을 추가하지 않아도, 지역본부별 열람전용 링크(`?view=readonly&r=토큰`)는 `applyRegionViewerFilter()`가 이미 `data.vehicles` 자체를 해당 지역 소속 차량으로 제한해두므로 자동으로 해당 사업장 기준 합계만 표시됨
+  - 변경: `renderStats()`(`totalFee` 집계 및 카드 마크업 추가), CSS(`.stat-strip` `grid-template-columns` 4열→5열 확장: `1.4fr 1fr 1fr 1fr` → `1.4fr 1fr 1fr 1fr 1fr`)
