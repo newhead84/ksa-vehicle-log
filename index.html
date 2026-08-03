@@ -38,6 +38,13 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-03] 개인사용(주말·공휴일) 체크 시 주행거리 기준 예상 최소 유류비 안내문구를 주유비 미입력 상태에서도
+  즉시 표시하도록 개선: 기존에는 checkFuelVsDistance()가 주유비 입력값이 있어야만 경고를 계산해, 체크 직후에는
+  아무 안내도 보이지 않고 숫자를 입력해야 비로소 나타나는 문제가 있었음. 개인사용 체크박스 안내(personal-notice)
+  안에 신규 안내 영역(fuelminguide-${id})을 추가하고, checkFuelVsDistance()에서 주유비 입력 여부와 무관하게
+  개인사용 체크 + 주행거리 확정 시점에 "예상 최소 유류비" 문구를 우선 표시 → 이후 실제 주유비 입력 시 기존 과소입력
+  경고(fuelwarn)는 그대로 유지 | 변경: HTML(개인사용 체크박스 안내 템플릿, fuelminguide-${id} 신규),
+  checkFuelVsDistance()
   [2026-08-03] 공휴일 자동 갱신 데이터 소스 이중화: GitHub Actions(update-kr-holidays.yml)가 공공데이터포털(data.go.kr)
   한국천문연구원_특일정보(getRestDeInfo)를 주 소스로 우선 조회하고(대체공휴일·임시공휴일 포함), 인증오류·네트워크
   오류 등으로 실패하거나 결과가 0건이면 기존 Nager.Date로 자동 폴백. Firebase(kr-holidays-remote) 저장 포맷·
@@ -4667,6 +4674,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
         <div class="personal-notice" id="personal-${id}" style="display:none;background:#EFF6FF;border:1px solid #3B82F6;border-radius:10px;padding:10px 12px;margin-top:4px;font-size:12.5px;color:#1D4ED8;line-height:1.6;">
           📌 주말·공휴일 운행 시 운행거리에 해당하는 주유비는 <b>본인이 직접 부담</b>해야 합니다.
           <div id="fuelrefprice-${id}" style="margin-top:6px;font-size:11px;color:#1D4ED8;line-height:1.6;"></div>
+          <div id="fuelminguide-${id}" style="display:none;margin-top:6px;font-size:11.5px;font-weight:700;color:#1D4ED8;line-height:1.6;"></div>
         </div>
       </div>
       <div class="check-field">
@@ -4920,19 +4928,34 @@ function toggleFuelField(chk, id){
 }
 
 // 개인사용 건의 주유비가 주행거리 대비 예상 최소 금액에 못 미치면 실시간 경고 표시
+// + 주유비를 입력하기 전이라도(개인사용 체크 시점부터) 주행거리 기준 예상 최소 유류비를 미리 안내
 function checkFuelVsDistance(id){
   const card = document.getElementById(id);
-  const warn = document.getElementById('fuelwarn-'+id);
-  if(!card || !warn) return;
+  if(!card) return;
   const isPersonal = card.querySelector('.tr-personal-chk')?.checked || false;
   const hasFuel = card.querySelector('.tr-fuel-chk')?.checked || false;
-  if(!isPersonal || !hasFuel){ warn.style.display='none'; return; }
   const s = Number(card.querySelector('.tr-start')?.value)||0;
   const e = Number(card.querySelector('.tr-end')?.value)||0;
   const dist = Math.max(0, e-s);
+
+  // 사전 안내 문구: 개인사용 체크 + 주행거리 확정 시, 주유비 입력 여부와 무관하게 즉시 표시
+  const guide = document.getElementById('fuelminguide-'+id);
+  if(guide){
+    if(isPersonal && dist>0){
+      const minCost = estimateMinFuelCost(dist);
+      guide.innerHTML = `💡 현재 주행거리 ${dist.toLocaleString()}km 기준 예상 최소 유류비는 약 ${minCost.toLocaleString()}원입니다. 주유비 입력 시 참고해 주세요.`;
+      guide.style.display='block';
+    } else {
+      guide.style.display='none';
+    }
+  }
+
+  const warn = document.getElementById('fuelwarn-'+id);
+  if(!warn) return;
+  if(!isPersonal || !hasFuel || dist<=0){ warn.style.display='none'; return; }
   const fuelRaw = card.querySelector('.tr-fuel')?.value.replace(/,/g,'') || '';
   const fuel = parseFuelAmount(fuelRaw);
-  if(dist<=0 || !fuel){ warn.style.display='none'; return; }
+  if(!fuel){ warn.style.display='none'; return; }
   const minCost = estimateMinFuelCost(dist);
   if(fuel < minCost){
     warn.textContent = `⚠ 주행 ${dist.toLocaleString()}km 기준 예상 최소 유류비는 약 ${minCost.toLocaleString()}원입니다. 입력하신 금액(${fuel.toLocaleString()}원)이 이보다 적습니다. 금액을 확인해 주세요.`;
