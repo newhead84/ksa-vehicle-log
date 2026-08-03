@@ -38,6 +38,12 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-03] 공휴일 자동 갱신 데이터 소스 이중화: GitHub Actions(update-kr-holidays.yml)가 공공데이터포털(data.go.kr)
+  한국천문연구원_특일정보(getRestDeInfo)를 주 소스로 우선 조회하고(대체공휴일·임시공휴일 포함), 인증오류·네트워크
+  오류 등으로 실패하거나 결과가 0건이면 기존 Nager.Date로 자동 폴백. Firebase(kr-holidays-remote) 저장 포맷·
+  index.html의 loadRemoteHolidays()/isHoliday() 등 소비 로직은 변경 없음(코드 변경 없음, 워크플로우+주석만 갱신).
+  ※ 운영 반영을 위해서는 GitHub 저장소 Secret에 DATA_GO_KR_API_KEY(공공데이터포털 발급 서비스키) 등록 필요
+  | 변경: .github/workflows/update-kr-holidays.yml, index.html 주석(KR_HOLIDAYS, KR_HOLIDAYS_REMOTE 상단)
   [2026-08-03] 공용차량 현황 카드 운행기록 표의 운행기간이 월이 바뀌는 기간(예: 7/31~8/3)에서 종료일의 "일"만 이어붙여
   "7/31~3"으로 잘못 표기되던 버그 수정. 표기 형식을 "YY-MM-DD" (시작=종료 시) / "YY-MM-DD~YY-MM-DD" (기간)로 통일:
   ① 신규 공용 함수 formatTripDateDisplay(fromISO,toISO) 추가, ② doSubmit()·saveTripEdits()·saveUserEdits()의 중복된
@@ -2056,7 +2062,7 @@ function exitToRole(){
 // 날짜 유틸
 // ============================================================
 // KR_HOLIDAYS: 수기 관리 목록 (예외/폴백용).
-// - 정기 국경일·대체공휴일은 아래 KR_HOLIDAYS_REMOTE(Nager.Date 자동 갱신)가 매년 채워주므로
+// - 정기 국경일·대체공휴일은 아래 KR_HOLIDAYS_REMOTE(공공데이터포털 특일정보/Nager.Date 자동 갱신)가 매년 채워주므로
 //   이 목록은 유지보수 부담을 줄이기 위해 새로 늘릴 필요는 없음
 // - 단, 선거일(임시공휴일)처럼 그때그때 정부가 개별 지정하는 날은 자동 갱신 API가
 //   놓칠 수 있으므로, 그런 예외 건만 이 목록에 계속 수동으로 추가할 것 (예: 2026-06-03 지방선거)
@@ -2177,8 +2183,9 @@ function todayLocalISO(){
   return `${y}-${m}-${day}`;
 }
 function isWeekend(d){ const w=d.getDay(); return w===0||w===6; }
-// GitHub Actions(update-kr-holidays.yml)가 Nager.Date API에서 자동으로 채워 Firebase에 저장한
-// 국경일/대체공휴일 목록. loadRemoteHolidays()가 앱 로드 시 채운다. (초기값은 빈 Set → 폴백은 KR_HOLIDAYS)
+// GitHub Actions(update-kr-holidays.yml)가 매일 자동으로 채워 Firebase에 저장한 국경일/대체공휴일 목록.
+// 소스는 공공데이터포털(data.go.kr) 특일정보(getRestDeInfo)를 우선 사용하고, 실패 시 Nager.Date로 폴백한다.
+// loadRemoteHolidays()가 앱 로드 시 채운다. (초기값은 빈 Set → 폴백은 KR_HOLIDAYS)
 let KR_HOLIDAYS_REMOTE = new Set();
 // Firebase에서 받아온 {"날짜":"공휴일명"} 원본(이름 조회용으로 별도 보관)
 let KR_HOLIDAYS_REMOTE_NAMES = {};

@@ -125,3 +125,9 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
   - 원인: `doSubmit()`/`saveTripEdits()`/`saveUserEdits()` 3곳에 동일한 버그 로직(종료월 없이 종료일만 문자열에 이어붙임)이 중복 존재
   - 조치: 표기 형식을 `YY-MM-DD`(시작=종료 시) / `YY-MM-DD~YY-MM-DD`(기간)로 통일한 공용 함수 `formatTripDateDisplay(fromISO,toISO)`를 신설하고, 위 3개 함수의 중복 로직을 모두 이 함수 호출로 교체. 운행기록 표 렌더링도 저장된 `t.date` 문자열 그대로 쓰지 않고 `isoDate`/`dateTo`로 즉시 재계산해서 표시하도록 변경 — 과거에 이미 잘못 저장된 기존 데이터도 별도 마이그레이션 없이 화면에서 정상 표기됨. 차량카드 상단 "최근 운행"(`vehicleStatsOf()`의 `lastDate`)도 동일 원인의 버그가 있어 함께 수정
   - 변경 영역: `formatTripDateDisplay()`(신규), `doSubmit()`, `saveTripEdits()`, `saveUserEdits()`, `vehicleStatsOf()`, 운행기록 표 렌더링(트립기간 `view-val`)
+- 공휴일 자동 갱신 데이터 소스 이중화(공공데이터포털 특일정보 우선 + Nager.Date 폴백)
+  - 배경: 기존 `update-kr-holidays.yml`은 공공데이터포털 API키 발급 절차 없이 쓸 수 있는 Nager.Date만 사용 중이었음. 공공데이터포털 API키를 발급받아 정식 공공 데이터 소스로 전환 요청
+  - 방식(사용자 선택): 완전 대체가 아닌 **이중화** — 한국천문연구원_특일정보 `getRestDeInfo`(관공서 공휴일, 대체·임시공휴일 반영)를 주 소스로 사용하고, 서비스키 미설정·API 인증오류·네트워크 오류·응답 0건 등 실패 상황에서는 자동으로 기존 Nager.Date 조회로 폴백
+  - 연도(당해년+익년) × 월(1~12) 단위로 순회 조회 후 병합, `isHoliday=="Y"` 항목만 필터링해 기존과 동일한 `{"YYYY-MM-DD":"공휴일명"}` 포맷으로 Firebase(`kr-holidays-remote`)에 기록 — index.html 소비 로직(`loadRemoteHolidays()`, `isHoliday()`, `holidayName()` 등)은 변경 없음
+  - **운영 반영 필요 조치**: GitHub 저장소 Secret에 `DATA_GO_KR_API_KEY`(공공데이터포털에서 발급받은 서비스키, Decoding 값) 등록 필요. 미등록 시에도 자동으로 Nager.Date 폴백되어 기능 자체는 계속 정상 동작함
+  - 변경 영역: `.github/workflows/update-kr-holidays.yml`(전면 재작성), `index.html` 주석(`KR_HOLIDAYS`, `KR_HOLIDAYS_REMOTE` 상단, 코드 로직 변경 없음)
