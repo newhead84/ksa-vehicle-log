@@ -35,6 +35,18 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-04] 수기기록(1~7월) 업로드 양식에 연도 중 재배치(소속 변경) 반영 기능 추가.
+  ① 양식에 "지역구분"·"조정배치일자(선택)"·"사유(선택)" 열 신규 추가 — 연도 중간에 소속이 바뀐 차량은
+  같은 차량번호로 행을 나눠(구간별) 입력하면 됨, ② 지역구분+조정배치일자가 함께 기재된 행은 업로드 시
+  자동으로 해당 차량의 "재배치 이력"에도 반영(날짜 오름차순 적용, 중복 방지), ③ 월별 가동율 데이터
+  (manualMonthly)에 그 달 기준 지역구분을 함께 저장 — 차량 상세보기의 월별 가동율 표에서 현재 소속과
+  다른 달은 🔀 표시로 구분(마우스오버 시 당시 소속 확인), ④ 기존 "재배치 이력" 관리자 입력 기능(차량
+  상세보기)에 재배치 사유 입력을 필수 항목으로 추가, 이력 표시에 사유 함께 노출, ⑤ 양식에 "작성법"
+  안내 시트 신규 추가 | 변경: pushBranchReassignment()(신규, changeBranch()/handleManualMonthlyUpload()
+  공유), changeBranch()(사유 필수 검증), downloadManualMonthlyTemplate()(열 추가·작성법 시트·예시 2행),
+  handleManualMonthlyUpload()(plate별 행 그룹핑·재배치 적용·월별 branch 태깅), monthlyUtilForPlate()
+  (branch 필드 반환), openVehicle()(재배치 이력 사유 표시, 재배치 사유 입력란, 월별 가동율 🔀 표시),
+  triggerManualMonthlyUpload()(안내문구)
   [2026-08-04] "📊 엑셀 업로드(수기기록)" 버튼에 샘플 양식 다운로드 기능 추가 — 연도 입력 배너에
   "📥 샘플 양식 다운로드" 버튼 신설, 현재 등록된 활성 차량번호가 채워지고 1~7월 가동율(%)·거리(km)
   열이 빈칸으로 준비된 엑셀(예시행 포함)을 즉시 내려받아 서식을 미리 확인할 수 있음(기존 업로드 로직
@@ -2584,7 +2596,9 @@ function monthlyUtilForPlate(plate,year){
   for(let m=1;m<=12;m++){
     const mm=manual[m];
     if(mm){
-      out.push({month:m,used:null,total:null,rate:Number(mm.rate)||0,distance:Number(mm.distance)||0,manual:true});
+      // mm.branch: 엑셀 수기기록 업로드 시 해당 월에 지정된 지역구분(재배치로 소속이 바뀐 경우 과거 소속을
+      // 그대로 유지하기 위함). 값이 없으면(과거 업로드분 등) 현재 소속(v.branch)으로 간주.
+      out.push({month:m,used:null,total:null,rate:Number(mm.rate)||0,distance:Number(mm.distance)||0,manual:true,branch:mm.branch||v.branch||''});
       continue;
     }
     const{startIso:monStart,endIso:monEnd}=monthRangeIso(year,m);
@@ -3576,7 +3590,7 @@ function openVehicle(plate){
       <span style="font-size:13px;font-weight:600;color:var(--navy);">${escapeHtml(v.branch||'미배정')}</span>
       ${v.originalBranch&&v.originalBranch!==v.branch?`<span class="orig">최초 배정: ${escapeHtml(v.originalBranch)}</span>`:''}
       ${v.serviceStartDate?`<span class="orig">차량개시일: ${v.serviceStartDate}</span>`:''}
-      ${(v.branchHistory&&v.branchHistory.length)?`<span class="orig">재배치 이력: ${v.branchHistory.map(h=>`${escapeHtml(h.date)} ${escapeHtml(h.from||'')}→${escapeHtml(h.branch)}`).join(', ')}</span>`:''}
+      ${(v.branchHistory&&v.branchHistory.length)?`<span class="orig">재배치 이력: ${v.branchHistory.map(h=>`${escapeHtml(h.date)} ${escapeHtml(h.from||'')}→${escapeHtml(h.branch)}${h.reason?`(${escapeHtml(h.reason)})`:''}`).join(', ')}</span>`:''}
       ${v.active===false?`<span class="badge" style="background:#E5E7EB;color:#9CA3AF;margin-left:auto;">운용중지</span>`:''}
     </div>` : `
     <div class="branch-edit">
@@ -3587,6 +3601,7 @@ function openVehicle(plate){
       </select>
       <input id="branchCustom-${plate}" placeholder="새 지역구분 입력" style="display:none;width:160px;">
       <input type="date" id="branchDate-${plate}" value="${todayLocalISO()}" title="재배치 일자" style="width:140px;">
+      <input id="branchReason-${plate}" placeholder="재배치 사유 (필수)" title="재배치 사유 (필수)" style="width:160px;">
       <button class="btn btn-primary" style="padding:6px 12px;font-size:12px;" onclick="changeBranch('${plate}')">재배치 반영</button>
       ${v.originalBranch&&v.originalBranch!==v.branch?`<span class="orig">최초 배정: ${v.originalBranch}</span>`:''}
       <button class="btn" style="padding:6px 12px;font-size:12px;${v.addedManually?'':'margin-left:auto;'}${v.active===false?'background:var(--good);color:#fff;':'background:none;border:1px solid var(--bad);color:var(--bad);'}" onclick="toggleVehicleActive('${plate}')">${v.active===false?'운용 재개':'운용 중지'}</button>
@@ -3596,7 +3611,7 @@ function openVehicle(plate){
       <label class="muted" style="font-size:12px;">재배치 이력</label>
       ${v.branchHistory.map((h,idx)=>`
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <span class="orig" style="word-break:keep-all;">${escapeHtml(h.from||'')} → ${escapeHtml(h.branch)}</span>
+          <span class="orig" style="word-break:keep-all;">${escapeHtml(h.from||'')} → ${escapeHtml(h.branch)}${h.reason?` · 사유: ${escapeHtml(h.reason)}`:' · 사유 미기재'}</span>
           <input type="date" id="branchHistDate-${plate}-${idx}" value="${h.date||''}" style="width:140px;">
           <button class="btn btn-primary" style="padding:4px 10px;font-size:11px;" onclick="saveBranchHistoryDate('${plate}',${idx})">날짜 저장</button>
           <button class="btn" style="padding:4px 10px;font-size:11px;background:none;border:1px solid var(--bad);color:var(--bad);" onclick="deleteBranchHistoryEntry('${plate}',${idx})">🗑 이력 삭제</button>
@@ -3624,12 +3639,14 @@ function openVehicle(plate){
       ${(v.contractHistory&&v.contractHistory.length)?v.contractHistory.map(h=>`<span class="orig" style="word-break:keep-all;">${escapeHtml(h.date||'')} 계약 갱신: ${h.prevFee!=null?Number(h.prevFee).toLocaleString():'–'}원→${h.newFee!=null?Number(h.newFee).toLocaleString():'–'}원, 기간 ${h.prevContractStartDate||'–'}~${h.prevContractEndDate||'–'} → ${h.newContractStartDate||'–'}~${h.newContractEndDate||'–'}</span>`).join(''):''}
     </div>`:''}
     <div style="margin-bottom:18px;">
-      <div class="muted" style="font-size:11px;margin-bottom:4px;">${monthlyYear||new Date().getFullYear()}년 월별 가동율 (업무일 기준)</div>
+      <div class="muted" style="font-size:11px;margin-bottom:4px;">${monthlyYear||new Date().getFullYear()}년 월별 가동율 (업무일 기준)${(v.branchHistory&&v.branchHistory.length)?' · 🔀 표시된 월은 당시 소속이 현재와 다름(마우스오버로 확인)':''}</div>
       <div class="mini-month-row">
         ${monthlyUtilForPlate(plate,monthlyYear||new Date().getFullYear()).map(m=>{
           const noData=trips.length===0||m.beforeService;
           const cls=noData?'m-none':(m.rate>=60?'m-good':m.rate>=30?'m-mid':'m-bad');
-          return `<div class="mini-month-cell ${cls}">${m.month}월<br>${noData?'–':m.rate.toFixed(0)+'%'}</div>`;
+          const branchMismatch=m.manual&&m.branch&&m.branch!==v.branch;
+          const title=branchMismatch?` title="당시 소속: ${escapeHtml(m.branch)}"`:'';
+          return `<div class="mini-month-cell ${cls}"${title}>${m.month}월${branchMismatch?' 🔀':''}<br>${noData?'–':m.rate.toFixed(0)+'%'}</div>`;
         }).join('')}
       </div>
     </div>
@@ -4419,27 +4436,44 @@ document.addEventListener('change',e=>{
   }
 });
 
+// 재배치 이력 1건을 v(차량 객체)에 적용(메모리 상 변경만 수행, 저장은 호출부 책임).
+// 반환값: 실제로 이력이 추가되었으면 true, 변경사항이 없어(no-op) 건너뛰었으면 false.
+// changeBranch()(관리자 화면 단건 입력)와 handleManualMonthlyUpload()(엑셀 일괄 업로드) 양쪽에서 공유.
+function pushBranchReassignment(v,newBranch,date,reason){
+  const prevBranch=v.branch;
+  // 선택한 지역구분이 현재 소속과 동일한 경우: 이미 반영은 되어 있지만 날짜가 기록되지 않은
+  // 과거 재배치(예: 최초배정 이후 소급 기록)를 뒤늦게 기록하는 용도로 처리 → 최초배정을 출발점으로 기록
+  const fromBranch = (newBranch===prevBranch) ? (v.originalBranch||prevBranch) : prevBranch;
+  if(fromBranch===newBranch) return false;
+  if(!Array.isArray(v.branchHistory)) v.branchHistory=[];
+  // 동일 일자+동일 신규소속 이력이 이미 있으면 중복 기록하지 않음(엑셀 재업로드 시 중복 방지)
+  const dup=v.branchHistory.some(h=>h.date===date && h.branch===newBranch && (h.from||'')===fromBranch);
+  if(dup) return false;
+  v.branch=newBranch;
+  v.branchHistory.push({date,from:fromBranch,branch:newBranch,reason:reason||''});
+  return true;
+}
+
 async function changeBranch(plate){
   const sel=document.getElementById('branchSelect-'+plate);
   const custom=document.getElementById('branchCustom-'+plate);
   const dateInput=document.getElementById('branchDate-'+plate);
+  const reasonInput=document.getElementById('branchReason-'+plate);
   let newBranch=sel.value;
   if(newBranch==='__custom__'){newBranch=custom.value.trim();if(!newBranch){custom.style.borderColor='var(--bad)';custom.focus();return;}}
   const v=data.vehicles[plate];
   const prevBranch=v.branch;
   const reassignDate=dateInput?dateInput.value:'';
   if(!reassignDate){ showAdminToast('⚠ 재배치 일자를 선택해주세요.','bad'); if(dateInput) dateInput.focus(); return; }
-  // 선택한 지역구분이 현재 소속과 동일한 경우: 이미 반영은 되어 있지만 날짜가 기록되지 않은
-  // 과거 재배치(예: 최초배정 이후 소급 기록)를 뒤늦게 기록하는 용도로 처리 → 최초배정을 출발점으로 기록
-  const fromBranch = (newBranch===prevBranch) ? (v.originalBranch||prevBranch) : prevBranch;
-  if(fromBranch===newBranch){ showAdminToast('⚠ 기존 지역구분과 동일하며, 기록할 이전 소속 정보가 없습니다.','bad'); return; }
+  const reason=reasonInput?reasonInput.value.trim():'';
+  if(!reason){ showAdminToast('⚠ 재배치 사유를 입력해주세요.','bad'); if(reasonInput){reasonInput.style.borderColor='var(--bad)';reasonInput.focus();} return; }
   const prevHistory=v.branchHistory;
-  v.branch=newBranch;
-  if(!Array.isArray(v.branchHistory)) v.branchHistory=[];
-  v.branchHistory.push({date:reassignDate,from:fromBranch,branch:newBranch});
+  const changed=pushBranchReassignment(v,newBranch,reassignDate,reason);
+  if(!changed){ showAdminToast('⚠ 기존 지역구분과 동일하며, 기록할 이전 소속 정보가 없습니다.','bad'); return; }
+  const fromBranch=v.branchHistory[v.branchHistory.length-1].from;
   const saved = await saveData();
   if(!saved){ v.branch=prevBranch; v.branchHistory=prevHistory; showAdminToast('⚠ 저장 실패: 지역구분 변경이 서버에 반영되지 않았습니다.','bad'); return; }
-  showAdminToast(`'${plate}' 재배치가 기록되었습니다. (${fromBranch} → ${newBranch}, ${reassignDate})`,'good');
+  showAdminToast(`'${plate}' 재배치가 기록되었습니다. (${fromBranch} → ${newBranch}, ${reassignDate}, 사유: ${reason})`,'good');
   renderAll();openVehicle(plate);
 }
 
@@ -4883,19 +4917,45 @@ function downloadManualMonthlyTemplate(){
   if(!window.XLSX){ showAdminToast('엑셀 라이브러리를 불러오지 못했습니다.','bad'); return; }
   const monthCols=[];
   for(let m=1;m<=7;m++){ monthCols.push(`${m}월가동율(%)`,`${m}월거리(km)`); }
+  const metaCols=['지역구분','조정배치일자(선택)','사유(선택)'];
+  const header=['차량번호',...metaCols,...monthCols];
   const plates=Object.keys(data.vehicles).filter(p=>data.vehicles[p].active!==false)
     .sort((a,b)=>{const ba=data.vehicles[a].branch||'',bb=data.vehicles[b].branch||'';return compareByOrg(ba,bb)||a.localeCompare(b);});
   const rows=plates.map(p=>{
-    const row={'차량번호':p};
+    const row={'차량번호':p,'지역구분':data.vehicles[p].branch||'','조정배치일자(선택)':'','사유(선택)':''};
     monthCols.forEach(c=>row[c]='');
     return row;
   });
-  const exampleRow={'차량번호':'(예시)12가3456'};
-  monthCols.forEach((c,i)=>{ exampleRow[c]=c.includes('가동율')?70:1200; });
-  rows.push(exampleRow);
-  const ws=XLSX.utils.json_to_sheet(rows,{header:['차량번호',...monthCols]});
-  ws['!cols']=[{wch:16}].concat(Array(monthCols.length).fill({wch:13}));
+  // 예시 2행: 같은 차량이 연도 중간에 재배치된 경우 "행을 나눠서" 입력하는 방법을 보여줌.
+  // 1행 = 재배치 이전 소속·월, 2행 = 재배치 이후 소속·월(조정배치일자·사유 기재 시 재배치 이력에도 자동 반영됨).
+  const example1={'차량번호':'(예시)12가3456','지역구분':'DT센터','조정배치일자(선택)':'','사유(선택)':''};
+  const example2={'차량번호':'(예시)12가3456','지역구분':'퓨처캠','조정배치일자(선택)':'2026-02-05','사유(선택)':'사업장 재배치'};
+  monthCols.forEach(c=>{ example1[c]=''; example2[c]=''; });
+  ['1월가동율(%)','2월가동율(%)'].forEach(c=>example1[c]=70);
+  ['1월거리(km)','2월거리(km)'].forEach(c=>example1[c]=1200);
+  for(let m=3;m<=7;m++){ example2[`${m}월가동율(%)`]=65; example2[`${m}월거리(km)`]=1100; }
+  rows.push(example1,example2);
+  const ws=XLSX.utils.json_to_sheet(rows,{header});
+  ws['!cols']=[{wch:16},{wch:14},{wch:16},{wch:16}].concat(Array(monthCols.length).fill({wch:13}));
+  const guideRows=[
+    ['📊 수기기록(1~7월) 업로드 양식 작성법'],
+    [''],
+    ['① 기본: 차량 1대당 1행 — 지역구분에 현재 소속을 두고, 해당 월의 가동율(%)·거리(km)만 채우면 됩니다.'],
+    ['② 연도 중간에 소속(지역구분)이 바뀐 차량은 "행을 나눠서" 입력하세요.'],
+    ['   - 예: 1~2월은 DT센터, 3~7월은 퓨처캠 소속이었다면 같은 차량번호로 2개 행을 만들고,'],
+    ['     각 행에는 그 기간에 해당하는 월(月) 열만 채우고 나머지 월 열은 비워둡니다.'],
+    ['   - 두 번째 행부터는 "조정배치일자"에 소속이 바뀐 날짜를, "사유"에 재배치 사유를 적어주세요.'],
+    ['     (조정배치일자+사유를 적으면, 해당 차량 상세보기의 "재배치 이력"에도 자동으로 기록됩니다)'],
+    ['   - 첫 번째(최초) 행은 조정배치일자·사유를 비워두면 됩니다.'],
+    ['③ 지역구분/조정배치일자/사유를 비워두고 월별 숫자만 채워도 기존 방식대로 정상 반영됩니다.'],
+    ['   (이 경우 해당 월의 소속은 그 차량의 현재 지역구분으로 표시됩니다)'],
+    ['④ "수기기록(1~7월)" 시트의 맨 아래 2개 예시행(차량번호 "(예시)12가3456")은 참고용이며,'],
+    ['   실제 업로드 전에 삭제해 주세요.'],
+  ];
+  const wsGuide=XLSX.utils.aoa_to_sheet(guideRows);
+  wsGuide['!cols']=[{wch:90}];
   const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,wsGuide,'작성법');
   XLSX.utils.book_append_sheet(wb,ws,'수기기록(1~7월)');
   XLSX.writeFile(wb,`KSA수기기록_샘플양식_${todayLocalISO()}.xlsx`);
 }
@@ -4910,7 +4970,8 @@ function triggerManualMonthlyUpload(){
     <div style="font-size:13px;font-weight:700;color:#7C3AED;margin-bottom:8px;">📊 엑셀 업로드(수기기록) — 반영할 연도 선택</div>
     <div style="font-size:12px;color:#5B21B6;margin-bottom:10px;word-break:keep-all;overflow-wrap:break-word;">
       처음 사용하시나요? 아래 <b>샘플 양식 다운로드</b>로 서식을 먼저 받아 확인해 주세요.
-      (현재 등록된 차량번호가 채워진 채로 내려받아지므로, 월별 가동율(%)·거리(km) 값만 채워서 그대로 업로드하시면 됩니다.)
+      (현재 등록된 차량번호·지역구분이 채워진 채로 내려받아지므로, 월별 가동율(%)·거리(km) 값만 채워서 그대로 업로드하시면 됩니다.
+      연도 중간에 소속이 바뀐 차량은 행을 나눠 입력하면 되며, 자세한 방법은 다운로드한 파일의 "작성법" 시트를 참고해 주세요.)
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <button class="btn btn-ghost" style="font-size:12px;padding:9px 14px;border-color:#7C3AED;color:#7C3AED;" onclick="downloadManualMonthlyTemplate()">📥 샘플 양식 다운로드</button>
@@ -4949,33 +5010,61 @@ async function handleManualMonthlyUpload(input){
     if(!rows) throw new Error('"차량번호" 열을 찾을 수 없습니다. 제공된 템플릿 형식을 확인해 주세요.');
 
     await refreshDataFromStorage();
-    let monthsFilled=0, vehiclesTouched=new Set(), unmatched=[];
+    let monthsFilled=0, vehiclesTouched=new Set(), unmatched=[], branchChanges=0;
+
+    // 같은 차량번호가 여러 행(재배치 전/후 구간)으로 나뉘어 입력될 수 있으므로 plate별로 먼저 모은다.
+    const rowsByPlate={};
     rows.forEach(r=>{
       const plate=String(r['차량번호']||'').trim();
       if(!plate) return;
+      if(!rowsByPlate[plate]) rowsByPlate[plate]=[];
+      rowsByPlate[plate].push(r);
+    });
+    const reassignDateOf=r=>String(r['조정배치일자(선택)']??r['조정배치일자']??'').trim();
+    const reasonOf=r=>String(r['사유(선택)']??r['사유']??'').trim();
+    const branchOf=r=>String(r['지역구분']??'').trim();
+
+    Object.keys(rowsByPlate).forEach(plate=>{
       if(!data.vehicles[plate]){
         if(!REGISTRY_MAP[plate]){ unmatched.push(plate); return; }
         data.vehicles[plate]={model:REGISTRY_MAP[plate].model,branch:REGISTRY_MAP[plate].branch,originalBranch:REGISTRY_MAP[plate].branch,active:true,trips:[]};
       }
       const v=data.vehicles[plate];
-      for(let m=1;m<=7;m++){
-        const rateKey1=`${m}월가동율(%)`, rateKey2=`${m}월`;
-        const distKey=`${m}월거리(km)`;
-        let rateVal=r[rateKey1];
-        if(rateVal===undefined||rateVal==='') rateVal=r[rateKey2];
-        if(rateVal===undefined||rateVal===''||rateVal===null) continue;
-        const distVal=r[distKey];
-        if(!v.manualMonthly) v.manualMonthly={};
-        if(!v.manualMonthly[year]) v.manualMonthly[year]={};
-        v.manualMonthly[year][m]={rate:Number(rateVal)||0,distance:Number(distVal)||0};
-        monthsFilled++; vehiclesTouched.add(plate);
-      }
+      const plateRows=rowsByPlate[plate];
+
+      // 1) 지역구분+조정배치일자가 모두 기재된 행 = 재배치 건. 날짜 오름차순으로 순서대로 재배치 이력에 반영.
+      plateRows
+        .filter(r=>branchOf(r) && reassignDateOf(r))
+        .sort((a,b)=>reassignDateOf(a).localeCompare(reassignDateOf(b)))
+        .forEach(r=>{
+          if(pushBranchReassignment(v,branchOf(r),reassignDateOf(r),reasonOf(r))) branchChanges++;
+        });
+
+      // 2) 월별 가동율(%)·거리(km) 반영. 행에 지역구분이 있으면 그 값을 해당 월의 "당시 소속"으로 함께 저장
+      //    (지역구분을 비워둔 행은 기존 방식대로 조회 시점의 현재 소속으로 표시됨)
+      plateRows.forEach(r=>{
+        const rowBranch=branchOf(r);
+        for(let m=1;m<=7;m++){
+          const rateKey1=`${m}월가동율(%)`, rateKey2=`${m}월`;
+          const distKey=`${m}월거리(km)`;
+          let rateVal=r[rateKey1];
+          if(rateVal===undefined||rateVal==='') rateVal=r[rateKey2];
+          if(rateVal===undefined||rateVal===''||rateVal===null) continue;
+          const distVal=r[distKey];
+          if(!v.manualMonthly) v.manualMonthly={};
+          if(!v.manualMonthly[year]) v.manualMonthly[year]={};
+          const entry={rate:Number(rateVal)||0,distance:Number(distVal)||0};
+          if(rowBranch) entry.branch=rowBranch;
+          v.manualMonthly[year][m]=entry;
+          monthsFilled++; vehiclesTouched.add(plate);
+        }
+      });
     });
     if(monthsFilled===0) throw new Error('반영할 1~7월 데이터를 찾지 못했습니다. 값이 비어있지 않은지 확인해 주세요.');
     const saved = await saveData();
     if(!saved) throw new Error('서버 저장에 실패했습니다. 인터넷 연결을 확인한 후 다시 시도해 주세요.');
     renderAll();
-    showAdminToast(`수기기록 반영 완료 · ${year}년 · 차량 ${vehiclesTouched.size}대 · ${monthsFilled}개 월 데이터${unmatched.length?` (미등록 차량번호 ${unmatched.length}건은 제외됨)`:''}`,'good');
+    showAdminToast(`수기기록 반영 완료 · ${year}년 · 차량 ${vehiclesTouched.size}대 · ${monthsFilled}개 월 데이터${branchChanges?` · 재배치 이력 ${branchChanges}건 추가`:''}${unmatched.length?` (미등록 차량번호 ${unmatched.length}건은 제외됨)`:''}`,'good');
   }catch(e){
     showAdminToast('업로드 오류: '+e.message,'bad');
   }
