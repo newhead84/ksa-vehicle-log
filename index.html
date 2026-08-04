@@ -35,6 +35,18 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-04] 엑셀 내보내기 서식 개선 + 전체운행기록 엑셀 업로드(복원/병합) 기능 신규 추가.
+  ① 전체운행기록·개인사용현황 시트의 "일자" 단일열(예: "7/31~3"처럼 월이 바뀌면 잘못 표기되던 문제 포함)을
+  시작일자/종료일자 두 열로 분리, ② 모든 날짜열(계약시작일/종료일, 시작일자/종료일자, 최근운행일 등)을
+  텍스트가 아닌 실제 Date 타입 셀(yy-mm-dd 서식)로 저장, ③ 대여료·운행건수·주행거리·주유비 등 숫자열에
+  천단위 구분(#,##0) 서식 적용(신규 excelDateCell()/applyCellFormats() 헬퍼로 시트별 일괄 처리),
+  ④ 관리자 툴바에 "🚗 전체기록 업로드" 버튼 신규 추가 — [엑셀 내보내기]로 받은 파일의 '전체운행기록'
+  시트만 인식하여, 이미 데이터가 있는 차량+일자 조합은 건너뛰고 없는 일자만 새 운행기록으로 추가(덮어쓰기
+  없음, 반영 전 확인 팝업 표시). 기존 "📊 엑셀 업로드"는 1~7월 수기기록 전용 별개 기능이라 이름에
+  "(수기기록)"을 덧붙여 구분(월별가동율 시트 반영은 이번 범위 제외, 추후 별도 요청 예정) | 변경:
+  excelDateCell()/applyCellFormats()(신규), exportToExcel()(ws1~ws6 서식/열 구성), openTripRecordImportModal()/
+  handleTripRecordImportFromModal()/applyTripRecordImport()/parseUploadDateCell()/existingDateSetForPlate()/
+  dateRangeIntersects()(모두 신규), HTML(#tripRecordUploadBtn 신규, #manualUploadBtn 라벨 수정)
   [2026-08-04] "사업장별 차량 가동율 운행거리 비교차트"의 '차량별' 보기 라벨 표기 개선: 차량번호만 표시하던
   것을 "사업장약칭 차량번호 차종"으로 확장 (예: "대전세종충남 231호4132 아반떼"). 사업장명은
   "○○지역본부"/"○○지부" 접미사를 생략하고 앞 지역명칭만 표시(신규 함수 branchShortLabel()), "국가기술
@@ -1081,8 +1093,9 @@
       <button class="reset-btn" id="refreshBtn" onclick="adminRefresh()" style="border-color:var(--accent);color:var(--accent);">⟳ 새로고침</button>
       <button class="reset-btn" id="contractMgmtBtn" onclick="openContractImportModal()" title="계약 연장(단가·기간 변경) 또는 차량 교체(반납 후 신차 투입)로 계약정보가 바뀌면, 지정 엑셀 양식으로 일괄 반영합니다" style="border-color:#B45309;color:#B45309;">📋 차량계약정보 관리</button>
       <button class="reset-btn" id="exportExcelBtn" onclick="exportToExcel()" style="border-color:var(--good);color:var(--good);">엑셀 내보내기</button>
-      <button class="reset-btn" id="manualUploadBtn" onclick="triggerManualMonthlyUpload()" style="border-color:#7C3AED;color:#7C3AED;">📊 엑셀 업로드</button>
+      <button class="reset-btn" id="manualUploadBtn" onclick="triggerManualMonthlyUpload()" title="1~7월 수기기록(가동율·거리)만 반영하는 별도 기능입니다. 실제 운행기록 복원/병합은 '전체기록 업로드'를 사용하세요." style="border-color:#7C3AED;color:#7C3AED;">📊 엑셀 업로드(수기기록)</button>
       <input type="file" id="manualMonthlyInput" accept=".xlsx,.xls" style="display:none;" onchange="handleManualMonthlyUpload(this)">
+      <button class="reset-btn" id="tripRecordUploadBtn" onclick="openTripRecordImportModal()" title="'엑셀 내보내기'로 받은 파일의 '전체운행기록' 시트를 업로드하여, 아직 없는 일자의 운행기록만 채워 넣습니다" style="border-color:#0E7C86;color:#0E7C86;">🚗 전체기록 업로드</button>
       <button class="reset-btn" id="backupDataBtn" onclick="backupData()" style="border-color:var(--navy);color:var(--navy);">💾 데이터 백업</button>
       <button class="reset-btn" id="restoreDataBtn" onclick="document.getElementById('restoreInput').click()" style="border-color:var(--accent);color:var(--accent);">📂 데이터 복원</button>
       <input type="file" id="restoreInput" accept=".json" style="display:none;" onchange="restoreData(this)">
@@ -4572,16 +4585,44 @@ function showAdminToast(msg, type='good'){
   setTimeout(()=>div.remove(),5000);
 }
 
+// 엑셀 내보내기: YYYY-MM-DD(or 그 접두) 문자열을 실제 Date 객체로 변환합니다.
+// (텍스트가 아닌 진짜 날짜 타입 셀로 저장되어야 엑셀에서 정렬/필터/서식 지정이 정상 동작합니다.)
+// 로컬 자정으로 생성해야 하며(코드 전반의 관례와 동일), toISOString 등 UTC 변환은 사용하지 않습니다.
+function excelDateCell(isoStr){
+  if(!isoStr) return '';
+  const s=String(isoStr).trim();
+  if(!/^\d{4}-\d{2}-\d{2}/.test(s)) return s; // 인식 불가 형식은 안전하게 원본 텍스트 유지
+  const d=new Date(s.slice(0,10)+'T00:00:00');
+  return isNaN(d) ? s : d;
+}
+// 시트의 특정 열(0-base 컬럼 인덱스)들에 엑셀 셀 서식(z)을 일괄 적용합니다. (헤더 행 제외, 값이 있는 셀만)
+function applyCellFormats(ws, colFormats){
+  if(!ws || !ws['!ref']) return;
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  for(let r=range.s.r+1;r<=range.e.r;r++){
+    Object.keys(colFormats).forEach(cStr=>{
+      const c=Number(cStr), z=colFormats[cStr];
+      const addr=XLSX.utils.encode_cell({r,c});
+      const cell=ws[addr];
+      if(cell && cell.v!==''&&cell.v!==undefined&&cell.v!==null) cell.z=z;
+    });
+  }
+}
+const XLSX_DATE_FMT='yy-mm-dd';
+const XLSX_NUM_FMT='#,##0';
+
 function exportToExcel(){
   if(!window.XLSX) return;
   const plates=Object.keys(data.vehicles).sort((a,b)=>{const ba=data.vehicles[a].branch||'',bb=data.vehicles[b].branch||'';return compareByOrg(ba,bb)||a.localeCompare(b);});
-  const vehicleRows=plates.map(p=>{const s=vehicleStatsOf(p);return{'차량번호':p,'차종':s.v.model||'','지역구분':s.v.branch||'','최초배정':s.v.originalBranch||'','총주행거리(km)':s.totalDist,'총주유비(원)':s.totalFuel,'운행건수':s.trips.length,'가동율(%)':s.trips.length>0?Number(s.util.rate.toFixed(1)):'','월대여료(원)':s.v.fee!=null?Number(s.v.fee):'','계약시작일':s.v.contractStartDate||'','계약종료일':s.v.contractEndDate||''};});
+  const vehicleRows=plates.map(p=>{const s=vehicleStatsOf(p);return{'차량번호':p,'차종':s.v.model||'','지역구분':s.v.branch||'','최초배정':s.v.originalBranch||'','총주행거리(km)':s.totalDist,'총주유비(원)':s.totalFuel,'운행건수':s.trips.length,'가동율(%)':s.trips.length>0?Number(s.util.rate.toFixed(1)):'','월대여료(원)':s.v.fee!=null?Number(s.v.fee):'','계약시작일':excelDateCell(s.v.contractStartDate),'계약종료일':excelDateCell(s.v.contractEndDate)};});
   const ws1=XLSX.utils.json_to_sheet(vehicleRows);
   ws1['!cols']=[{wch:12},{wch:28},{wch:16},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10},{wch:12},{wch:12},{wch:12}];
+  applyCellFormats(ws1,{4:XLSX_NUM_FMT,5:XLSX_NUM_FMT,6:XLSX_NUM_FMT,8:XLSX_NUM_FMT,9:XLSX_DATE_FMT,10:XLSX_DATE_FMT});
   const tripRows=[];
-  plates.forEach(p=>(data.vehicles[p].trips||[]).slice().sort(tripChronoCompare).forEach(t=>{tripRows.push({'차량번호':p,'지역구분':data.vehicles[p].branch||'','일자(원본)':t.date||'','인식된날짜':t.isoDate||'','시작거리':t.startOdo,'종료거리':t.endOdo,'주행거리(km)':t.distance,'제출자':t.submitter||'','운행자':t.user||'','행선지':t.dest||'','주유비(원)':t.fuel||0,'개인사용여부':t.isPersonal?'개인사용':'','출퇴근사용여부':t.isCommute?(t.commuteDir||'출퇴근사용'):'','출퇴근거리(km)':t.isCommute?(t.distance||0):'','차량상태':t.status||'','비고':t.note||'','입력일시':t.submittedAt?new Date(t.submittedAt).toLocaleString('ko-KR'):'','최종수정일시':t.lastEditedAt?new Date(t.lastEditedAt).toLocaleString('ko-KR'):''});}));
+  plates.forEach(p=>(data.vehicles[p].trips||[]).slice().sort(tripChronoCompare).forEach(t=>{tripRows.push({'차량번호':p,'지역구분':data.vehicles[p].branch||'','시작일자':excelDateCell(t.isoDate),'종료일자':excelDateCell(t.dateTo||t.isoDate),'시작거리':t.startOdo,'종료거리':t.endOdo,'주행거리(km)':t.distance,'제출자':t.submitter||'','운행자':t.user||'','행선지':t.dest||'','주유비(원)':t.fuel||0,'개인사용여부':t.isPersonal?'개인사용':'','출퇴근사용여부':t.isCommute?(t.commuteDir||'출퇴근사용'):'','출퇴근거리(km)':t.isCommute?(t.distance||0):'','차량상태':t.status||'','비고':t.note||'','입력일시':t.submittedAt?new Date(t.submittedAt).toLocaleString('ko-KR'):'','최종수정일시':t.lastEditedAt?new Date(t.lastEditedAt).toLocaleString('ko-KR'):''});}));
   const ws2=XLSX.utils.json_to_sheet(tripRows);
-  ws2['!cols']=[{wch:12},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10},{wch:12},{wch:10},{wch:10},{wch:20},{wch:10},{wch:10},{wch:12},{wch:14},{wch:10},{wch:20},{wch:18},{wch:18}];
+  ws2['!cols']=[{wch:12},{wch:16},{wch:10},{wch:10},{wch:10},{wch:10},{wch:12},{wch:10},{wch:10},{wch:20},{wch:10},{wch:10},{wch:12},{wch:14},{wch:10},{wch:20},{wch:18},{wch:18}];
+  applyCellFormats(ws2,{2:XLSX_DATE_FMT,3:XLSX_DATE_FMT,6:XLSX_NUM_FMT,10:XLSX_NUM_FMT,13:XLSX_NUM_FMT});
   const year=monthlyYear||new Date().getFullYear();
   const monthlyRows=plates.map(p=>{
     const hasAnyData=hasMonthlyDataFor(p,year);
@@ -4601,29 +4642,37 @@ function exportToExcel(){
   });
   const ws3=XLSX.utils.json_to_sheet(monthlyRows);
   ws3['!cols']=[{wch:12},{wch:16},{wch:16}].concat(Array(24).fill({wch:12})).concat([{wch:12},{wch:12}]);
+  // 월별 "거리(km)" 열(3열부터 짝수번째: 가동율,거리 반복)과 연간총거리(km) 열에 천단위 서식 적용
+  const ws3DistCols={};
+  for(let m=0;m<12;m++) ws3DistCols[3+m*2+1]=XLSX_NUM_FMT;
+  ws3DistCols[3+24+1]=XLSX_NUM_FMT; // 연간총거리(km)
+  applyCellFormats(ws3,ws3DistCols);
 
   const driverMap=driverSummaryMap();
   const driverNames=Object.keys(driverMap).sort((a,b)=>driverMap[b].count-driverMap[a].count||a.localeCompare(b));
   const driverRows=driverNames.map(name=>{
     const m=driverMap[name];
-    return {'운행자':name,'운행건수':m.count,'총주행거리(km)':m.dist,'총주유비(원)':m.fuel,'개인사용건수':m.personal,'출퇴근사용건수':m.commute,'이용차량':Array.from(m.plates).join(', '),'최근운행일':m.lastDate||''};
+    return {'운행자':name,'운행건수':m.count,'총주행거리(km)':m.dist,'총주유비(원)':m.fuel,'개인사용건수':m.personal,'출퇴근사용건수':m.commute,'이용차량':Array.from(m.plates).join(', '),'최근운행일':excelDateCell(m.lastDate)};
   });
   const ws4=XLSX.utils.json_to_sheet(driverRows);
   ws4['!cols']=[{wch:14},{wch:10},{wch:14},{wch:14},{wch:12},{wch:12},{wch:30},{wch:12}];
+  applyCellFormats(ws4,{1:XLSX_NUM_FMT,2:XLSX_NUM_FMT,3:XLSX_NUM_FMT,4:XLSX_NUM_FMT,5:XLSX_NUM_FMT,7:XLSX_DATE_FMT});
 
-  const personalRows=personalUseTrips().map(t=>({'일자':t.date||t.isoDate||'','차량번호':t.plate,'지역구분':t.branch||'','운행자':t.user||'','주행거리(km)':t.distance||0,'주유비(원)':t.fuel||0,'행선지':t.dest||'','제출자':t.submitter||'','비고':t.note||''}));
+  const personalRows=personalUseTrips().map(t=>({'시작일자':excelDateCell(t.isoDate),'종료일자':excelDateCell(t.dateTo||t.isoDate),'차량번호':t.plate,'지역구분':t.branch||'','운행자':t.user||'','주행거리(km)':t.distance||0,'주유비(원)':t.fuel||0,'행선지':t.dest||'','제출자':t.submitter||'','비고':t.note||''}));
   const ws5=XLSX.utils.json_to_sheet(personalRows);
-  ws5['!cols']=[{wch:12},{wch:12},{wch:16},{wch:10},{wch:12},{wch:12},{wch:20},{wch:10},{wch:20}];
+  ws5['!cols']=[{wch:10},{wch:10},{wch:12},{wch:16},{wch:10},{wch:12},{wch:12},{wch:20},{wch:10},{wch:20}];
+  applyCellFormats(ws5,{0:XLSX_DATE_FMT,1:XLSX_DATE_FMT,5:XLSX_NUM_FMT,6:XLSX_NUM_FMT});
 
   const commuteAllList=commuteUseTrips();
   const commuteDaily=commuteDailyTotals(commuteAllList);
   const commuteRows=commuteAllList.map(t=>{
     const key=`${escapeHtml(t.user||'')}|${t.isoDate||''}`;
     const dayTotal=commuteDaily[key]?.total||0;
-    return {'일자':t.date||t.isoDate||'','차량번호':t.plate,'지역구분':t.branch||'','운행자':t.user||'','구분':t.commuteDir||'','출퇴근거리(km)':t.distance||0,'당일합계(왕복,km)':dayTotal,'60km초과여부':dayTotal>COMMUTE_ROUNDTRIP_LIMIT_KM?'초과':'','행선지':t.dest||'','제출자':t.submitter||'','비고':t.note||''};
+    return {'일자':excelDateCell(t.isoDate),'차량번호':t.plate,'지역구분':t.branch||'','운행자':t.user||'','구분':t.commuteDir||'','출퇴근거리(km)':t.distance||0,'당일합계(왕복,km)':dayTotal,'60km초과여부':dayTotal>COMMUTE_ROUNDTRIP_LIMIT_KM?'초과':'','행선지':t.dest||'','제출자':t.submitter||'','비고':t.note||''};
   });
   const ws6=XLSX.utils.json_to_sheet(commuteRows);
   ws6['!cols']=[{wch:12},{wch:12},{wch:16},{wch:10},{wch:8},{wch:14},{wch:16},{wch:12},{wch:20},{wch:10},{wch:20}];
+  applyCellFormats(ws6,{0:XLSX_DATE_FMT,5:XLSX_NUM_FMT,6:XLSX_NUM_FMT});
 
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws1,'차량현황');
@@ -4633,6 +4682,191 @@ function exportToExcel(){
   XLSX.utils.book_append_sheet(wb,ws5,'개인사용현황');
   XLSX.utils.book_append_sheet(wb,ws6,'출퇴근사용현황');
   XLSX.writeFile(wb,`차량운행관리_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// ============================================================
+// 전체운행기록 엑셀 업로드 ('엑셀 내보내기'의 '전체운행기록' 시트를 그대로 업로드 →
+// 아직 없는 일자의 운행기록만 신규로 채워 넣는 병합/복원용 기능)
+// ============================================================
+function openTripRecordImportModal(){
+  document.getElementById('modalBody').innerHTML=`
+    <div class="modal-head">
+      <div class="modal-head-info"><div class="plate-big" style="font-size:20px;">🚗 전체운행기록 엑셀 업로드</div><div class="muted" style="font-size:12px;">운행기록 복원·병합 전용 — 아직 없는 일자만 새로 채워 넣습니다</div></div>
+      <div class="modal-head-actions"><button class="close-x" onclick="closeModal()">✕</button></div>
+    </div>
+    <div style="padding:4px 0 16px;font-size:13px;line-height:1.8;color:var(--muted);word-break:keep-all;">
+      <b style="color:var(--navy);">사용 방법 / 양식 안내</b><br>
+      1. 이 기능은 <b>[엑셀 내보내기]</b>로 받은 파일을 그대로 업로드하는 용도입니다. 파일 안의 여러 시트 중 <b>'전체운행기록'</b> 시트만 읽으며, 나머지 시트(차량현황·월별가동율·운행자별현황·개인사용현황·출퇴근사용현황)는 무시됩니다.<br>
+      2. 필요 열: 차량번호, 시작일자, 종료일자, 시작거리, 종료거리, 주행거리(km), 제출자, 운행자, 행선지, 주유비(원), 개인사용여부, 출퇴근사용여부, 차량상태, 비고 (열 이름이 같으면 순서는 상관없습니다)<br>
+      3. <b>이미 운행기록이 있는 차량+일자 조합은 자동으로 건너뛰고, 데이터가 전혀 없던 일자만 새로 추가</b>됩니다 (기존 데이터를 덮어쓰지 않습니다).<br>
+      4. 반영 전 변경 요약을 확인 팝업으로 먼저 보여드립니다.<br>
+      5. '월별가동율' 시트 반영(수기 가동율 채우기)은 이 기능의 범위가 아닙니다 — 필요 시 별도로 요청해 주세요.
+    </div>
+    <div style="border:2px dashed var(--line);border-radius:10px;padding:20px;text-align:center;">
+      <input type="file" id="tripRecordImportInput" accept=".xlsx,.xls" style="display:block;margin:0 auto 12px;">
+      <button class="btn btn-primary" style="font-size:13px;padding:8px 18px;" onclick="handleTripRecordImportFromModal()">엑셀 업로드 및 반영</button>
+    </div>
+    <div id="tripRecordImportResult" style="margin-top:14px;font-size:12.5px;word-break:keep-all;"></div>
+  `;
+  document.getElementById('modalOverlay').classList.add('show');
+  lockBodyScroll();
+}
+
+function handleTripRecordImportFromModal(){
+  const input=document.getElementById('tripRecordImportInput');
+  const resultEl=document.getElementById('tripRecordImportResult');
+  const file=input?.files?.[0];
+  if(!file){ resultEl.innerHTML='<span style="color:var(--bad);">⚠ 업로드할 엑셀 파일을 선택해주세요.</span>'; return; }
+  const reader=new FileReader();
+  reader.onload=async function(e){
+    let rows;
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
+      const sheetName=wb.SheetNames.find(n=>n.includes('전체운행기록'));
+      if(!sheetName) throw new Error(`'전체운행기록' 시트를 찾을 수 없습니다. 엑셀 내보내기로 받은 파일을 그대로 업로드해 주세요.`);
+      rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{defval:''});
+    }catch(err){
+      resultEl.innerHTML=`<span style="color:var(--bad);">⚠ 엑셀 파일을 읽을 수 없습니다: ${escapeHtml(err.message)}</span>`;
+      return;
+    }
+    await applyTripRecordImport(rows,resultEl);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// 엑셀 업로드 셀 값을 YYYY-MM-DD 문자열로 정규화합니다.
+// Date 객체(자체 내보내기 파일), 엑셀 시리얼 숫자(cellDates 미적용 셀), 수기 입력 문자열(YYYY-MM-DD/YY-MM-DD) 모두 허용.
+function parseUploadDateCell(val){
+  if(val===undefined||val===null||val==='') return null;
+  if(val instanceof Date){
+    if(isNaN(val)) return null;
+    const y=val.getFullYear(),m=String(val.getMonth()+1).padStart(2,'0'),d=String(val.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+  if(typeof val==='number'){
+    if(window.XLSX && XLSX.SSF && XLSX.SSF.parse_date_code){
+      const dc=XLSX.SSF.parse_date_code(val);
+      if(dc) return `${dc.y}-${String(dc.m).padStart(2,'0')}-${String(dc.d).padStart(2,'0')}`;
+    }
+    return null;
+  }
+  const s=String(val).trim();
+  let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m=s.match(/^(\d{2})-(\d{2})-(\d{2})$/);
+  if(m) return `20${m[1]}-${m[2]}-${m[3]}`;
+  return null;
+}
+
+// 특정 차량이 기존에 이미 운행기록을 가지고 있는 모든 날짜(YYYY-MM-DD) 집합
+function existingDateSetForPlate(plate){
+  const set=new Set();
+  (data.vehicles[plate]?.trips||[]).forEach(t=>{
+    if(Array.isArray(t.usageDates)&&t.usageDates.length){ t.usageDates.forEach(d=>set.add(d)); return; }
+    if(!t.isoDate) return;
+    let d=new Date(t.isoDate+'T00:00:00');
+    const endD=new Date((t.dateTo||t.isoDate)+'T00:00:00');
+    if(isNaN(d)||isNaN(endD)) return;
+    while(d<=endD){ set.add(iso(d)); d=new Date(d.getTime()+86400000); }
+  });
+  return set;
+}
+function dateRangeIntersects(existingSet,startISO,endISO){
+  let d=new Date(startISO+'T00:00:00');
+  const endD=new Date(endISO+'T00:00:00');
+  if(isNaN(d)||isNaN(endD)) return false;
+  while(d<=endD){ if(existingSet.has(iso(d))) return true; d=new Date(d.getTime()+86400000); }
+  return false;
+}
+
+async function applyTripRecordImport(rows,resultEl){
+  if(!rows.length){ resultEl.innerHTML='<span style="color:var(--bad);">⚠ 시트에 데이터가 없습니다.</span>'; return; }
+  await refreshDataFromStorage();
+  const errors=[];
+  const plan=[];
+  let skippedExisting=0;
+  const unmatchedPlates=new Set();
+  const perPlateExisting={};
+
+  rows.forEach((r,i)=>{
+    const rowNum=i+2;
+    const plate=String(r['차량번호']||'').trim();
+    if(!plate) return; // 빈 행은 무시
+    if(!data.vehicles[plate] && !REGISTRY_MAP[plate]){ unmatchedPlates.add(plate); return; }
+    const startISO=parseUploadDateCell(r['시작일자']);
+    if(!startISO){ errors.push(`${rowNum}행(${plate}): 시작일자를 인식할 수 없습니다.`); return; }
+    const endISO=parseUploadDateCell(r['종료일자'])||startISO;
+    const startOdo=Number(r['시작거리']), endOdo=Number(r['종료거리']);
+    if(isNaN(startOdo)||isNaN(endOdo)){ errors.push(`${rowNum}행(${plate}): 시작거리/종료거리 값이 올바르지 않습니다.`); return; }
+
+    if(!perPlateExisting[plate]) perPlateExisting[plate]=existingDateSetForPlate(plate);
+    if(dateRangeIntersects(perPlateExisting[plate],startISO,endISO)){ skippedExisting++; return; }
+
+    const usageDates=[]; let d=new Date(startISO+'T00:00:00'); const endD=new Date(endISO+'T00:00:00');
+    while(d<=endD){ usageDates.push(iso(d)); d=new Date(d.getTime()+86400000); }
+    usageDates.forEach(dt=>perPlateExisting[plate].add(dt)); // 같은 파일 내 동일 일자 중복 반영 방지
+
+    const distRaw=r['주행거리(km)'];
+    const distance=(distRaw!==''&&distRaw!==undefined&&distRaw!==null&&!isNaN(Number(distRaw)))?Number(distRaw):Math.max(0,endOdo-startOdo);
+    const personalRaw=String(r['개인사용여부']||'').trim();
+    const commuteRaw=String(r['출퇴근사용여부']||'').trim();
+    const isPersonal=personalRaw==='개인사용';
+    const isCommute=!isPersonal && commuteRaw!=='';
+    const commuteDir=(isCommute && commuteRaw!=='출퇴근사용')?commuteRaw:'';
+
+    plan.push({
+      plate,
+      date:formatTripDateDisplay(startISO,endISO), isoDate:startISO, dateTo:endISO, usageDates,
+      startOdo, endOdo, distance,
+      submitter:String(r['제출자']||'').trim(),
+      user:String(r['운행자']||'').trim(),
+      dest:String(r['행선지']||'').trim(),
+      fuel:parseFuelAmount(r['주유비(원)']),
+      status:String(r['차량상태']||'').trim()||'정상',
+      note:String(r['비고']||'').trim(),
+      isPersonal, isCommute, commuteDir
+    });
+  });
+
+  if(errors.length){
+    resultEl.innerHTML=`<div style="color:var(--bad);font-weight:600;margin-bottom:6px;">⚠ ${errors.length}건의 오류로 반영을 중단했습니다. 아래 항목을 수정한 뒤 다시 업로드해주세요.</div>`+errors.slice(0,30).map(e=>`<div style="color:var(--bad);">· ${escapeHtml(e)}</div>`).join('');
+    return;
+  }
+  if(!plan.length){
+    resultEl.innerHTML=`<span style="color:var(--bad);">⚠ 새로 추가할 데이터가 없습니다. (이미 등록된 일자 ${skippedExisting}건${unmatchedPlates.size?`, 미등록 차량번호 ${unmatchedPlates.size}건`:''} 제외)</span>`;
+    return;
+  }
+
+  const byPlate={};
+  plan.forEach(p=>{ (byPlate[p.plate]=byPlate[p.plate]||[]).push(p); });
+  const plateNames=Object.keys(byPlate);
+  const summaryLines=plateNames.map(p=>`${p}: ${byPlate[p].length}건 추가`);
+  const ok=confirm(`⚠️ 아래 내용을 전체운행기록에 반영합니다.\n\n신규 추가: 총 ${plan.length}건 (차량 ${plateNames.length}대)\n${summaryLines.slice(0,15).join('\n')}${summaryLines.length>15?`\n... 외 ${summaryLines.length-15}대`:''}\n\n이미 데이터가 있는 일자 ${skippedExisting}건은 자동으로 건너뜁니다.${unmatchedPlates.size?`\n미등록 차량번호 ${unmatchedPlates.size}건은 제외됩니다.`:''}\n\n계속 진행하시겠습니까?`);
+  if(!ok) return;
+
+  plan.forEach(p=>{
+    if(!data.vehicles[p.plate]){
+      data.vehicles[p.plate]={model:REGISTRY_MAP[p.plate]?.model||'',branch:REGISTRY_MAP[p.plate]?.branch||'미배정',originalBranch:REGISTRY_MAP[p.plate]?.branch||'미배정',active:true,trips:[]};
+    }
+    const v=data.vehicles[p.plate];
+    if(!Array.isArray(v.trips)) v.trips=[];
+    v.trips.push({
+      date:p.date, isoDate:p.isoDate, dateTo:p.dateTo, usageDates:p.usageDates,
+      startOdo:p.startOdo, endOdo:p.endOdo, distance:p.distance,
+      user:p.user, dest:p.dest, fuel:p.fuel, status:p.status, note:p.note,
+      submitter:p.submitter||'(엑셀업로드)', branchAtTime:v.branch,
+      imgKey:null, isPersonal:p.isPersonal, isDaeCha:false, daeChaPate:'',
+      isCommute:p.isCommute, commuteDir:p.commuteDir,
+      submittedAt:new Date().toISOString(),
+      importedFromExcel:true
+    });
+  });
+
+  const saved=await saveData();
+  if(!saved){ resultEl.innerHTML='<span style="color:var(--bad);">⚠ 저장 실패: 변경 내용이 서버에 반영되지 않았습니다. 인터넷 연결을 확인한 후 다시 시도해 주세요.</span>'; return; }
+  resultEl.innerHTML=`<span style="color:var(--good);font-weight:600;">✅ 반영 완료 — 신규 ${plan.length}건 추가 (차량 ${plateNames.length}대), 이미 존재하는 일자 ${skippedExisting}건 제외${unmatchedPlates.size?`, 미등록 차량번호 ${unmatchedPlates.size}건 제외`:''}</span>`;
+  showAdminToast(`전체운행기록 업로드 완료 · 신규 ${plan.length}건 (차량 ${plateNames.length}대)`,'good');
+  renderAll();
 }
 
 // ============================================================
