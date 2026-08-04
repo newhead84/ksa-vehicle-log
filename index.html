@@ -35,6 +35,12 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-04] "사업장별 차량 가동율 운행거리 비교차트"의 '차량별' 보기 라벨 표기 개선: 차량번호만 표시하던
+  것을 "사업장약칭 차량번호 차종"으로 확장 (예: "대전세종충남 231호4132 아반떼"). 사업장명은
+  "○○지역본부"/"○○지부" 접미사를 생략하고 앞 지역명칭만 표시(신규 함수 branchShortLabel()), "국가기술
+  표준원(파견)"은 "국표원"으로 단축. 차종은 기존 modelShort() 재사용(그랜저/소나타/아반떼). 라벨 폭 부족
+  방지를 위해 '차량별' 모드일 때만 labelW를 112→190으로 확대 | 변경: renderMonthlyCompareChart(),
+  branchShortLabel()(신규)
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
@@ -1777,6 +1783,19 @@ const ORG_ORDER = [
 function orgOrderIndex(b){ const i=ORG_ORDER.indexOf(b); return i===-1?999:i; }
 function compareByOrg(a,b){ const ia=orgOrderIndex(a),ib=orgOrderIndex(b); return ia!==ib?ia-ib:a.localeCompare(b); }
 
+// 사업장명 축약 표기 (요청: 2026-08-04, 차량별 비교차트 라벨용)
+// - "○○지역본부" → "지역본부" 생략, 앞 지역명칭만 표시 (예: "경기강원지역본부" → "경기강원")
+// - "○○지부" → "지부" 생략, 앞 지역명칭만 표시 (예: "강원지부" → "강원")
+// - "국가기술표준원(파견)" 등 국가기술표준원 계열 → "국표원"으로 단축
+// - DT센터/퓨처캠 등 이미 짧은 명칭은 그대로 표시
+function branchShortLabel(branch){
+  if(!branch) return branch;
+  if(branch.includes('국가기술표준원')) return '국표원';
+  if(branch.endsWith('지역본부')) return branch.slice(0,-4);
+  if(branch.endsWith('지부')) return branch.slice(0,-2);
+  return branch;
+}
+
 // 지역본부별 열람전용 링크 설정 (요청: 2026-07-26)
 // - DT센터/퓨처캠/국가기술표준원(파견)은 지역본부 링크 대상에서 제외
 // - 강원지부는 경기강원지역본부에, 충남지부는 대전세종충남지역본부에 포함시켜 함께 조회되도록 함
@@ -3013,7 +3032,8 @@ function renderMonthlyCompareChart(year){
   const padL=parseFloat(wrapStyle.paddingLeft)||0, padR=parseFloat(wrapStyle.paddingRight)||0;
   const measuredW=el.clientWidth?(el.clientWidth-padL-padR):0;
   const w=Math.round(measuredW>200?measuredW:900);
-  const labelW=112,padRight=54,padTop=22,rowH=30,barH=16,padBottom=6;
+  // 차량별(flat) 모드는 라벨에 "사업장약칭 차량번호 차종"을 함께 표기하므로 라벨 폭을 더 넓게 확보
+  const labelW=(mccGroupBy==='vehicle'?190:112),padRight=54,padTop=22,rowH=30,barH=16,padBottom=6;
   const subRowH=24,subBarH=12; // 사업장별 모드에서 펼쳐진 소속 차량 하위 행 크기(본행보다 작게)
   const plotW=w-labelW-padRight;
   const xOf=v=>labelW+(Math.min(v,axisMax)/axisMax)*plotW;
@@ -3029,8 +3049,10 @@ function renderMonthlyCompareChart(year){
       const barEndX=xOf(value);
       const escPlate=v.plate.replace(/'/g,"\\'");
       const branchTitle=escapeHtml(v.branch);
+      const branchShortTxt=escapeHtml(branchShortLabel(v.branch));
+      const modelShortTxt=escapeHtml(modelShort(data.vehicles[v.plate]?.model||''));
       bodySvg+=`<g class="mcc-bar-row">
-        <text class="mcc-bar-label" x="${labelW-8}" y="${cy+4}" font-size="11" font-weight="600" fill="var(--ink)" text-anchor="end" style="cursor:pointer;" title="${branchTitle} · 클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${escPlate}')">${escapeHtml(v.plate)}</text>
+        <text class="mcc-bar-label" x="${labelW-8}" y="${cy+4}" font-size="11" font-weight="600" fill="var(--ink)" text-anchor="end" style="cursor:pointer;" title="${branchTitle} · 클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${escPlate}')"><tspan fill="var(--muted)" font-weight="500">${branchShortTxt} </tspan>${escapeHtml(v.plate)}<tspan fill="var(--muted)" font-weight="500"> ${modelShortTxt}</tspan></text>
         <rect class="mcc-bar" x="${labelW}" y="${barY}" width="${Math.max(0,barEndX-labelW)}" height="${barH}" rx="4" fill="${color}" style="cursor:pointer;" title="${branchTitle} · 클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${escPlate}')"/>
         <text class="mcc-bar-value" x="${barEndX+6}" y="${cy+4}" font-size="11" font-weight="700" fill="var(--ink)" text-anchor="start" style="pointer-events:none;">${valueLabel(value)}</text>
       </g>`;
