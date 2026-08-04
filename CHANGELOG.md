@@ -6,6 +6,7 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 ## 2026-08-04
 
+- "사업장별 차량 가동율 운행거리 비교차트" 개선 3건: ① 사업장 라벨 폰트를 12px→11px로 소폭 축소해 "대전세종충남지역본부" 등 긴 사업장명 좌측 앞글자가 잘려 보이던 문제 해결, ② 막대 클릭 동작을 기존 "해당 사업장만 강조"에서 "해당 사업장 소속 차량별 가동율/운행거리를 막대 바로 아래에 펼치기(재클릭 시 접기)"로 변경(순위 정렬로 강조 기능의 실효성이 낮다는 피드백 반영), ③ 상단 탭에 '사업장별'/'차량별' 보기 전환 버튼 신규 추가 — '차량별' 선택 시 전체 차량(46~47대)을 사업장 구분 없이 연평균 기준 1등~꼴찌 flat 순위로 나열(색상은 소속 사업장 색상 유지, 차량번호·막대 클릭 시 하단 공용차량 현황으로 이동) | 변경: renderMonthlyCompareChart()(bodySvg 동적 높이 계산으로 재작성, vehicleSummary 신규 집계), mccGroupBy/mccExpandedBranch(신규, 기존 mccHighlight/toggleMccHighlight() 대체), setMccGroupBy()/toggleMccBranchExpand()(신규), setMccMetric()(그룹 전환 시 확장 상태 초기화 추가), HTML(.mcc-btn-divider 및 사업장별/차량별 버튼, #mccCaption id 추가), CSS(.mcc-groupby-btn, .mcc-btn-divider 신규)
 - 공용차량 현황 카드(차량 상세 모달) 내 "월별 가동율" 1~12월 미니표(.mini-month-row, 카드 가로폭 전체 사용)와 아래쪽 "건별 운행거리 추이" 스파크라인(.sparkline-wrap, max-width:640px)의 x축 위치가 서로 어긋나 보이던 문제 수정: 미니표는 기존 가로폭(카드 전체)을 그대로 유지하고, 대신 폭이 좁은 스파크라인 쪽을 margin:auto로 카드 내 가운데 정렬해 시각적 균형을 맞춤(스파크라인 SVG 크기·비율은 기존과 동일, 변경 없음) | 변경: CSS(.sparkline-wrap)
 
 ## 2026-07-26

@@ -38,6 +38,16 @@
   형식: [YYYY-MM-DD] 요청내용 요약 | 변경 함수/영역: funcName(), #elementId 등
   ※ 전체 변경이력은 CHANGELOG.md 참조 (2026-08-01부로 분리, 이 블록은 최근 항목만 유지)
 =================================================================
+  [2026-08-04] "사업장별 차량 가동율 운행거리 비교차트" 개선 3건: ① 사업장 라벨 폰트를 12px→11px로 소폭
+  축소해 "대전세종충남지역본부" 등 긴 사업장명 좌측 앞글자가 잘려 보이던 문제 해결, ② 막대 클릭 동작을
+  기존 "해당 사업장만 강조"에서 "해당 사업장 소속 차량별 가동율/운행거리를 막대 바로 아래에 펼치기(재클릭
+  시 접기)"로 변경(순위 정렬로 강조 기능의 실효성이 낮다는 피드백 반영), ③ 상단 탭에 '사업장별'/'차량별'
+  보기 전환 버튼 신규 추가 — '차량별' 선택 시 전체 차량(46~47대)을 사업장 구분 없이 연평균 기준 1등~꼴찌
+  flat 순위로 나열(색상은 소속 사업장 색상 유지, 차량번호·막대 클릭 시 하단 공용차량 현황으로 이동) | 변경:
+  renderMonthlyCompareChart()(bodySvg 동적 높이 계산으로 재작성, vehicleSummary 신규 집계), mccGroupBy/
+  mccExpandedBranch(신규, 기존 mccHighlight/toggleMccHighlight() 대체), setMccGroupBy()/toggleMccBranchExpand()
+  (신규), setMccMetric()(그룹 전환 시 확장 상태 초기화 추가), HTML(.mcc-btn-divider 및 사업장별/차량별 버튼,
+  #mccCaption id 추가), CSS(.mcc-groupby-btn, .mcc-btn-divider 신규)
   [2026-08-04] "사업장별 차량 가동율 운행거리 비교차트"와 차량 상세 모달 "건별 운행거리 추이" 스파크라인을
   화면에서 눈에 띄게 더 크게 보이도록 확대: 기존에는 두 차트 모두 컨테이너에 각각 max-width(820px, 640px)
   상한이 걸려 있어 넓은 화면에서도 일정 크기 이상 커지지 않았음 → 두 상한을 모두 제거(max-width:none)하여
@@ -947,12 +957,16 @@
   .mcc-legend-model{color:var(--muted);}
   .mcc-metric-btn{padding:5px 12px;font-size:12px;}
   .mcc-metric-btn.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .mcc-groupby-btn{padding:5px 12px;font-size:12px;}
+  .mcc-groupby-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .mcc-btn-divider{width:1px;align-self:stretch;background:var(--line);margin:0 2px;}
 
   @media (max-width:640px){
     .month-cell-km{font-size:9px;}
     .mcc-caption{font-size:12px;}
     .mcc-legend-item{font-size:12px;}
     .mcc-metric-btn{padding:4px 9px;font-size:11px;}
+    .mcc-groupby-btn{padding:4px 9px;font-size:11px;}
   }
 
 </style>
@@ -1166,10 +1180,13 @@
       <div class="month-controls">
         <button type="button" class="btn btn-ghost mcc-metric-btn active" data-metric="rate" onclick="setMccMetric('rate')">가동율(%)</button>
         <button type="button" class="btn btn-ghost mcc-metric-btn" data-metric="dist" onclick="setMccMetric('dist')">운행거리(km)</button>
+        <span class="mcc-btn-divider"></span>
+        <button type="button" class="btn btn-ghost mcc-groupby-btn active" data-groupby="branch" onclick="setMccGroupBy('branch')">사업장별</button>
+        <button type="button" class="btn btn-ghost mcc-groupby-btn" data-groupby="vehicle" onclick="setMccGroupBy('vehicle')">차량별</button>
       </div>
     </div>
     <div class="section-body collapsed" id="monthlyCompareChartWrap">
-      <div class="muted mcc-caption" style="margin-bottom:10px;">선택한 연도의 연평균 가동율·운행거리를 기준으로 15개 사업장을 순위 막대로 비교합니다 (버튼으로 가동율/운행거리 전환, 막대 클릭 시 해당 사업장만 강조, 사업장명 클릭 시 하단 공용차량 현황으로 이동).</div>
+      <div class="muted mcc-caption" id="mccCaption" style="margin-bottom:10px;">선택한 연도의 연평균 가동율·운행거리를 기준으로 15개 사업장을 순위 막대로 비교합니다 (버튼으로 가동율/운행거리 전환, 막대 클릭 시 소속 차량별 상세를 펼치거나 접음, 사업장명 클릭 시 하단 공용차량 현황으로 이동).</div>
       <div class="mcc-wrap" id="monthlyCompareChart"></div>
     </div>
 
@@ -2905,26 +2922,40 @@ function renderMonthly(year){
     });
   });
   document.getElementById('monthlyArea').innerHTML=`<div class="month-table-wrap"><table class="month-table"><thead><tr><th>차량번호</th><th>주사용자</th>${monthLabels.map(l=>`<th>${l}</th>`).join('')}<th>연평균</th></tr></thead><tbody>${rowsHtml||`<tr><td colspan="15" class="muted" style="text-align:center;padding:20px;">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
-  mccHighlight=null;
+  mccExpandedBranch=null;
   renderMonthlyCompareChart(monthlyYear);
 }
 
-// 사업장별 가동율·운행거리 비교 차트: 15개 사업장을 연평균 값 기준 내림차순 순위 막대차트로 비교한다.
+// 사업장별/차량별 가동율·운행거리 비교 차트: 연평균 값 기준 내림차순 순위 막대차트로 비교한다.
 // (기존 월별 라인차트는 범례·선이 15개나 겹쳐 한눈에 비교가 어려워, 연평균 기준 랭킹 막대차트로 개편)
-// 각 사업장의 값은 해당 사업장 소속 차량들의 "연평균"(가동율 평균, 운행거리 평균)이며, 차량 단위가 아닌 사업장 단위 비교가 목적이다.
+// - 사업장별 모드: 15개 사업장을 연평균(소속 차량 평균)으로 비교. 막대 클릭 시 소속 차량별 상세를 그 막대 바로 아래에 펼치거나(다시 클릭 시) 접는다.
+// - 차량별 모드: 사업장 구분 없이 전체 차량을 연평균 기준 1등~꼴찌 순으로 나열한다(색상은 소속 사업장 색상 유지).
 // 가동율(%)과 운행거리(km)는 성격이 달라 한 차트에 나란히 놓지 않고, 상단 탭(mccMetric)으로 지표를 전환해서 본다.
-// 막대 클릭 시 해당 사업장만 강조(나머지는 흐리게)하고, 사업장명 클릭 시 기존과 동일하게 하단 공용차량 현황으로 스크롤 이동한다.
+// 사업장명/차량번호 클릭 시 하단 공용차량 현황(해당 사업장 그룹 또는 해당 차량 카드)으로 스크롤 이동한다.
 let mccMetric='rate'; // 'rate'(가동율%) | 'dist'(운행거리km)
-let mccHighlight=null; // 강조 중인 사업장명(없으면 null)
+let mccGroupBy='branch'; // 'branch'(사업장별) | 'vehicle'(차량별)
+let mccExpandedBranch=null; // 사업장별 모드에서 펼쳐진 사업장명(없으면 null)
 const MCC_LINE_COLORS=['#17593d','#e81657','#2f6690','#e67e22','#7eb138','#8e44ad','#c0392b','#1abc9c','#5b6ee1','#a3742d','#0e7c86','#b8860b','#455a64','#d6336c','#5c940d'];
 function setMccMetric(metric){
   mccMetric=metric;
-  mccHighlight=null;
+  mccExpandedBranch=null;
   document.querySelectorAll('.mcc-metric-btn').forEach(b=>b.classList.toggle('active',b.dataset.metric===metric));
   renderMonthlyCompareChart(monthlyYear);
 }
-function toggleMccHighlight(branch){
-  mccHighlight=(mccHighlight===branch)?null:branch;
+function setMccGroupBy(mode){
+  mccGroupBy=mode;
+  mccExpandedBranch=null;
+  document.querySelectorAll('.mcc-groupby-btn').forEach(b=>b.classList.toggle('active',b.dataset.groupby===mode));
+  const cap=document.getElementById('mccCaption');
+  if(cap){
+    cap.textContent=mode==='vehicle'
+      ?'선택한 연도의 연평균 가동율·운행거리를 기준으로 전체 차량을 1등~꼴찌 순위 막대로 비교합니다 (버튼으로 가동율/운행거리 전환, 차량번호·막대 클릭 시 하단 공용차량 현황으로 이동).'
+      :'선택한 연도의 연평균 가동율·운행거리를 기준으로 15개 사업장을 순위 막대로 비교합니다 (버튼으로 가동율/운행거리 전환, 막대 클릭 시 소속 차량별 상세를 펼치거나 접음, 사업장명 클릭 시 하단 공용차량 현황으로 이동).';
+  }
+  renderMonthlyCompareChart(monthlyYear);
+}
+function toggleMccBranchExpand(branch){
+  mccExpandedBranch=(mccExpandedBranch===branch)?null:branch;
   renderMonthlyCompareChart(monthlyYear);
 }
 function renderMonthlyCompareChart(year){
@@ -2952,14 +2983,26 @@ function renderMonthlyCompareChart(year){
     }
     if(validMonthCnt>0) branchSummary.push({branch,avgRate:rateSumMonths/validMonthCnt,avgDist:distSumMonths/validMonthCnt});
   });
+  // 차량별 연평균(신규): 각 차량 자신의 유효 월(beforeService 아님)들의 평균 가동율/평균 운행거리.
+  const vehicleSummary=[];
+  plates.forEach(p=>{
+    if(!hasMonthlyDataFor(p,year)) return;
+    let rateSum=0,distSum=0,validCnt=0;
+    perVehicleMonthly[p].forEach(rec=>{
+      if(rec&&!rec.beforeService){ rateSum+=rec.rate||0; distSum+=rec.distance||0; validCnt++; }
+    });
+    if(validCnt>0) vehicleSummary.push({plate:p,branch:data.vehicles[p].branch||'미배정',avgRate:rateSum/validCnt,avgDist:distSum/validCnt});
+  });
   if(!branchSummary.length){
     el.innerHTML=`<div class="muted" style="text-align:center;padding:20px;">데이터가 없습니다</div>`;
     return;
   }
   // 선택된 지표(가동율/운행거리) 기준 내림차순 순위 정렬
   branchSummary.sort((a,b)=>mccMetric==='rate'?(b.avgRate-a.avgRate):(b.avgDist-a.avgDist));
-  // 운행거리 축 공통 최댓값: 정렬된(=전체) 사업장의 연평균 거리값 중 최댓값 기준
-  const distMax=Math.max(...branchSummary.map(b=>b.avgDist),1);
+  vehicleSummary.sort((a,b)=>mccMetric==='rate'?(b.avgRate-a.avgRate):(b.avgDist-a.avgDist));
+  // 운행거리 축 공통 최댓값: 사업장/차량 두 데이터셋을 모두 포함해 계산(사업장별 모드에서 소속 차량 상세를
+  // 펼쳤을 때 개별 차량 값이 사업장 평균보다 커도 축을 벗어나지 않도록 여유를 둔다).
+  const distMax=Math.max(...branchSummary.map(b=>b.avgDist),...vehicleSummary.map(v=>v.avgDist),1);
   const distStep=sparklineNiceStep(distMax,4);
   const distAxisMax=Math.max(distStep,Math.ceil(distMax/distStep)*distStep);
   const axisMax=mccMetric==='rate'?100:distAxisMax;
@@ -2971,36 +3014,83 @@ function renderMonthlyCompareChart(year){
   const measuredW=el.clientWidth?(el.clientWidth-padL-padR):0;
   const w=Math.round(measuredW>200?measuredW:900);
   const labelW=112,padRight=54,padTop=22,rowH=30,barH=16,padBottom=6;
+  const subRowH=24,subBarH=12; // 사업장별 모드에서 펼쳐진 소속 차량 하위 행 크기(본행보다 작게)
   const plotW=w-labelW-padRight;
-  const h=padTop+branchSummary.length*rowH+padBottom;
   const xOf=v=>labelW+(Math.min(v,axisMax)/axisMax)*plotW;
   const valueLabel=v=>mccMetric==='rate'?Math.round(v)+'%':Math.round(v).toLocaleString()+'km';
+  let bodySvg='', cursorY=padTop;
+  if(mccGroupBy==='vehicle'){
+    // 차량별 모드: 사업장 구분 없이 전체 차량을 순위대로 나열(요청사항: flat 랭킹)
+    vehicleSummary.forEach(v=>{
+      const color=MCC_LINE_COLORS[branches.indexOf(v.branch)%MCC_LINE_COLORS.length];
+      const value=mccMetric==='rate'?v.avgRate:v.avgDist;
+      const cy=cursorY+rowH/2;
+      const barY=cy-barH/2;
+      const barEndX=xOf(value);
+      const escPlate=v.plate.replace(/'/g,"\\'");
+      const branchTitle=escapeHtml(v.branch);
+      bodySvg+=`<g class="mcc-bar-row">
+        <text class="mcc-bar-label" x="${labelW-8}" y="${cy+4}" font-size="11" font-weight="600" fill="var(--ink)" text-anchor="end" style="cursor:pointer;" title="${branchTitle} · 클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${escPlate}')">${escapeHtml(v.plate)}</text>
+        <rect class="mcc-bar" x="${labelW}" y="${barY}" width="${Math.max(0,barEndX-labelW)}" height="${barH}" rx="4" fill="${color}" style="cursor:pointer;" title="${branchTitle} · 클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${escPlate}')"/>
+        <text class="mcc-bar-value" x="${barEndX+6}" y="${cy+4}" font-size="11" font-weight="700" fill="var(--ink)" text-anchor="start" style="pointer-events:none;">${valueLabel(value)}</text>
+      </g>`;
+      cursorY+=rowH;
+    });
+  } else {
+    // 사업장별 모드: 막대 클릭 시 소속 차량별 상세를 바로 아래에 펼침/접음
+    branchSummary.forEach(b=>{
+      const color=MCC_LINE_COLORS[branches.indexOf(b.branch)%MCC_LINE_COLORS.length];
+      const value=mccMetric==='rate'?b.avgRate:b.avgDist;
+      const expanded=mccExpandedBranch===b.branch;
+      const rowTop=cursorY;
+      const cy=cursorY+rowH/2;
+      const barY=cy-barH/2;
+      const barEndX=xOf(value);
+      const escBranch=b.branch.replace(/'/g,"\\'");
+      const subVehicles=vehicleSummary.filter(v=>v.branch===b.branch);
+      cursorY+=rowH;
+      let subSvg='';
+      if(expanded){
+        if(subVehicles.length){
+          subVehicles.forEach(v=>{
+            const svalue=mccMetric==='rate'?v.avgRate:v.avgDist;
+            const scy=cursorY+subRowH/2;
+            const sbarY=scy-subBarH/2;
+            const sBarEndX=xOf(svalue);
+            const escPlate=v.plate.replace(/'/g,"\\'");
+            subSvg+=`<g class="mcc-bar-row-sub">
+              <text x="${labelW-16}" y="${scy+3}" font-size="10" font-weight="500" fill="var(--muted)" text-anchor="end" style="cursor:pointer;" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${escPlate}')">${escapeHtml(v.plate)}</text>
+              <rect x="${labelW}" y="${sbarY}" width="${Math.max(0,sBarEndX-labelW)}" height="${subBarH}" rx="3" fill="${color}" style="opacity:0.55;cursor:pointer;" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${escPlate}')"/>
+              <text x="${sBarEndX+6}" y="${scy+3}" font-size="10" font-weight="600" fill="var(--muted)" text-anchor="start" style="pointer-events:none;">${valueLabel(svalue)}</text>
+            </g>`;
+            cursorY+=subRowH;
+          });
+        } else {
+          subSvg+=`<text x="${labelW}" y="${cursorY+15}" font-size="10" fill="var(--muted)">소속 차량 데이터가 없습니다</text>`;
+          cursorY+=subRowH;
+        }
+      }
+      const subRowsEndY=cursorY;
+      const expandBg=expanded?`<rect x="0" y="${rowTop}" width="${w}" height="${subRowsEndY-rowTop}" fill="var(--accent-soft)" opacity="0.35"/>`:'';
+      bodySvg+=`<g class="mcc-bar-row">
+        ${expandBg}
+        <text class="mcc-bar-label" x="${labelW-8}" y="${cy+4}" font-size="11" font-weight="600" fill="var(--ink)" text-anchor="end" style="cursor:pointer;" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleGroup('${escBranch}')">${escapeHtml(b.branch)}</text>
+        <rect class="mcc-bar" x="${labelW}" y="${barY}" width="${Math.max(0,barEndX-labelW)}" height="${barH}" rx="4" fill="${color}" style="cursor:pointer;" title="클릭 시 소속 차량별 상세 펼치기/접기" onclick="toggleMccBranchExpand('${escBranch}')"/>
+        <text class="mcc-bar-value" x="${barEndX+6}" y="${cy+4}" font-size="11" font-weight="700" fill="var(--ink)" text-anchor="start" style="pointer-events:none;">${valueLabel(value)}</text>
+      </g>${subSvg}`;
+    });
+  }
+  const h=cursorY+padBottom;
   const gridSvg=ticks.map(tv=>{
     const x=xOf(tv);
     return `<line x1="${x}" y1="${padTop-8}" x2="${x}" y2="${h-padBottom}" stroke="var(--line)" stroke-width="1"/>`
          + `<text x="${x}" y="13" font-size="9" fill="var(--muted)" text-anchor="middle">${mccMetric==='rate'?tv+'%':tv.toLocaleString()}</text>`;
   }).join('');
-  const barsSvg=branchSummary.map((b,idx)=>{
-    const color=MCC_LINE_COLORS[branches.indexOf(b.branch)%MCC_LINE_COLORS.length];
-    const value=mccMetric==='rate'?b.avgRate:b.avgDist;
-    const cy=padTop+idx*rowH+rowH/2;
-    const barY=cy-barH/2;
-    const barEndX=xOf(value);
-    const dim=mccHighlight&&mccHighlight!==b.branch;
-    const rowOpacity=dim?0.28:1;
-    const labelFill=dim?'var(--muted)':'var(--ink)';
-    const escBranch=b.branch.replace(/'/g,"\\'");
-    return `<g class="mcc-bar-row">
-      <text class="mcc-bar-label" x="${labelW-8}" y="${cy+4}" font-size="12" font-weight="600" fill="${labelFill}" text-anchor="end" style="cursor:pointer;" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleGroup('${escBranch}')">${escapeHtml(b.branch)}</text>
-      <rect class="mcc-bar" x="${labelW}" y="${barY}" width="${Math.max(0,barEndX-labelW)}" height="${barH}" rx="4" fill="${color}" style="opacity:${rowOpacity};cursor:pointer;transition:opacity .15s ease;" title="클릭 시 이 사업장만 강조 표시" onclick="toggleMccHighlight('${escBranch}')"/>
-      <text class="mcc-bar-value" x="${barEndX+6}" y="${cy+4}" font-size="11" font-weight="700" fill="${dim?'var(--muted)':'var(--ink)'}" text-anchor="start" style="opacity:${rowOpacity};pointer-events:none;">${valueLabel(value)}</text>
-    </g>`;
-  }).join('');
   el.innerHTML=`<div class="mcc-chart-block">
     <div class="mcc-svg-wrap">
       <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}">
         ${gridSvg}
-        ${barsSvg}
+        ${bodySvg}
       </svg>
     </div>
   </div>`;
