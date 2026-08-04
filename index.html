@@ -35,6 +35,11 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-04] "📊 엑셀 업로드(수기기록)" 버튼에 샘플 양식 다운로드 기능 추가 — 연도 입력 배너에
+  "📥 샘플 양식 다운로드" 버튼 신설, 현재 등록된 활성 차량번호가 채워지고 1~7월 가동율(%)·거리(km)
+  열이 빈칸으로 준비된 엑셀(예시행 포함)을 즉시 내려받아 서식을 미리 확인할 수 있음(기존 업로드 로직
+  자체는 변경 없음) | 변경: downloadManualMonthlyTemplate()(신규), triggerManualMonthlyUpload()(배너
+  안내문구·버튼 추가)
   [2026-08-04] 엑셀 내보내기 서식 개선 + 전체운행기록 엑셀 업로드(복원/병합) 기능 신규 추가.
   ① 전체운행기록·개인사용현황 시트의 "일자" 단일열(예: "7/31~3"처럼 월이 바뀌면 잘못 표기되던 문제 포함)을
   시작일자/종료일자 두 열로 분리, ② 모든 날짜열(계약시작일/종료일, 시작일자/종료일자, 최근운행일 등)을
@@ -4874,6 +4879,27 @@ async function applyTripRecordImport(rows,resultEl){
 // ============================================================
 let pendingManualYear=null;
 
+function downloadManualMonthlyTemplate(){
+  if(!window.XLSX){ showAdminToast('엑셀 라이브러리를 불러오지 못했습니다.','bad'); return; }
+  const monthCols=[];
+  for(let m=1;m<=7;m++){ monthCols.push(`${m}월가동율(%)`,`${m}월거리(km)`); }
+  const plates=Object.keys(data.vehicles).filter(p=>data.vehicles[p].active!==false)
+    .sort((a,b)=>{const ba=data.vehicles[a].branch||'',bb=data.vehicles[b].branch||'';return compareByOrg(ba,bb)||a.localeCompare(b);});
+  const rows=plates.map(p=>{
+    const row={'차량번호':p};
+    monthCols.forEach(c=>row[c]='');
+    return row;
+  });
+  const exampleRow={'차량번호':'(예시)12가3456'};
+  monthCols.forEach((c,i)=>{ exampleRow[c]=c.includes('가동율')?70:1200; });
+  rows.push(exampleRow);
+  const ws=XLSX.utils.json_to_sheet(rows,{header:['차량번호',...monthCols]});
+  ws['!cols']=[{wch:16}].concat(Array(monthCols.length).fill({wch:13}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'수기기록(1~7월)');
+  XLSX.writeFile(wb,`KSA수기기록_샘플양식_${todayLocalISO()}.xlsx`);
+}
+
 function triggerManualMonthlyUpload(){
   const existing=document.getElementById('manualYearBanner');
   if(existing) existing.remove();
@@ -4881,8 +4907,13 @@ function triggerManualMonthlyUpload(){
   div.id='manualYearBanner';
   div.style.cssText='background:#F5F3FF;border:1px solid #7C3AED;border-radius:12px;padding:16px 20px;margin-bottom:18px;';
   div.innerHTML=`
-    <div style="font-size:13px;font-weight:700;color:#7C3AED;margin-bottom:8px;">📊 엑셀 업로드 — 반영할 연도 선택</div>
+    <div style="font-size:13px;font-weight:700;color:#7C3AED;margin-bottom:8px;">📊 엑셀 업로드(수기기록) — 반영할 연도 선택</div>
+    <div style="font-size:12px;color:#5B21B6;margin-bottom:10px;word-break:keep-all;overflow-wrap:break-word;">
+      처음 사용하시나요? 아래 <b>샘플 양식 다운로드</b>로 서식을 먼저 받아 확인해 주세요.
+      (현재 등록된 차량번호가 채워진 채로 내려받아지므로, 월별 가동율(%)·거리(km) 값만 채워서 그대로 업로드하시면 됩니다.)
+    </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <button class="btn btn-ghost" style="font-size:12px;padding:9px 14px;border-color:#7C3AED;color:#7C3AED;" onclick="downloadManualMonthlyTemplate()">📥 샘플 양식 다운로드</button>
       <input id="manualYearInput" type="number" value="${new Date().getFullYear()}" style="width:100px;border:1.5px solid #7C3AED;border-radius:8px;padding:9px 10px;font-family:'Paperlogy';font-size:14px;text-align:center;">
       <button class="btn btn-primary" onclick="confirmManualYearAndPickFile()">파일 선택 →</button>
       <button class="btn btn-ghost" onclick="document.getElementById('manualYearBanner').remove()">취소</button>
