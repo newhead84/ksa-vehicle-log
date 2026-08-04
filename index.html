@@ -45,6 +45,12 @@
   수정 | 변경: monthlyUtilForPlate()(futureMonth 플래그 신규), monthCellHtml()(futureMonth 인자 추가),
   renderMonthly()(validMonths 필터), renderMonthlyCompareChart()(branchSummary/vehicleSummary 집계 필터),
   openVehicle()(월별 가동율 미니표 noData 조건), exportToExcel()(월별가동율 시트 validMonths/noData 조건)
+  [2026-08-04] (위 항목 보강) 실제 운행기록이 단 한 건도 없는 달(수기기록 미입력 포함, 예: 시스템 실사용
+  개시 전인 1~7월)도 "0%/0km"가 아니라 "미입력(데이터없음)"으로 간주해 연평균 집계에서 제외하도록 수정.
+  monthlyUtilForPlate()에 해당 월 운행기록 0건 여부를 나타내는 별도 플래그를 추가하고, 위 4개 소비처
+  (비교차트/월별표/모달/엑셀) 모두 beforeService·futureMonth와 동일하게 이 경우도 함께 제외 | 변경:
+  monthlyUtilForPlate()(월별 record에 noData 필드 추가), monthCellHtml()(noData 인자 추가),
+  renderMonthly(), renderMonthlyCompareChart(), openVehicle(), exportToExcel()
   [2026-08-04] QR 스캔으로 진입 시 사업장/차량번호 임의 변경 방지: URL의 ?plate= 파라미터로
   사업장·차량이 자동선택된 경우, 두 선택창(사업장 선택/차량번호 선택)을 비활성화(disabled)하고
   "🔒 QR 스캔으로 연동된 사업장·차량입니다" 안내문구를 노출해 다른 차량으로 잘못 전환·제출되는
@@ -2648,8 +2654,11 @@ function monthlyUtilForPlate(plate,year){
     const ym=`${year}-${String(m).padStart(2,'0')}`;
     const used=new Set(allDates.filter(d=>d.startsWith(ym)&&isBizDay(new Date(d+'T00:00:00')))).size;
     const total=(svcStart&&svcStart>monStart)?countBizDays(svcStart,monEnd):bizDaysInMonth(year,m);
-    const distance=trips.filter(t=>(t.isoDate||'').startsWith(ym)&&!t.isCommute&&!t.isPersonal).reduce((s,t)=>s+(Number(t.distance)||0),0);
-    out.push({month:m,used,total,rate:total>0?Math.min(100,(used/total)*100):0,distance,manual:false});
+    const monTrips=trips.filter(t=>(t.isoDate||'').startsWith(ym)&&!t.isCommute&&!t.isPersonal);
+    const distance=monTrips.reduce((s,t)=>s+(Number(t.distance)||0),0);
+    // 그 달에 실제 운행기록이 단 한 건도 없으면(수기기록 미입력 포함) "미입력"으로 간주해 연평균 등
+    // 집계 대상에서 제외한다(0%가 아니라 데이터 자체가 없는 것으로 취급 — beforeService/futureMonth와 동일 처리)
+    out.push({month:m,used,total,rate:total>0?Math.min(100,(used/total)*100):0,distance,manual:false,noData:monTrips.length===0});
   }
   return out;
 }
@@ -2668,8 +2677,8 @@ function availableYears(){
   years.add(String(new Date().getFullYear()));
   return Array.from(years).sort();
 }
-function monthCellHtml(rate,hasAnyTrip,beforeService,distance,futureMonth){
-  if(!hasAnyTrip||beforeService||futureMonth) return `<td class="month-cell m-none">–</td>`;
+function monthCellHtml(rate,hasAnyTrip,beforeService,distance,futureMonth,noData){
+  if(!hasAnyTrip||beforeService||futureMonth||noData) return `<td class="month-cell m-none">–</td>`;
   const cls=rate>=60?'m-good':rate>=30?'m-mid':'m-bad';
   const distTxt=distance!=null?`<span class="month-cell-km">${Math.round(distance).toLocaleString()}km</span>`:'';
   return `<td class="month-cell ${cls}">${rate.toFixed(0)}%${distTxt}</td>`;
@@ -3009,11 +3018,11 @@ function renderMonthly(year){
     ps.forEach(p=>{
       const hasAnyTrip=hasMonthlyDataFor(p,monthlyYear);
       const monthly=monthlyUtilForPlate(p,monthlyYear);
-      const validMonths=monthly.filter(m=>!m.beforeService&&!m.futureMonth);
+      const validMonths=monthly.filter(m=>!m.beforeService&&!m.futureMonth&&!m.noData);
       const avg=hasAnyTrip&&validMonths.length?validMonths.reduce((s,m)=>s+m.rate,0)/validMonths.length:0;
       const yearDistance=hasAnyTrip?validMonths.reduce((s,m)=>s+(m.distance||0),0):0;
       const modelName=modelShort(data.vehicles[p]?.model||'');
-      rowsHtml+=`<tr><td><div class="plate-cell" style="cursor:pointer;" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${p}')"><span class="plate-num">${p}</span><span class="plate-model">${modelName}</span></div></td>${topDriversCellHtml(p)}${monthly.map(m=>monthCellHtml(m.rate,hasAnyTrip,m.beforeService,m.distance,m.futureMonth)).join('')}<td class="month-cell month-avg ${hasAnyTrip?(avg>=60?'m-good':avg>=30?'m-mid':'m-bad'):'m-none'}" title="연평균 가동율 / 연간 총 운행거리">${hasAnyTrip?avg.toFixed(0)+'%':'–'}${hasAnyTrip?`<span class="month-cell-km">${Math.round(yearDistance).toLocaleString()}km</span>`:''}</td></tr>`;
+      rowsHtml+=`<tr><td><div class="plate-cell" style="cursor:pointer;" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${p}')"><span class="plate-num">${p}</span><span class="plate-model">${modelName}</span></div></td>${topDriversCellHtml(p)}${monthly.map(m=>monthCellHtml(m.rate,hasAnyTrip,m.beforeService,m.distance,m.futureMonth,m.noData)).join('')}<td class="month-cell month-avg ${hasAnyTrip?(avg>=60?'m-good':avg>=30?'m-mid':'m-bad'):'m-none'}" title="연평균 가동율 / 연간 총 운행거리">${hasAnyTrip?avg.toFixed(0)+'%':'–'}${hasAnyTrip?`<span class="month-cell-km">${Math.round(yearDistance).toLocaleString()}km</span>`:''}</td></tr>`;
     });
   });
   document.getElementById('monthlyArea').innerHTML=`<div class="month-table-wrap"><table class="month-table"><thead><tr><th>차량번호</th><th>주사용자</th>${monthLabels.map(l=>`<th>${l}</th>`).join('')}<th>연평균</th></tr></thead><tbody>${rowsHtml||`<tr><td colspan="15" class="muted" style="text-align:center;padding:20px;">데이터가 없습니다</td></tr>`}</tbody></table></div>`;
@@ -3072,7 +3081,7 @@ function renderMonthlyCompareChart(year){
       let rateSum=0,distSum=0,cnt=0;
       ps.forEach(p=>{
         const rec=perVehicleMonthly[p][m-1];
-        if(rec&&!rec.beforeService&&!rec.futureMonth){ rateSum+=rec.rate||0; distSum+=rec.distance||0; cnt++; }
+        if(rec&&!rec.beforeService&&!rec.futureMonth&&!rec.noData){ rateSum+=rec.rate||0; distSum+=rec.distance||0; cnt++; }
       });
       if(cnt>0){ rateSumMonths+=rateSum/cnt; distSumMonths+=distSum/cnt; validMonthCnt++; }
     }
@@ -3084,7 +3093,7 @@ function renderMonthlyCompareChart(year){
     if(!hasMonthlyDataFor(p,year)) return;
     let rateSum=0,distSum=0,validCnt=0;
     perVehicleMonthly[p].forEach(rec=>{
-      if(rec&&!rec.beforeService&&!rec.futureMonth){ rateSum+=rec.rate||0; distSum+=rec.distance||0; validCnt++; }
+      if(rec&&!rec.beforeService&&!rec.futureMonth&&!rec.noData){ rateSum+=rec.rate||0; distSum+=rec.distance||0; validCnt++; }
     });
     if(validCnt>0) vehicleSummary.push({plate:p,branch:data.vehicles[p].branch||'미배정',avgRate:rateSum/validCnt,avgDist:distSum/validCnt});
   });
@@ -3680,7 +3689,7 @@ function openVehicle(plate){
       <div class="muted" style="font-size:11px;margin-bottom:4px;">${monthlyYear||new Date().getFullYear()}년 월별 가동율 (업무일 기준)${(v.branchHistory&&v.branchHistory.length)?' · 🔀 표시된 월은 당시 소속이 현재와 다름(마우스오버로 확인)':''}</div>
       <div class="mini-month-row">
         ${monthlyUtilForPlate(plate,monthlyYear||new Date().getFullYear()).map(m=>{
-          const noData=trips.length===0||m.beforeService||m.futureMonth;
+          const noData=trips.length===0||m.beforeService||m.futureMonth||m.noData;
           const cls=noData?'m-none':(m.rate>=60?'m-good':m.rate>=30?'m-mid':'m-bad');
           const branchMismatch=m.manual&&m.branch&&m.branch!==v.branch;
           const title=branchMismatch?` title="당시 소속: ${escapeHtml(m.branch)}"`:'';
@@ -4704,12 +4713,12 @@ function exportToExcel(){
   const monthlyRows=plates.map(p=>{
     const hasAnyData=hasMonthlyDataFor(p,year);
     const monthly=monthlyUtilForPlate(p,year);
-    const validMonths=monthly.filter(m=>!m.beforeService&&!m.futureMonth);
+    const validMonths=monthly.filter(m=>!m.beforeService&&!m.futureMonth&&!m.noData);
     const avg=hasAnyData&&validMonths.length?validMonths.reduce((s,m)=>s+m.rate,0)/validMonths.length:0;
     const yearTotalDist=monthly.reduce((s,m)=>s+(Number(m.distance)||0),0);
     const row={'차량번호':p,'차종':modelShort(data.vehicles[p]?.model||''),'지역구분':data.vehicles[p].branch||''};
     monthly.forEach(m=>{
-      const noData=!hasAnyData||m.beforeService||m.futureMonth;
+      const noData=!hasAnyData||m.beforeService||m.futureMonth||m.noData;
       row[`${m.month}월가동율(%)`]=noData?'':Number(m.rate.toFixed(1));
       row[`${m.month}월거리(km)`]=noData?'':Number((m.distance||0).toFixed(0));
     });
