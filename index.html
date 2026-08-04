@@ -35,6 +35,15 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-04] QR 스캔으로 진입 시 사업장/차량번호 임의 변경 방지: URL의 ?plate= 파라미터로
+  사업장·차량이 자동선택된 경우, 두 선택창(사업장 선택/차량번호 선택)을 비활성화(disabled)하고
+  "🔒 QR 스캔으로 연동된 사업장·차량입니다" 안내문구를 노출해 다른 차량으로 잘못 전환·제출되는
+  것을 방지. 임시저장(초안) 복원 시에도 QR로 잠긴 차량과 다른 차량의 초안이면 복원 배너를
+  띄우지 않도록 하여 잠금이 우회되지 않게 함(초안 데이터 자체는 유지). 관리자 대시보드 등
+  QR을 거치지 않은 경로는 영향 없음(선택창 계속 활성) | 변경: proceedEnterUserMode()(잠금 호출
+  추가, checkDraftBanner 호출 순서 조정), lockVehicleSelectionForQr()(신규), checkDraftBanner()
+  (잠금 차량과 다른 초안이면 배너 스킵), exitToRole()(역할 종료 시 잠금 해제), CSS(.plate-select:disabled
+  신규), HTML(#qrLockNote 신규)
   [2026-08-04] 수기기록(1~7월) 업로드 양식에 연도 중 재배치(소속 변경) 반영 기능 추가.
   ① 양식에 "지역구분"·"조정배치일자(선택)"·"사유(선택)" 열 신규 추가 — 연도 중간에 소속이 바뀐 차량은
   같은 차량번호로 행을 나눠(구간별) 입력하면 됨, ② 지역구분+조정배치일자가 함께 기재된 행은 업로드 시
@@ -717,6 +726,7 @@
     appearance:none;-webkit-appearance:none;cursor:pointer;
   }
   .plate-select:focus{outline:2px solid var(--navy);outline-offset:2px;}
+  .plate-select:disabled{background-color:#eee;color:var(--muted);cursor:not-allowed;opacity:.85;}
 
   .last-odo-hint{
     margin-top:10px;font-size:13px;color:var(--muted);
@@ -1145,6 +1155,7 @@
           <option value="">-- 차량번호를 선택하세요 --</option>
         </select>
       </div>
+      <div id="qrLockNote" style="display:none;font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5;word-break:keep-all;overflow-wrap:break-word;">🔒 QR 스캔으로 연동된 사업장·차량입니다. 다른 차량으로 변경이 필요하면 관리자에게 문의해주세요.</div>
       <div class="last-odo-hint" id="lastOdoHint">이전 종료거리: <b>–</b> km</div>
     </div>
     <div class="form-err" id="userFormErr"></div>
@@ -1753,6 +1764,7 @@ let data = { vehicles: {} };
 let currentRole = null; // 'user' | 'admin'
 let viewerMode = false; // true면 링크로 들어온 열람 전용 모드(로그인 없이 관리자 대시보드 대부분을 조회만 가능, 수정/삭제/백업/복원 불가)
 let viewerRegionToken = null; // 지역본부별 열람전용 링크로 들어온 경우 REGION_GROUPS의 키(토큰). 전체 열람 링크는 null.
+let qrLockedPlate = null; // QR 스캔(?plate=)으로 진입한 경우 해당 차량번호. non-null이면 사업장/차량 선택창을 잠금.
 let sessionSubmits = []; // 이번 세션에서 사용자가 제출한 항목들
 
 // ============================================================
@@ -2133,7 +2145,6 @@ function proceedEnterUserMode(){
 
   loadData().then(()=>{
     buildVehicleDropdown();  // 사업장 목록 완성
-    checkDraftBanner();
     // 최초 진입 시 항상 페이지 맨 위(헤더 포함)부터 보이도록
     window.scrollTo(0, 0);
     // URL에서 직접 읽어 자동선택 (가장 안정적)
@@ -2151,8 +2162,13 @@ function proceedEnterUserMode(){
         const pSel = document.getElementById('userPlateSelect');
         pSel.value = plate;
         onVehicleSelect();
+        // QR로 연동된 차량은 임의로 다른 사업장·차량으로 바꿀 수 없도록 선택창을 잠금
+        lockVehicleSelectionForQr(plate);
       }
     }
+    // 잠금 여부가 확정된 이후에 임시저장 배너를 확인 (다른 차량의 임시저장본이
+    // 잠금을 깨고 복원되는 것을 방지하기 위해 checkDraftBanner 내부에서 잠금상태를 참조함)
+    checkDraftBanner();
   });
 }
 
@@ -2269,8 +2285,12 @@ function exitToRole(){
   document.getElementById('addRowBtn').style.display = 'none';
   document.getElementById('submitBar').style.display = 'none';
   document.getElementById('userBranchSelect').value = '';
+  document.getElementById('userBranchSelect').disabled = false;
   document.getElementById('plateSelectWrap').style.display = 'none';
   document.getElementById('userPlateSelect').value = '';
+  document.getElementById('userPlateSelect').disabled = false;
+  document.getElementById('qrLockNote').style.display = 'none';
+  qrLockedPlate = null;
   document.getElementById('lastOdoHint').style.display = 'none';
   document.getElementById('draftBanner').style.display = 'none';
   document.getElementById('submitLogItems').innerHTML = '';
@@ -5192,6 +5212,20 @@ function buildVehicleDropdown(){
   buildBranchDropdown();
 }
 
+// QR 스캔(?plate=...)으로 진입해 사업장·차량이 자동선택된 경우, 사용자가 임의로
+// 다른 사업장/차량으로 변경하지 못하도록 두 선택창을 잠근다(운행기록이 다른 차량에
+// 잘못 귀속되는 것을 방지). 관리자 대시보드의 직접입력 등 QR을 거치지 않은 경로에는
+// 영향 없음(이 함수가 호출되지 않으므로 선택창은 계속 활성 상태).
+function lockVehicleSelectionForQr(plate){
+  qrLockedPlate = plate;
+  const bSel = document.getElementById('userBranchSelect');
+  const pSel = document.getElementById('userPlateSelect');
+  if(bSel) bSel.disabled = true;
+  if(pSel) pSel.disabled = true;
+  const note = document.getElementById('qrLockNote');
+  if(note) note.style.display = 'block';
+}
+
 // 운행기록을 일자(isoDate) 오름차순으로 정렬하되, 같은 날짜에 여러 건이 있을 경우
 // 실제 입력(제출) 시간(submittedAt) 기준으로 2차 정렬한다.
 // submittedAt이 없는 과거 데이터는 기존 배열 순서를 그대로 유지(0 반환)해 하위호환.
@@ -6056,6 +6090,9 @@ async function checkDraftBanner(){
     if(!raw) return;
     const draft = JSON.parse(raw);
     if(!draft.plate||!draft.rows?.length) return;
+    // QR로 차량이 잠긴 상태에서 다른 차량의 임시저장본을 복원하면 잠금이 무의미해지므로,
+    // 잠긴 차량과 다른 차량의 임시저장본이면 배너를 띄우지 않는다(저장본 자체는 유지됨).
+    if(qrLockedPlate && draft.plate !== qrLockedPlate) return;
     document.getElementById('draftBanner').style.display='flex';
   }catch(e){}
 }
