@@ -35,6 +35,12 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-05] "사업장별 차량 가동율 운행거리 비교차트"에서 사업장 막대를 눌러 펼친 소속 차량 상세 목록 개선:
+  ① 차량번호 우측에 차종명(그랜저/소나타/아반떼) 병기, ② 기존에는 가동율·운행거리 값 기준으로 정렬되어
+  차종이 뒤섞여 보이던 것을 차종 정렬원칙(그랜저>소나타>아반떼, 동일 차종은 차량번호순)으로 통일 —
+  가동율/운행거리 두 지표 모두 동일하게 반영. 병기 텍스트가 들어갈 여유 확보를 위해 사업장별 모드
+  라벨 폭도 소폭 확대 | 변경: renderMonthlyCompareChart()(subVehicles 정렬 기준, 소속 차량 라벨,
+  labelW)
   [2026-08-05] 차종 정렬 규칙(사업장→차종[그랜저/소나타/아반떼순]→차량번호) 적용 범위 확장: ① 엑셀 내보내기
   (exportToExcel)의 차량 정렬 기준에 기존 modelOrder()가 누락되어 있어 사업장 내에서 차종 순서가 뒤섞여
   보이던 문제 수정(전체차량현황·전체운행기록·월별가동율 시트 모두 동일 정렬 반영), ② 1~7월 수기기록 업로드
@@ -3143,8 +3149,9 @@ function renderMonthlyCompareChart(year){
   const padL=parseFloat(wrapStyle.paddingLeft)||0, padR=parseFloat(wrapStyle.paddingRight)||0;
   const measuredW=el.clientWidth?(el.clientWidth-padL-padR):0;
   const w=Math.round(measuredW>200?measuredW:900);
-  // 차량별(flat) 모드는 라벨에 "사업장약칭 차량번호 차종"을 함께 표기하므로 라벨 폭을 더 넓게 확보
-  const labelW=(mccGroupBy==='vehicle'?190:112),padRight=54,padTop=22,rowH=30,barH=16,padBottom=6;
+  // 차량별(flat) 모드는 라벨에 "사업장약칭 차량번호 차종"을, 사업장별 모드는 펼침 시 "차량번호 차종"을
+  // 함께 표기하므로 라벨 폭을 더 넓게 확보 (차량별 모드가 더 많은 정보를 담아 폭이 더 큼)
+  const labelW=(mccGroupBy==='vehicle'?190:132),padRight=54,padTop=22,rowH=30,barH=16,padBottom=6;
   const subRowH=24,subBarH=12; // 사업장별 모드에서 펼쳐진 소속 차량 하위 행 크기(본행보다 작게)
   const plotW=w-labelW-padRight;
   const xOf=v=>labelW+(Math.min(v,axisMax)/axisMax)*plotW;
@@ -3180,7 +3187,12 @@ function renderMonthlyCompareChart(year){
       const barY=cy-barH/2;
       const barEndX=xOf(value);
       const escBranch=b.branch.replace(/'/g,"\\'");
-      const subVehicles=vehicleSummary.filter(v=>v.branch===b.branch);
+      // 소속 차량 상세 정렬은 가동율/운행거리 순위가 아닌 차종 정렬원칙(그랜저>소나타>아반떼)을 따름
+      const subVehicles=vehicleSummary.filter(v=>v.branch===b.branch)
+        .sort((va,vb)=>{
+          const oa=modelOrder(data.vehicles[va.plate]?.model||''), ob=modelOrder(data.vehicles[vb.plate]?.model||'');
+          return oa!==ob?oa-ob:va.plate.localeCompare(vb.plate);
+        });
       cursorY+=rowH;
       let subSvg='';
       if(expanded){
@@ -3191,8 +3203,9 @@ function renderMonthlyCompareChart(year){
             const sbarY=scy-subBarH/2;
             const sBarEndX=xOf(svalue);
             const escPlate=v.plate.replace(/'/g,"\\'");
+            const subModelTxt=escapeHtml(modelShort(data.vehicles[v.plate]?.model||''));
             subSvg+=`<g class="mcc-bar-row-sub">
-              <text x="${labelW-16}" y="${scy+3}" font-size="10" font-weight="500" fill="var(--muted)" text-anchor="end" style="cursor:pointer;" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${escPlate}')">${escapeHtml(v.plate)}</text>
+              <text x="${labelW-16}" y="${scy+3}" font-size="10" font-weight="500" fill="var(--muted)" text-anchor="end" style="cursor:pointer;" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${escPlate}')">${escapeHtml(v.plate)}<tspan fill="var(--muted)" font-weight="400"> ${subModelTxt}</tspan></text>
               <rect x="${labelW}" y="${sbarY}" width="${Math.max(0,sBarEndX-labelW)}" height="${subBarH}" rx="3" fill="${color}" style="opacity:0.55;cursor:pointer;" title="클릭 시 하단 공용차량 현황으로 이동" onclick="scrollToVehicleCard('${escPlate}')"/>
               <text x="${sBarEndX+6}" y="${scy+3}" font-size="10" font-weight="600" fill="var(--muted)" text-anchor="start" style="pointer-events:none;">${valueLabel(svalue)}</text>
             </g>`;
