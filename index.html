@@ -35,6 +35,9 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-06] "사업장별 차량 가동율 운행거리 비교차트" 섹션이 접힌 상태에서도 헤더의 가동율/운행거리·
+  사업장별/차량별 전환 버튼이 계속 노출되던 버그 수정: 섹션이 접혔을 때는 해당 버튼들도 함께 숨기고
+  펼쳤을 때만 노출되도록 변경 | 변경: CSS(.section-head:has(+ .section-body.collapsed) .month-controls 신규)
   [2026-08-05] ★가동율 계산 오류 버그 수정(중요): iso() 함수가 UTC 변환(toISOString())을 사용해 KST
   자정 기준 Date를 하루 이른 날짜로 잘못 변환하던 버그를 수정. 이 버그는 doSubmit()(일반 QR 제출)·
   saveTripEdits()(관리자 수정)·saveUserEdits()(본인수정)·applyTripRecordImport()(전체기록 업로드)
@@ -609,6 +612,8 @@
   /* ===== Monthly utilization table ===== */
   .month-controls{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
   .month-controls select{font-family:'Paperlogy';font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;}
+  /* 비교차트 섹션이 접힌 상태일 때는 헤더의 전환 버튼도 함께 숨김 (2026-08-06) */
+  .section-head:has(+ .section-body.collapsed) .month-controls{display:none;}
   .month-table-wrap{overflow-x:auto;overflow-y:auto;max-height:70vh;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);}
   .month-table{width:100%;border-collapse:collapse;font-size:12px;min-width:680px;table-layout:fixed;}
   .month-table thead th{position:sticky;top:0;z-index:2;box-shadow:0 1px 0 var(--line);}

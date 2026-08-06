@@ -4,6 +4,10 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 형식: 각 항목은 `요청내용 요약 | 변경: 함수/영역`
 
+## 2026-08-06
+
+- "사업장별 차량 가동율 운행거리 비교차트" 섹션이 접힌 상태에서도 헤더의 가동율/운행거리·사업장별/차량별 전환 버튼이 계속 노출되던 버그 수정: 섹션이 접혔을 때는 해당 버튼들도 함께 숨기고 펼쳤을 때만 노출되도록 변경 | 변경: CSS(.section-head:has(+ .section-body.collapsed) .month-controls 신규)
+
 ## 2026-08-05
 
 - 위 1회성 복구 도구(🛠 usageDates 복구(1회성)) 사용 완료(69건 복구 확인) 후 제거: 관리자 툴바 버튼(#repairUsageDatesBtn) 및 computeCorrectUsageDates()/auditUsageDatesDrift()/repairUsageDatesDrift() 함수 삭제. iso() 자체의 수정(localDateKey 기반)은 재발 방지를 위해 계속 유지 | 변경: HTML(#repairUsageDatesBtn 삭제), 위 3개 함수 삭제
