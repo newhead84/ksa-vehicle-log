@@ -149,16 +149,21 @@
     color-scheme:dark;
   }
   .ded-date-range{display:flex; align-items:center; gap:8px; min-width:0;}
-  .ded-date-range .date-field{position:relative; min-width:0; flex:1 1 0;}
+  .ded-date-range .date-field{position:relative; min-width:74px; flex:1 1 0;}
   .ded-date-range input{min-width:0; width:100%; text-align:center;}
   .ded-date-range .sep{color:var(--ded-muted-2); font-family:'Outfit',sans-serif; font-size:14px; flex:0 0 auto;}
   /* 네이티브 날짜 입력의 텍스트(YYYY. MM. DD. 등 브라우저 로케일 포맷)는 숨기고,
      동일 위치에 YY-MM-DD 형식의 커스텀 표시를 오버레이한다. 달력 아이콘/피커는 그대로 네이티브 동작 유지. */
-  .ded-date-range input[type="date"]{color:transparent; -webkit-text-fill-color:transparent; padding-right:26px;}
+  .ded-date-range input[type="date"]{color:transparent; -webkit-text-fill-color:transparent; padding-right:22px; padding-left:2px;}
   /* color-scheme:dark 상태에서 브라우저가 자동으로 밝은 색 아이콘을 그리는데, 여기에 filter:invert()를 걸면
      아이콘이 다시 어두워져 어두운 배경 위에서 보이지 않게 된다(과거 버그). 대신 아이콘 모양을 CSS mask로
      가져와 색상을 베이지(--ded-beige)로 직접 지정해 배경색과 무관하게 항상 보이도록 한다. */
   .ded-date-range input[type="date"]::-webkit-calendar-picker-indicator{
+    /* -webkit-appearance:none이 부모 input에 걸려 있으면 일부 Android Chrome/WebView에서
+       인디케이터 자체가 렌더링되지 않는 경우가 있어(2026-08-07 확인), 여기서 명시적으로
+       appearance:auto를 다시 지정해 아이콘이 항상 그려지도록 강제한다. */
+    -webkit-appearance:auto;
+    appearance:auto;
     opacity:1;
     cursor:pointer;
     width:18px; height:18px;
@@ -171,9 +176,10 @@
     -webkit-mask-position:center; mask-position:center;
   }
   .ded-date-range .date-fmt{
-    position:absolute; left:0; right:26px; top:0; bottom:0;
+    position:absolute; left:0; right:24px; top:0; bottom:0;
     display:flex; align-items:center; justify-content:center;
-    font-family:'Outfit',sans-serif; font-size:17px; color:var(--ded-text);
+    font-family:'Outfit',sans-serif; font-size:16px; color:var(--ded-text);
+    white-space:nowrap; overflow:hidden;
     pointer-events:none;
   }
   .ded-line-field input:focus{border-bottom-color:var(--ded-beige);}
@@ -252,6 +258,39 @@
   }
   .ded-maint-btn:hover{background:var(--ded-red); color:var(--ded-text);}
   .ded-maint-btn.active{background:var(--ded-red); color:var(--ded-text);}
+  .ded-maint-hotline{
+    font-size:13px; color:var(--ded-muted); text-align:center;
+    margin:10px 0 4px; word-break:keep-all; overflow-wrap:break-word;
+  }
+  .ded-maint-hotline a{color:var(--ded-beige); font-family:'Outfit',sans-serif; font-weight:500; text-decoration:none;}
+
+  /* ── QR 스캔 안내 배너 ── */
+  .ded-qr-banner{
+    display:none;
+    align-items:center; gap:10px;
+    border:1px solid var(--ded-beige);
+    background:rgba(203,178,149,0.08);
+    padding:12px 14px; margin:12px 22px 0;
+    font-size:13.5px; color:var(--ded-text);
+    word-break:keep-all; overflow-wrap:break-word;
+  }
+  .ded-qr-banner.show{display:flex;}
+  .ded-qr-banner .ic{flex:0 0 auto; font-size:17px;}
+
+  /* ── 운행 단계(출발/도착) 표시 ── */
+  .ded-phase-toggle{display:flex; gap:0; border:1px solid var(--ded-line); margin:0 22px;}
+  .ded-phase-btn{
+    flex:1; text-align:center; padding:10px; font-size:13.5px; font-weight:600;
+    font-family:'Pretendard',sans-serif; letter-spacing:.02em;
+    color:var(--ded-muted-2); border-right:1px solid var(--ded-line);
+  }
+  .ded-phase-btn:last-child{border-right:none;}
+  .ded-phase-btn.active{background:var(--ded-beige); color:var(--ded-bg-pure);}
+  .ded-readonly-summary{
+    font-size:14px; color:var(--ded-muted); padding:4px 0 10px;
+    word-break:keep-all; overflow-wrap:break-word;
+  }
+  .ded-readonly-summary b{color:var(--ded-text); font-weight:600;}
 
   /* ── 회장차 이용자 구분 토글 ── */
   .ded-mode-toggle{display:flex; gap:0; border:1px solid var(--ded-line);}
@@ -405,6 +444,20 @@
     </div>
   </div>
 
+  <!-- 회장차 · 수행기사 모드 전용: 운행 단계(출발/도착) 표시 및 QR 안내 -->
+  <div class="ded-phase-toggle" id="driverPhaseToggle" style="display:none;">
+    <div class="ded-phase-btn" id="phaseBtnStart">🚗 출발 등록</div>
+    <div class="ded-phase-btn" id="phaseBtnEnd">🏁 도착 등록</div>
+  </div>
+  <div class="ded-qr-banner" id="qrBannerStart">
+    <span class="ic">📷</span>
+    <span>운행을 <b>시작하기 전</b>, 차량에 부착된 QR코드를 반드시 스캔해주세요.</span>
+  </div>
+  <div class="ded-qr-banner" id="qrBannerEnd">
+    <span class="ic">📷</span>
+    <span>운행을 <b>종료한 후</b>, 차량에 부착된 QR코드를 반드시 스캔해주세요.</span>
+  </div>
+
   <!-- 운행자 -->
   <div class="ded-section" id="driverNameRow">
     <div class="ded-line-field">
@@ -419,7 +472,7 @@
   <div class="ded-section">
     <div class="ded-eyebrow">TRIP</div>
 
-    <div class="ded-line-field">
+    <div class="ded-line-field" id="dateRangeRow">
       <label>운행기간</label>
       <div class="in-wrap ded-date-range">
         <div class="date-field">
@@ -434,9 +487,32 @@
       </div>
     </div>
 
+    <!-- 수행기사 모드 전용: 근로/대기/휴게시간 산정을 위해 기간이 아닌 단일 운행일자로 입력받음 -->
+    <div class="ded-line-field" id="singleDateRow" style="display:none;">
+      <label>운행일자</label>
+      <div class="in-wrap ded-date-range">
+        <div class="date-field">
+          <input type="date" id="singleDate" oninput="syncSingleDateDisplay()" onchange="syncSingleDateDisplay()">
+          <span class="date-fmt" id="singleDateFmt"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ded-readonly-summary" id="startPhaseSummary" style="display:none;"></div>
+
     <div class="ded-line-field" id="startLocationRow">
       <label>출발지</label>
-      <div class="in-wrap"><input type="text" id="startLocation" placeholder="예: 본사"></div>
+      <div class="in-wrap"><input type="text" id="startLocation"></div>
+    </div>
+
+    <div class="ded-line-field" id="routeNoteRow">
+      <label>행선지</label>
+      <div class="in-wrap"><input type="text" id="routeNote" placeholder="예시: 지역명, 업체명 등"></div>
+    </div>
+
+    <div class="ded-line-field" id="endLocationRow">
+      <label>도착지</label>
+      <div class="in-wrap"><input type="text" id="endLocation"></div>
     </div>
 
     <div class="ded-line-field" id="startTimeRow">
@@ -444,17 +520,12 @@
       <div class="in-wrap"><input type="time" id="startTime" oninput="syncWorkTime('start')"></div>
     </div>
 
-    <div class="ded-line-field" id="endLocationRow">
-      <label>도착지</label>
-      <div class="in-wrap"><input type="text" id="endLocation" placeholder="예: 본사"></div>
-    </div>
-
     <div class="ded-line-field" id="endTimeRow">
       <label>종료 시각</label>
       <div class="in-wrap"><input type="time" id="endTime" oninput="syncWorkTime('end')"></div>
     </div>
 
-    <div class="ded-line-field">
+    <div class="ded-line-field" id="startOdoRow">
       <label>시작거리</label>
       <div class="in-wrap">
         <input type="number" id="startOdo" inputmode="numeric" placeholder="0" style="text-align:right" oninput="calcDistance()">
@@ -462,7 +533,7 @@
       </div>
     </div>
 
-    <div class="ded-line-field">
+    <div class="ded-line-field" id="endOdoRow">
       <label>종료거리</label>
       <div class="in-wrap">
         <input type="number" id="endOdo" inputmode="numeric" placeholder="0" style="text-align:right" oninput="calcDistance()">
@@ -470,14 +541,15 @@
       </div>
     </div>
 
-    <div class="ded-readout">
+    <div class="ded-readout" id="distanceRow">
       <span class="lbl">주행거리</span>
       <span class="val" id="distanceVal">0<span>km</span></span>
     </div>
 
-    <div class="ded-line-field">
-      <label>행선지</label>
-      <div class="in-wrap"><input type="text" id="routeNote" placeholder="예시: 지역명, 업체명 등"></div>
+    <!-- 전무이사 차량 전용: 시작/종료 단계 구분 없이 한 번에 제출하므로, 제출(=운행 종료) 시 QR 스캔 안내만 노출 -->
+    <div class="ded-qr-banner" id="qrBannerJeonmu">
+      <span class="ic">📷</span>
+      <span>운행을 <b>종료할 때</b>, 차량에 부착된 QR코드를 스캔해주세요.</span>
     </div>
   </div>
 
@@ -493,6 +565,7 @@
       <div class="err" id="maintErr">점검 사유를 입력해 주세요.</div>
       <button type="button" class="ded-add-btn" onclick="sendMaintenanceRequest()">담당자에게 메일 발송</button>
     </div>
+    <div class="ded-maint-hotline">급한 정비/사고 등은 롯데렌터카 대표번호 <a href="tel:15881230">1588-1230</a>으로 직접 접수하실 수도 있습니다.</div>
   </div>
 
   <!-- 대리운전 / 대차 / 주유 -->
@@ -528,7 +601,7 @@
     <div class="ded-line-field">
       <label>주유금액</label>
       <div class="in-wrap">
-        <input type="number" id="fuelCost" inputmode="numeric" placeholder="0">
+        <input type="text" id="fuelCost" inputmode="numeric" placeholder="0" oninput="formatFuelCostInput()">
         <span class="ded-unit">원</span>
       </div>
     </div>
@@ -724,6 +797,8 @@ function applyQrLock(){
 let hoegjangMode = 'driver'; // 'driver' | 'staff'
 let editingIndex = null;      // 내 운행기록 수정 중인 trips[] 인덱스 (null이면 신규 입력)
 let myRecordsCache = [];      // 내 운행기록 패널에 표시 중인 목록 캐시
+let driverPhase = 'start';    // 회장차 수행기사 모드 전용: 'start'(출발 등록) | 'end'(도착 등록)
+let openTripIndex = null;     // driverPhase==='end'일 때, 이어서 도착 정보를 채워넣을 trips[] 인덱스
 
 function todayIso(){
   const d = new Date();
@@ -747,6 +822,16 @@ function syncDateDisplays(){
   const eFmt = document.getElementById('endDateFmt');
   if(s && sFmt) sFmt.textContent = formatYYMMDD(s.value);
   if(e && eFmt) eFmt.textContent = formatYYMMDD(e.value);
+}
+
+// 회장차 수행기사 모드 전용 단일 운행일자 표시 동기화(+ 내부적으로 startDate/endDate에도 동일 값 반영)
+function syncSingleDateDisplay(){
+  const sd = document.getElementById('singleDate');
+  const fmt = document.getElementById('singleDateFmt');
+  if(!sd) return;
+  if(fmt) fmt.textContent = formatYYMMDD(sd.value);
+  document.getElementById('startDate').value = sd.value;
+  document.getElementById('endDate').value = sd.value;
 }
 
 // 시작/종료 시각 입력 시 근로 시작/종료 시간에 동일 값 연동
@@ -818,25 +903,109 @@ function setHoegjangMode(mode){
 }
 
 // 차량 + 이용자 구분(수행기사/KSA직원) 조합에 따라 화면 레이아웃을 갱신
-function refreshHoegjangLayout(){
+async function refreshHoegjangLayout(){
   const v = VEHICLES[currentVehicleKey];
   const isHoegjang = currentVehicleKey === 'hoegjang';
+  const chauffeur = isChauffeurMode();
   document.getElementById('hoegjangModeBar').style.display = isHoegjang ? 'block' : 'none';
 
   // 운행자명 입력창은 항상 노출한다(숨기지 않음) — KSA직원 모드에서는 기본값만 비워서 직접 입력받는다
   const effChairman = v.chairman && !(isHoegjang && hoegjangMode === 'staff');
   document.getElementById('driverNameRow').style.display = 'block';
-  document.getElementById('startLocationRow').style.display = effChairman ? 'flex' : 'none';
-  document.getElementById('endLocationRow').style.display = effChairman ? 'flex' : 'none';
-  document.getElementById('startTimeRow').style.display = effChairman ? 'flex' : 'none';
-  document.getElementById('endTimeRow').style.display = effChairman ? 'flex' : 'none';
   document.getElementById('chairmanOnlyBlock').style.display = effChairman ? 'block' : 'none';
+  document.getElementById('routeNoteRow').style.display = 'flex';
 
-  // 수행기사 모드: 출발/도착 QR 이중화 단계(과거 checkQrPhase/enterDepartPhase/enterArrivePhase 방식) 없이,
-  // 출발지·도착지·시작/종료 시각을 한 화면에서 함께 입력받아 한 번에 제출하는 기존 방식으로 복원
-  // (KSA직원 모드·전무이사 차량은 원래부터 이 단순 입력 방식이었으며 이번 변경으로 영향받지 않음)
-  document.getElementById('submitBtnMain').textContent = '운행기록 제출';
+  // 날짜 입력: 회장차 · 수행기사 모드(신규 입력)는 근로/대기/휴게시간 산정을 위해 "운행일자" 단일값,
+  // 그 외(KSA직원 모드 · 전무이사 차량 · 기존 기록 수정)는 기존 "운행기간"(범위) 그대로 유지
+  document.getElementById('dateRangeRow').style.display = chauffeur ? 'none' : 'flex';
+  document.getElementById('singleDateRow').style.display = chauffeur ? 'flex' : 'none';
+  if(chauffeur && !document.getElementById('singleDate').value){
+    document.getElementById('singleDate').value = todayIso();
+    syncSingleDateDisplay();
+  }
+
+  // 전무이사 차량(회장차가 아닌 경우)은 시작/종료 구분 없이 한 번에 제출하므로,
+  // 제출(=운행 종료) 시 QR 스캔 안내만 노출한다 — 화면 구성 자체는 변경하지 않음
+  document.getElementById('qrBannerJeonmu').classList.toggle('show', !isHoegjang);
+
+  if(chauffeur){
+    await refreshDriverPhase();
+  } else {
+    document.getElementById('driverPhaseToggle').style.display = 'none';
+    document.getElementById('qrBannerStart').classList.remove('show');
+    document.getElementById('qrBannerEnd').classList.remove('show');
+    document.getElementById('startPhaseSummary').style.display = 'none';
+    document.getElementById('startLocationRow').style.display = effChairman ? 'flex' : 'none';
+    document.getElementById('endLocationRow').style.display = effChairman ? 'flex' : 'none';
+    document.getElementById('startTimeRow').style.display = effChairman ? 'flex' : 'none';
+    document.getElementById('endTimeRow').style.display = effChairman ? 'flex' : 'none';
+    document.getElementById('startOdoRow').style.display = 'flex';
+    document.getElementById('endOdoRow').style.display = 'flex';
+    document.getElementById('distanceRow').style.display = 'flex';
+    document.getElementById('submitBtnMain').textContent = editingIndex!==null ? '수정 저장' : '운행기록 제출';
+  }
   prefillStartOdoFromHistory();
+}
+
+// 회장차 · 수행기사 모드 전용: 오늘 날짜에 "출발만 등록되고 도착이 비어있는" 기록이 있는지 확인해
+// 출발 등록 단계인지 도착 등록 단계인지를 판단한다.
+async function refreshDriverPhase(){
+  const v = VEHICLES[currentVehicleKey];
+  document.getElementById('driverPhaseToggle').style.display = 'flex';
+  const dateVal = document.getElementById('singleDate').value || todayIso();
+  try{
+    const existing = await fbGet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`);
+    const trips = Array.isArray(existing)
+      ? existing.map((t,i)=>({...t, _idx:i})).filter(t=>t)
+      : (existing && typeof existing==='object' ? Object.keys(existing).map(k=>({...existing[k], _idx:Number(k)})) : []);
+    const openTrip = trips.find(t => t.vehicleKey==='hoegjang' && t.status==='open' && t.dateFrom===dateVal);
+    if(openTrip){
+      driverPhase = 'end';
+      openTripIndex = openTrip._idx;
+      renderDriverPhaseUI(openTrip);
+    } else {
+      driverPhase = 'start';
+      openTripIndex = null;
+      renderDriverPhaseUI(null);
+    }
+  }catch(e){
+    console.error('[전용차량] 운행 단계 확인 실패:', e);
+    driverPhase = 'start';
+    openTripIndex = null;
+    renderDriverPhaseUI(null);
+  }
+}
+
+// driverPhase 값에 따라 출발/도착 관련 필드·안내 배너·제출 버튼 라벨을 갱신
+function renderDriverPhaseUI(openTrip){
+  document.getElementById('phaseBtnStart').classList.toggle('active', driverPhase==='start');
+  document.getElementById('phaseBtnEnd').classList.toggle('active', driverPhase==='end');
+
+  document.getElementById('qrBannerStart').classList.toggle('show', driverPhase==='start');
+  document.getElementById('qrBannerEnd').classList.toggle('show', driverPhase==='end');
+
+  document.getElementById('startLocationRow').style.display = driverPhase==='start' ? 'flex' : 'none';
+  document.getElementById('startTimeRow').style.display = driverPhase==='start' ? 'flex' : 'none';
+  document.getElementById('startOdoRow').style.display = driverPhase==='start' ? 'flex' : 'none';
+
+  document.getElementById('endLocationRow').style.display = driverPhase==='end' ? 'flex' : 'none';
+  document.getElementById('endTimeRow').style.display = driverPhase==='end' ? 'flex' : 'none';
+  document.getElementById('endOdoRow').style.display = driverPhase==='end' ? 'flex' : 'none';
+  document.getElementById('distanceRow').style.display = driverPhase==='end' ? 'flex' : 'none';
+
+  const summary = document.getElementById('startPhaseSummary');
+  if(driverPhase==='end' && openTrip){
+    summary.style.display = 'block';
+    summary.innerHTML = `출발지 <b>${openTrip.startLocation||'-'}</b> · 시작 시각 <b>${openTrip.startTime||'-'}</b> · 시작거리 <b>${(openTrip.startOdo||0).toLocaleString()}km</b>`;
+    if(!document.getElementById('startOdo').value) document.getElementById('startOdo').value = openTrip.startOdo || '';
+    if(!document.getElementById('routeNote').value) document.getElementById('routeNote').value = openTrip.routeNote || '';
+    calcDistance();
+  } else {
+    summary.style.display = 'none';
+    summary.innerHTML = '';
+  }
+
+  document.getElementById('submitBtnMain').textContent = driverPhase==='end' ? '도착 등록' : '출발 등록';
 }
 
 function initDates(){
@@ -844,6 +1013,11 @@ function initDates(){
   document.getElementById('startDate').value = iso;
   document.getElementById('endDate').value = iso;
   syncDateDisplays();
+  const sd = document.getElementById('singleDate');
+  if(sd){
+    sd.value = iso;
+    syncSingleDateDisplay();
+  }
 }
 
 function toggleSwitch(swId, condId){
@@ -853,6 +1027,13 @@ function toggleSwitch(swId, condId){
   const isOn = sw.classList.contains('on');
   cond.classList.toggle('open', isOn);
   if(!isOn) cond.classList.remove('invalid');
+}
+
+// 주유금액 입력 시 천 단위 콤마 표시 (저장 시에는 콤마 제거 후 숫자로 파싱)
+function formatFuelCostInput(){
+  const el = document.getElementById('fuelCost');
+  const digits = el.value.replace(/[^0-9]/g,'');
+  el.value = digits ? Number(digits).toLocaleString() : '';
 }
 
 function calcDistance(){
@@ -909,6 +1090,11 @@ function collectPeriods(listId){
   return out;
 }
 
+// 회장차 · 수행기사 모드(수정 중이 아닐 때)에서만 출발/도착 2단계 등록을 사용
+function isChauffeurMode(){
+  return currentVehicleKey === 'hoegjang' && hoegjangMode === 'driver' && editingIndex === null;
+}
+
 async function submitLog(){
   const submitBtn = document.getElementById('submitBtnMain');
   const v = VEHICLES[currentVehicleKey];
@@ -939,50 +1125,13 @@ async function submitLog(){
   const driver = (currentVehicleKey === 'hoegjang' && hoegjangMode === 'staff')
     ? 'KSA직원'
     : (document.getElementById('driverName').value.trim() || v.driver);
-  const startDate = document.getElementById('startDate').value;
-  const endDate = document.getElementById('endDate').value;
-
-  const startOdo = parseFloat(document.getElementById('startOdo').value) || 0;
-  const endOdo = parseFloat(document.getElementById('endOdo').value) || 0;
-
-  if(!startDate || !endDate){
-    showToast('운행기간을 입력해주세요.', true);
-    return;
-  }
-  if(endOdo < startOdo){
-    showToast('종료거리 값이 시작거리보다 작습니다. 확인해주세요.', true);
-    return;
-  }
-
-  const effChairman = v.chairman && !(currentVehicleKey === 'hoegjang' && hoegjangMode === 'staff');
-
-  const trip = {
-    dateFrom: startDate, dateTo: endDate,
-    isoDateFrom: startDate, isoDateTo: endDate,
-    driver,
-    startLocation: effChairman ? document.getElementById('startLocation').value.trim() : '',
-    endLocation: effChairman ? document.getElementById('endLocation').value.trim() : '',
-    startTime: effChairman ? document.getElementById('startTime').value : '',
-    endTime: effChairman ? document.getElementById('endTime').value : '',
-    startOdo, endOdo, distance: Math.max(0, endOdo - startOdo),
-    routeNote: document.getElementById('routeNote').value.trim(),
-    isSubstituteDriver: document.getElementById('substituteSwitch').classList.contains('on'),
-    substituteDriverReason: document.getElementById('substituteDriverReason').value.trim(),
-    isSubstituteVehicle: document.getElementById('substituteVehicleSwitch').classList.contains('on'),
-    substituteVehicle: document.getElementById('substituteVehicle').value.trim(),
-    fuelCost: parseFloat(document.getElementById('fuelCost').value) || 0,
-    plate: v.plate, vehicleKey: currentVehicleKey,
-    submittedAt: new Date().toISOString()
-  };
-
-  if(effChairman){
-    trip.workStart = document.getElementById('workStart').value;
-    trip.workEnd = document.getElementById('workEnd').value;
-    trip.waitPeriods = collectPeriods('waitPeriodsList');
-    trip.restPeriods = collectPeriods('restPeriodsList');
-    trip.overtimeStart = document.getElementById('overtimeStart').value;
-    trip.overtimeEnd = document.getElementById('overtimeEnd').value;
-  }
+  const chauffeur = isChauffeurMode();
+  const fuelCost = parseFloat((document.getElementById('fuelCost').value || '').replace(/,/g,'')) || 0;
+  const routeNote = document.getElementById('routeNote').value.trim();
+  const isSubstituteDriver = document.getElementById('substituteSwitch').classList.contains('on');
+  const substituteDriverReason = document.getElementById('substituteDriverReason').value.trim();
+  const isSubstituteVehicle = document.getElementById('substituteVehicleSwitch').classList.contains('on');
+  const substituteVehicle = document.getElementById('substituteVehicle').value.trim();
 
   submitBtn.disabled = true;
   submitBtn.textContent = '저장 중…';
@@ -991,22 +1140,132 @@ async function submitLog(){
     const existing = await fbGet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`);
     const trips = Array.isArray(existing) ? existing.filter(t=>t) : (existing && typeof existing==='object' ? Object.values(existing) : []);
 
-    const wasEditing = editingIndex !== null;
-    if(wasEditing && trips[editingIndex]){
-      trip.submittedAt = trips[editingIndex].submittedAt || trip.submittedAt;
-      trip.editedAt = new Date().toISOString();
-      trips[editingIndex] = trip;
-    } else {
-      trips.push(trip);
-    }
-    await fbSet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`, trips);
+    if(chauffeur && driverPhase === 'start'){
+      // ── 회장차 수행기사: 1단계(출발) 등록 ──
+      const dateVal = document.getElementById('singleDate').value;
+      const startLocation = document.getElementById('startLocation').value.trim();
+      const startTime = document.getElementById('startTime').value;
+      const startOdo = parseFloat(document.getElementById('startOdo').value) || 0;
+      if(!dateVal){ showToast('운행일자를 입력해주세요.', true); submitBtn.disabled=false; submitBtn.textContent='출발 등록'; return; }
+      if(!startLocation){ showToast('출발지를 입력해주세요.', true); submitBtn.disabled=false; submitBtn.textContent='출발 등록'; return; }
 
-    openSubmitConfirm(wasEditing ? '운행기록이 수정되었습니다.' : '운행기록이 저장되었습니다.');
-    editingIndex = null;
-    document.getElementById('editBanner').style.display = 'none';
-    resetFormAfterSubmit(trip.endOdo);
-    refreshHoegjangLayout();
-    loadMyRecords();
+      const trip = {
+        dateFrom: dateVal, dateTo: dateVal, isoDateFrom: dateVal, isoDateTo: dateVal,
+        driver, startLocation, startTime, startOdo,
+        endLocation:'', endTime:'', endOdo:0, distance:0,
+        routeNote,
+        isSubstituteDriver, substituteDriverReason, isSubstituteVehicle, substituteVehicle,
+        fuelCost,
+        workStart: document.getElementById('workStart').value,
+        workEnd:'', waitPeriods: collectPeriods('waitPeriodsList'), restPeriods: collectPeriods('restPeriodsList'),
+        overtimeStart: document.getElementById('overtimeStart').value, overtimeEnd:'',
+        plate: v.plate, vehicleKey: currentVehicleKey, status:'open',
+        submittedAt: new Date().toISOString()
+      };
+      trips.push(trip);
+      await fbSet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`, trips);
+
+      openSubmitConfirm('출발 정보가 등록되었습니다.');
+      resetFormAfterSubmit();
+      await refreshHoegjangLayout();
+      loadMyRecords();
+    } else if(chauffeur && driverPhase === 'end'){
+      // ── 회장차 수행기사: 2단계(도착) 등록 — 열려있는 출발 기록에 도착 정보를 이어붙임 ──
+      if(openTripIndex === null || !trips[openTripIndex]){
+        showToast('먼저 출발 등록을 해주세요.', true);
+        submitBtn.disabled = false; submitBtn.textContent = '도착 등록';
+        return;
+      }
+      const base = trips[openTripIndex];
+      const endLocation = document.getElementById('endLocation').value.trim();
+      const endTime = document.getElementById('endTime').value;
+      const endOdo = parseFloat(document.getElementById('endOdo').value) || 0;
+      if(!endLocation){ showToast('도착지를 입력해주세요.', true); submitBtn.disabled=false; submitBtn.textContent='도착 등록'; return; }
+      if(endOdo < (base.startOdo||0)){ showToast('종료거리 값이 시작거리보다 작습니다. 확인해주세요.', true); submitBtn.disabled=false; submitBtn.textContent='도착 등록'; return; }
+
+      const trip = {
+        ...base,
+        endLocation, endTime, endOdo, distance: Math.max(0, endOdo - (base.startOdo||0)),
+        routeNote: routeNote || base.routeNote,
+        isSubstituteDriver, substituteDriverReason, isSubstituteVehicle, substituteVehicle,
+        fuelCost: fuelCost || base.fuelCost || 0,
+        workStart: document.getElementById('workStart').value || base.workStart,
+        workEnd: document.getElementById('workEnd').value,
+        waitPeriods: collectPeriods('waitPeriodsList'),
+        restPeriods: collectPeriods('restPeriodsList'),
+        overtimeStart: document.getElementById('overtimeStart').value || base.overtimeStart,
+        overtimeEnd: document.getElementById('overtimeEnd').value,
+        status:'complete', editedAt: new Date().toISOString()
+      };
+      trips[openTripIndex] = trip;
+      await fbSet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`, trips);
+
+      openSubmitConfirm('도착 정보가 등록되었습니다.');
+      resetFormAfterSubmit();
+      await refreshHoegjangLayout();
+      loadMyRecords();
+    } else {
+      // ── KSA직원 모드 · 전무이사 차량 · 기존 기록 수정: 한 화면에서 한 번에 제출(기존 방식) ──
+      const startDate = document.getElementById('startDate').value;
+      const endDate = document.getElementById('endDate').value;
+      const startOdo = parseFloat(document.getElementById('startOdo').value) || 0;
+      const endOdo = parseFloat(document.getElementById('endOdo').value) || 0;
+
+      if(!startDate || !endDate){
+        showToast('운행기간을 입력해주세요.', true);
+        submitBtn.disabled = false; submitBtn.textContent = editingIndex!==null ? '수정 저장' : '운행기록 제출';
+        return;
+      }
+      if(endOdo < startOdo){
+        showToast('종료거리 값이 시작거리보다 작습니다. 확인해주세요.', true);
+        submitBtn.disabled = false; submitBtn.textContent = editingIndex!==null ? '수정 저장' : '운행기록 제출';
+        return;
+      }
+
+      const effChairman = v.chairman && !(currentVehicleKey === 'hoegjang' && hoegjangMode === 'staff');
+
+      const trip = {
+        dateFrom: startDate, dateTo: endDate,
+        isoDateFrom: startDate, isoDateTo: endDate,
+        driver,
+        startLocation: effChairman ? document.getElementById('startLocation').value.trim() : '',
+        endLocation: effChairman ? document.getElementById('endLocation').value.trim() : '',
+        startTime: effChairman ? document.getElementById('startTime').value : '',
+        endTime: effChairman ? document.getElementById('endTime').value : '',
+        startOdo, endOdo, distance: Math.max(0, endOdo - startOdo),
+        routeNote,
+        isSubstituteDriver, substituteDriverReason, isSubstituteVehicle, substituteVehicle,
+        fuelCost,
+        plate: v.plate, vehicleKey: currentVehicleKey, status:'complete',
+        submittedAt: new Date().toISOString()
+      };
+
+      if(effChairman){
+        trip.workStart = document.getElementById('workStart').value;
+        trip.workEnd = document.getElementById('workEnd').value;
+        trip.waitPeriods = collectPeriods('waitPeriodsList');
+        trip.restPeriods = collectPeriods('restPeriodsList');
+        trip.overtimeStart = document.getElementById('overtimeStart').value;
+        trip.overtimeEnd = document.getElementById('overtimeEnd').value;
+      }
+
+      const wasEditing = editingIndex !== null;
+      if(wasEditing && trips[editingIndex]){
+        trip.submittedAt = trips[editingIndex].submittedAt || trip.submittedAt;
+        trip.editedAt = new Date().toISOString();
+        trips[editingIndex] = trip;
+      } else {
+        trips.push(trip);
+      }
+      await fbSet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`, trips);
+
+      openSubmitConfirm(wasEditing ? '운행기록이 수정되었습니다.' : '운행기록이 저장되었습니다.');
+      editingIndex = null;
+      document.getElementById('editBanner').style.display = 'none';
+      resetFormAfterSubmit(trip.endOdo);
+      await refreshHoegjangLayout();
+      loadMyRecords();
+    }
   }catch(e){
     console.error('[전용차량 운행기록] 저장 실패:', e);
     showToast('저장에 실패했습니다: ' + e.message + '\n네트워크 확인 후 다시 시도해주세요.', true);
@@ -1067,7 +1326,7 @@ async function loadMyRecords(){
     listEl.innerHTML = recent.map(t => `
       <div class="ded-myrecord-item" onclick="startEditRecord(${t._idx})">
         <div class="info">
-          <div class="date">${t.dateFrom||''}${(t.dateTo && t.dateTo!==t.dateFrom) ? ' ~ '+t.dateTo : ''}</div>
+          <div class="date">${formatYYMMDD(t.dateFrom)||t.dateFrom||''}${(t.dateTo && t.dateTo!==t.dateFrom) ? ' ~ '+(formatYYMMDD(t.dateTo)||t.dateTo) : ''}</div>
           <div class="sub">${(t.driver||'')} · ${(t.routeNote||'행선지 미입력')} · ${(t.distance||0).toLocaleString()}km</div>
         </div>
         <div class="edit-lbl">수정 ›</div>
@@ -1086,11 +1345,20 @@ function startEditRecord(idx){
 
   const v = VEHICLES[currentVehicleKey];
   document.getElementById('hoegjangModeBar').style.display = 'none';
+  document.getElementById('driverPhaseToggle').style.display = 'none';
+  document.getElementById('qrBannerStart').classList.remove('show');
+  document.getElementById('qrBannerEnd').classList.remove('show');
+  document.getElementById('startPhaseSummary').style.display = 'none';
+  document.getElementById('dateRangeRow').style.display = 'flex';
+  document.getElementById('singleDateRow').style.display = 'none';
   document.getElementById('driverNameRow').style.display = 'block';
   document.getElementById('startLocationRow').style.display = v.chairman ? 'flex' : 'none';
   document.getElementById('endLocationRow').style.display = v.chairman ? 'flex' : 'none';
   document.getElementById('startTimeRow').style.display = v.chairman ? 'flex' : 'none';
   document.getElementById('endTimeRow').style.display = v.chairman ? 'flex' : 'none';
+  document.getElementById('startOdoRow').style.display = 'flex';
+  document.getElementById('endOdoRow').style.display = 'flex';
+  document.getElementById('distanceRow').style.display = 'flex';
   document.getElementById('chairmanOnlyBlock').style.display = v.chairman ? 'block' : 'none';
 
   document.getElementById('driverName').value = t.driver || '';
@@ -1104,7 +1372,7 @@ function startEditRecord(idx){
   document.getElementById('startOdo').value = t.startOdo || '';
   document.getElementById('endOdo').value = t.endOdo || '';
   document.getElementById('routeNote').value = t.routeNote || '';
-  document.getElementById('fuelCost').value = t.fuelCost || '';
+  document.getElementById('fuelCost').value = t.fuelCost ? Number(t.fuelCost).toLocaleString() : '';
   calcDistance();
 
   const subSw = document.getElementById('substituteSwitch');
@@ -1136,7 +1404,7 @@ function startEditRecord(idx){
   }
 
   document.getElementById('editBanner').style.display = 'flex';
-  document.getElementById('editBannerText').textContent = `${t.dateFrom||''} 운행기록을 수정하는 중입니다.`;
+  document.getElementById('editBannerText').textContent = `${formatYYMMDD(t.dateFrom)||t.dateFrom||''} 운행기록을 수정하는 중입니다.`;
   document.getElementById('submitBtnMain').textContent = '수정 저장';
   window.scrollTo({top:0, behavior:'smooth'});
   showToast('수정할 기록을 불러왔습니다.');

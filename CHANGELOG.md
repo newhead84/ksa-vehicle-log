@@ -4,6 +4,20 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 형식: 각 항목은 `요청내용 요약 | 변경: 함수/영역`
 
+## 2026-08-07 (7)
+
+- 전용차량 기사님 입력화면(회장차 수행기사 모드 중심) 일괄 수정요청 반영. KSA직원 모드·전무이사 차량 화면 레이아웃은 요청에 따라 변경하지 않음(QR 안내문구만 추가).
+  ① 회장차 수행기사 모드: 근로/대기/휴게시간 산정을 위해 "운행기간"(범위) 대신 "운행일자" 단일 입력으로 전환(`singleDateRow` 신규, `dateRangeRow`와 토글). KSA직원 모드·전무이사 차량·기존 기록 수정 화면은 기존 "운행기간" 범위 입력 그대로 유지.
+  ② 회장차 수행기사 모드에 "출발 등록"/"도착 등록" 2단계 제출 방식 복원 — 출발 등록 시 `status:'open'` 상태로 출발지·시작시각·시작거리만 저장하고, 같은 날짜에 열려있는 기록이 있으면 자동으로 "도착 등록" 단계로 전환되어 도착지·종료시각·종료거리를 이어서 입력받아 `status:'complete'`로 완료 처리. 도착 등록 단계에서는 출발 시 입력한 정보를 읽기 전용 요약으로 상단에 표시. 상태 판단·전환 로직 신규(`driverPhase`/`openTripIndex` 상태변수, `refreshDriverPhase()`/`renderDriverPhaseUI()`/`isChauffeurMode()`), 제출 버튼 라벨이 단계에 따라 "출발 등록"/"도착 등록"으로 자동 전환.
+  ③ QR 스캔 안내 배너 추가: 회장차 수행기사 모드는 출발 등록 단계(운행 시작 전)와 도착 등록 단계(운행 종료 후) 각각 별도 안내 문구 노출(`qrBannerStart`/`qrBannerEnd`), 전무이사 차량은 운행 종료(제출) 시점에만 안내 문구 노출(`qrBannerJeonmu`) — 전무이사 차량은 시작/종료 단계 구분 없이 기존과 동일하게 한 번에 제출.
+  ④ 점검요청 패널 하단에 롯데렌터카 대표번호(1588-1230) 전화연결 링크 및 자체 접수 안내문구 추가.
+  ⑤ "내 운행기록 확인/수정" 목록의 날짜 표시를 `formatYYMMDD()`로 통일(YYYY-MM-DD → YY-MM-DD), 수정 배너 문구도 동일하게 적용.
+  ⑥ 주유금액 입력 시 천 단위 콤마 자동 표시(`formatFuelCostInput()` 신규, `type="number"`→`type="text"`+`inputmode="numeric"`로 변경), 저장/수정 시 콤마 제거 후 숫자로 파싱.
+  ⑦ 달력 아이콘 미노출 재발 수정 — `-webkit-appearance:none`이 부모 `input[type=date]`에 걸려 있으면 일부 Android Chrome/WebView에서 `::-webkit-calendar-picker-indicator` 자체가 렌더링되지 않는 것이 원인. 인디케이터에 `-webkit-appearance:auto`를 명시적으로 재지정.
+  ⑧ 운행기간/운행일자 입력창에서 날짜 선택 시 오버레이 텍스트(YY-MM-DD)가 줄바뀜하던 문제 수정 — `.date-fmt`에 `white-space:nowrap` 추가, 날짜 필드 최소 폭·아이콘 여백 조정.
+  ⑨ 수행기사 페이지(회장차 수행기사 모드) 출발지/도착지 입력창의 "예: 본사" placeholder 예시 제거, 행선지 입력 위치를 도착지 입력 위(출발지→행선지→도착지 순)로 재배치.
+  | 변경: dedicated-driver-input.html(CSS `.ded-date-range`/`.ded-maint-hotline`/`.ded-qr-banner`/`.ded-phase-toggle`/`.ded-readonly-summary` 신규·수정, HTML TRIP 섹션 구조 재편(`dateRangeRow`/`singleDateRow`/`routeNoteRow`/`startOdoRow`/`endOdoRow`/`distanceRow`/`driverPhaseToggle`/`qrBannerStart`/`qrBannerEnd`/`qrBannerJeonmu`/`startPhaseSummary` id 신규), JS `refreshHoegjangLayout()`/`submitLog()`/`resetFormAfterSubmit()`(연동)/`initDates()`/`startEditRecord()`/`loadMyRecords()` 수정, `syncSingleDateDisplay()`/`refreshDriverPhase()`/`renderDriverPhaseUI()`/`isChauffeurMode()`/`formatFuelCostInput()` 신규)
+
 ## 2026-08-07 (6)
 
 - 전용차량 수정요청사항 후속 반영(6항에서 보류했던 항목 포함).
