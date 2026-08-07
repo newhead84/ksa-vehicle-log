@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <style>
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css');
 
@@ -268,7 +270,7 @@
 </head>
 <body>
 
-<div class="ded-demo-bar">
+<div class="ded-demo-bar" id="demoBar">
   <span class="ded-demo-label">PREVIEW</span>
   <select id="vehicleSwitch" onchange="switchVehicle(this.value)">
     <option value="hoegjang">회장차 · G90 · 177호1673</option>
@@ -494,6 +496,84 @@ const VEHICLES = {
 
 let currentVehicleKey = 'hoegjang';
 
+// ============================================================
+// ★ Firebase 연동 (index.html과 동일한 프로젝트/인증 방식) ★
+// - 공용차량(fleet-data)과 완전히 분리된 별도 노드(dedicated-fleet-data)에 저장합니다.
+// - 차량 메타정보(VEHICLES 상수)는 코드에 고정, 운행기록(trips)만 Firebase에 저장/조회합니다.
+// ============================================================
+const FIREBASE_URL = 'https://ksa-vehicle-log-default-rtdb.asia-southeast1.firebasedatabase.app';
+const DEDICATED_STORAGE_KEY = 'dedicated-fleet-data';
+const firebaseConfig = {
+  apiKey: "AIzaSyAGS2iP6VVLpsdbxGgaE1V5eIu-IHWNrH8",
+  authDomain: "ksa-vehicle-log.firebaseapp.com",
+  databaseURL: FIREBASE_URL,
+  projectId: "ksa-vehicle-log"
+};
+firebase.initializeApp(firebaseConfig);
+
+let _authReadyResolve;
+const authReadyPromise = new Promise(res=>{ _authReadyResolve = res; });
+firebase.auth().onAuthStateChanged(()=>{ _authReadyResolve(); });
+setTimeout(()=>_authReadyResolve(), 5000);
+firebase.auth().signInAnonymously().catch(e=>{
+  console.error('[전용차량] 익명 인증 실패:', e);
+});
+
+async function getAuthToken(){
+  await authReadyPromise;
+  const user = firebase.auth().currentUser;
+  if(!user) return null;
+  try{ return await user.getIdToken(); }catch(e){ return null; }
+}
+
+async function fbFetchWithTimeout(url, options, timeoutMs=15000){
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), timeoutMs);
+  try{
+    return await fetch(url, {...options, signal: controller.signal});
+  }catch(e){
+    if(e.name === 'AbortError') throw new Error('네트워크 응답 시간 초과(15초)');
+    throw new Error('네트워크 오류 — 인터넷 연결을 확인해 주세요.');
+  }finally{
+    clearTimeout(timer);
+  }
+}
+async function fbGet(path){
+  const token = await getAuthToken();
+  const url = `${FIREBASE_URL}/${path}.json${token?`?auth=${token}`:''}`;
+  const r = await fbFetchWithTimeout(url);
+  if(!r.ok) throw new Error(`Firebase 읽기 실패 (${r.status})`);
+  return r.json();
+}
+async function fbSet(path, value){
+  const token = await getAuthToken();
+  const url = `${FIREBASE_URL}/${path}.json${token?`?auth=${token}`:''}`;
+  const r = await fbFetchWithTimeout(url, {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(value)
+  });
+  if(!r.ok) throw new Error(`Firebase 쓰기 실패 (${r.status})`);
+  return r.json();
+}
+
+// ── QR 잠금 (?plate=차량번호) ──
+// 실사용 시 차량에 부착된 QR코드가 index.html이 아닌 이 페이지를 ?plate=177호1673 형태로 직접 여는 것을 가정.
+// 해당 차량번호와 일치하는 VEHICLES 항목이 있으면 그 차량으로 고정하고, 전환 UI(PREVIEW 바)를 숨긴다.
+let lockedByQr = false;
+function applyQrLock(){
+  const params = new URLSearchParams(window.location.search);
+  const plate = params.get('plate');
+  if(!plate) return;
+  const matchKey = Object.keys(VEHICLES).find(k => VEHICLES[k].plate === plate);
+  if(matchKey){
+    lockedByQr = true;
+    document.getElementById('demoBar').style.display = 'none';
+    switchVehicle(matchKey);
+  } else {
+    console.warn('[전용차량] QR 파라미터의 차량번호와 일치하는 차량이 없습니다:', plate);
+  }
+}
+
 function switchVehicle(key){
   currentVehicleKey = key;
   const v = VEHICLES[key];
@@ -569,8 +649,37 @@ function addPeriod(listId){
   list.appendChild(row);
 }
 
-function submitLog(){
+function showToast(msg, isErr){
   const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  if(isErr) toast.classList.add('err');
+  setTimeout(()=>toast.classList.remove('show','err'), 3200);
+}
+
+// 기간 목록(대기/휴게시간) DOM에서 {start,end} 배열로 수집
+function collectPeriods(listId){
+  const rows = document.querySelectorAll(`#${listId} .ded-period-row`);
+  const out = [];
+  rows.forEach(row=>{
+    const inputs = row.querySelectorAll('input[type="time"]');
+    const start = inputs[0]?.value || '';
+    const end = inputs[1]?.value || '';
+    if(start || end) out.push({start, end});
+  });
+  return out;
+}
+
+// YY.MM.DD 형식 문자열을 ISO(YYYY-MM-DD)로 변환 (2000년대 가정)
+function maskedDateToIso(masked){
+  const digits = (masked||'').replace(/\D/g,'');
+  if(digits.length < 6) return '';
+  const y = '20' + digits.slice(0,2), m = digits.slice(2,4), d = digits.slice(4,6);
+  return `${y}-${m}-${d}`;
+}
+
+async function submitLog(){
+  const submitBtn = document.querySelector('.ded-submit');
 
   // 대차 차량 사용 시 차량정보 필수 검증
   const vehSwitch = document.getElementById('substituteVehicleSwitch');
@@ -579,16 +688,95 @@ function submitLog(){
   if(vehSwitch.classList.contains('on') && !vehInput.value.trim()){
     vehCond.classList.add('invalid');
     vehInput.focus();
-    toast.textContent = '대차 차량 정보를 입력해주세요.';
-    toast.classList.add('show','err');
-    setTimeout(()=>toast.classList.remove('show','err'), 2600);
+    showToast('대차 차량 정보를 입력해주세요.', true);
     return;
   }
   vehCond.classList.remove('invalid');
 
-  toast.textContent = '운행기록이 제출되었습니다.\n(프로토타입 — 실제 저장은 Firebase 연동 후 동작)';
-  toast.classList.add('show');
-  setTimeout(()=>toast.classList.remove('show'), 3200);
+  const v = VEHICLES[currentVehicleKey];
+  const driver = document.getElementById('driverName').value.trim() || v.driver;
+  const startDate = document.getElementById('startDate').value.trim();
+  const endDate = document.getElementById('endDate').value.trim();
+  const startOdo = parseFloat(document.getElementById('startOdo').value) || 0;
+  const endOdo = parseFloat(document.getElementById('endOdo').value) || 0;
+
+  if(!startDate || !endDate){
+    showToast('운행기간을 입력해주세요.', true);
+    return;
+  }
+  if(endOdo < startOdo){
+    showToast('종료 계기판 값이 시작 계기판보다 작습니다. 확인해주세요.', true);
+    return;
+  }
+
+  const isoDateFrom = maskedDateToIso(startDate);
+  const isoDateTo = maskedDateToIso(endDate);
+  if(!isoDateFrom || !isoDateTo){
+    showToast('운행기간 형식을 확인해주세요 (YY.MM.DD).', true);
+    return;
+  }
+
+  const trip = {
+    dateFrom: startDate, dateTo: endDate,
+    isoDateFrom, isoDateTo,
+    driver,
+    startLocation: v.chairman ? (document.getElementById('startLocation').value.trim()) : '',
+    endLocation: v.chairman ? (document.getElementById('endLocation').value.trim()) : '',
+    startTime: v.chairman ? document.getElementById('startTime').value : '',
+    endTime: v.chairman ? document.getElementById('endTime').value : '',
+    startOdo, endOdo, distance: Math.max(0, endOdo - startOdo),
+    routeNote: document.getElementById('routeNote').value.trim(),
+    isSubstituteDriver: document.getElementById('substituteSwitch').classList.contains('on'),
+    substituteDriverReason: document.getElementById('substituteDriverReason').value.trim(),
+    isSubstituteVehicle: vehSwitch.classList.contains('on'),
+    substituteVehicle: vehInput.value.trim(),
+    fuelCost: parseFloat(document.getElementById('fuelCost').value) || 0,
+    plate: v.plate, vehicleKey: currentVehicleKey,
+    submittedAt: new Date().toISOString()
+  };
+
+  if(v.chairman){
+    trip.workStart = document.getElementById('workStart').value;
+    trip.workEnd = document.getElementById('workEnd').value;
+    trip.waitPeriods = collectPeriods('waitPeriodsList');
+    trip.restPeriods = collectPeriods('restPeriodsList');
+    trip.overtimeStart = document.getElementById('overtimeStart').value;
+    trip.overtimeEnd = document.getElementById('overtimeEnd').value;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = '저장 중…';
+  try{
+    // 저장 직전 최신 데이터를 다시 읽어 병합 (동시 제출 데이터 유실 방지)
+    const existing = await fbGet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`);
+    const trips = Array.isArray(existing) ? existing.filter(t=>t) : (existing && typeof existing==='object' ? Object.values(existing) : []);
+    trips.push(trip);
+    await fbSet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`, trips);
+    showToast('운행기록이 저장되었습니다.');
+    resetFormAfterSubmit();
+  }catch(e){
+    console.error('[전용차량 운행기록] 저장 실패:', e);
+    showToast('저장에 실패했습니다: ' + e.message + '\n네트워크 확인 후 다시 시도해주세요.', true);
+  }finally{
+    submitBtn.disabled = false;
+    submitBtn.textContent = '운행기록 제출';
+  }
+}
+
+function resetFormAfterSubmit(){
+  ['startOdo','endOdo','routeNote','substituteVehicle','substituteDriverReason','fuelCost','startLocation','endLocation','startTime','endTime','workStart','workEnd','overtimeStart','overtimeEnd'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  document.getElementById('distanceVal').innerHTML = '0<span>km</span>';
+  document.getElementById('workTotalVal').textContent = '–';
+  document.getElementById('waitPeriodsList').innerHTML = '';
+  document.getElementById('restPeriodsList').innerHTML = '';
+  ['substituteSwitch','substituteVehicleSwitch'].forEach(id=>{
+    const sw = document.getElementById(id);
+    if(sw && sw.classList.contains('on')) sw.click();
+  });
+  initDates();
 }
 
 // ============================================================
@@ -677,6 +865,7 @@ document.getElementById('headerWordmark').src = GENESIS_WORDMARK_WHITE;
 initDates();
 switchVehicle('hoegjang');
 pickRandomQuote();
+applyQrLock();
 </script>
 
 </body>
