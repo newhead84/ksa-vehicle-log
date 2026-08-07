@@ -9,6 +9,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css');
 
@@ -25,12 +26,19 @@
     --ded-good:#8FBF9F;
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;background:var(--ded-bg);color:var(--ded-text);}
+  html,body{margin:0;padding:0;background:var(--ded-bg);color:var(--ded-text); overflow-x:hidden; max-width:100%;}
   body{
     font-family:'Pretendard','Outfit',sans-serif;
     word-break:keep-all; overflow-wrap:break-word;
     -webkit-font-smoothing:antialiased;
     min-height:100vh;
+    -webkit-user-select:none; user-select:none;
+    -webkit-touch-callout:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  input, textarea, select{
+    -webkit-user-select:text; user-select:text;
+    -webkit-touch-callout:default;
   }
   .ded-eyebrow{
     font-family:'Outfit',sans-serif; font-weight:400; font-size:11px;
@@ -94,9 +102,10 @@
   .ded-topbar{
     display:flex; align-items:center; justify-content:space-between;
     padding:20px 32px; border-bottom:1px solid var(--ded-line);
+    flex-wrap:wrap; gap:12px;
   }
-  .ded-topbar .brand{font-family:'Outfit',sans-serif; font-size:13px; letter-spacing:.14em; color:var(--ded-beige);}
-  .ded-topbar .sess{font-size:12px; color:var(--ded-muted); display:flex; align-items:center; gap:14px;}
+  .ded-topbar .brand{font-family:'Outfit',sans-serif; font-size:13px; letter-spacing:.14em; color:var(--ded-beige); min-width:0;}
+  .ded-topbar .sess{font-size:12px; color:var(--ded-muted); display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
   .ded-exit{
     background:none; border:1px solid var(--ded-line); color:var(--ded-muted);
     font-size:11px; padding:6px 12px; cursor:pointer; font-family:'Pretendard',sans-serif;
@@ -109,7 +118,7 @@
 
   /* 상단 요약 카드 */
   .ded-stat-strip{
-    display:grid; grid-template-columns:repeat(5,1fr); gap:1px;
+    display:grid; grid-template-columns:repeat(3,1fr); gap:1px;
     background:var(--ded-line); border:1px solid var(--ded-line);
     margin:28px 0 44px;
   }
@@ -181,6 +190,18 @@
   .ded-qr-actions button:hover{background:var(--ded-beige); color:#0A0A0A;}
   .ded-qr-actions button.primary{background:var(--ded-beige); color:#0A0A0A;}
   .ded-qr-actions button.primary:hover{opacity:.85;}
+
+  /* 계약정보 관리 폼 */
+  .contract-row{border-bottom:1px solid var(--ded-line); padding:14px 0;}
+  .contract-row:last-child{border-bottom:none;}
+  .contract-row .veh-label{font-size:13px; color:var(--ded-beige); margin-bottom:8px;}
+  .contract-row .field-line{display:flex; align-items:center; gap:10px; margin-bottom:8px;}
+  .contract-row label{flex:0 0 84px; font-size:12px; color:var(--ded-muted);}
+  .contract-row input{
+    flex:1; background:#0A0A0A; border:1px solid var(--ded-line); color:var(--ded-text);
+    padding:8px 10px; font-family:'Pretendard',sans-serif; font-size:13px;
+  }
+  .contract-row input:focus{outline:none; border-color:var(--ded-beige);}
 
   /* 필터탭 */
   .ded-tabs{display:flex; gap:0; border-bottom:1px solid var(--ded-line); margin-bottom:0;}
@@ -274,6 +295,8 @@
     <div class="sess">
       <span id="sessEmail">dedicated-viewer@ksa-log.com</span>
       <button class="ded-exit" id="refreshDataBtn" onclick="refreshDashboard()" style="border-color:var(--ded-beige);color:var(--ded-beige);">⟳ 새로고침</button>
+      <button class="ded-exit" onclick="openContractModal()">📋 계약정보 관리</button>
+      <button class="ded-exit" onclick="exportTripsExcel()">⬇ 엑셀내보내기</button>
       <button class="ded-exit" onclick="exitDash()">세션 종료</button>
     </div>
   </div>
@@ -327,13 +350,35 @@
   </div>
 </div>
 
+<!-- ═══════ 계약정보 관리 모달 ═══════ -->
+<div class="ded-qr-overlay" id="dedContractOverlay" onclick="if(event.target===this)closeContractModal()">
+  <div class="ded-qr-card" style="max-width:460px;">
+    <div class="ded-qr-head">
+      <div>
+        <div class="plate" style="font-size:15px;">📋 전용차량 계약정보 관리</div>
+        <div class="org">계약시작일·월대여료를 입력하면 총대여료 누계가 자동 계산됩니다</div>
+      </div>
+      <button class="ded-qr-close" onclick="closeContractModal()">✕</button>
+    </div>
+    <div class="ded-qr-body" style="text-align:left;">
+      <div id="contractFormRows"></div>
+      <div class="ded-qr-actions">
+        <button class="primary" onclick="saveContracts()" id="contractSaveBtn">💾 저장</button>
+      </div>
+      <div id="contractSaveMsg" style="margin-top:10px;font-size:12px;color:var(--ded-muted);"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 // 차량 메타정보(조직/기사/차종/월 대여료)는 계약정보 성격이라 코드에 고정합니다.
 // 실제 운행기록(trips)은 Firebase(dedicated-fleet-data)에서 실시간으로 불러옵니다.
+// token: QR/기사님 입력 URL에서 차량번호 대신 사용하는 임의 12자리 hex (차량번호 노출 방지)
+// contractStartDate: 계약정보 관리 모달에서 실제 값으로 갱신 가능 (Firebase dedicated-fleet-data/contracts 에 저장)
 const VEHICLES = [
-  {key:'hoegjang', org:'한국표준협회', role:'회장(수행기사)', driver:'이왕희', plate:'177호1673', model:'G90', monthlyFee:1180000},
-  {key:'jeonmu1', org:'경영품질원', role:'전무이사(본인)', driver:'이경근', plate:'222호7779', model:'G80', monthlyFee:890000},
-  {key:'jeonmu2', org:'산업표준원', role:'전무이사(본인)', driver:'이동석', plate:'222호7780', model:'G80', monthlyFee:890000}
+  {key:'hoegjang', org:'한국표준협회', role:'회장(수행기사)', driver:'이왕희', plate:'177호1673', model:'G90', monthlyFee:1180000, token:'48ac240c17b5', contractStartDate:null},
+  {key:'jeonmu1', org:'경영품질원', role:'전무이사(본인)', driver:'이경근', plate:'222호7779', model:'G80', monthlyFee:890000, token:'98aa695b10cc', contractStartDate:null},
+  {key:'jeonmu2', org:'산업표준원', role:'전무이사(본인)', driver:'이동석', plate:'222호7780', model:'G80', monthlyFee:890000, token:'e7ccd86d4078', contractStartDate:null}
 ];
 
 // Firebase에서 불러온 실제 운행기록 (평탄화된 배열, 화면표시용 필드로 매핑됨)
@@ -397,6 +442,44 @@ async function fbGet(path){
   const r = await fbFetchWithTimeout(url);
   if(!r.ok) throw new Error(`Firebase 읽기 실패 (${r.status})`);
   return r.json();
+}
+async function fbPut(path, value){
+  const token = await getAuthToken();
+  const url = `${FIREBASE_URL}/${path}.json${token?`?auth=${token}`:''}`;
+  const r = await fbFetchWithTimeout(url, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(value)});
+  if(!r.ok) throw new Error(`Firebase 저장 실패 (${r.status})`);
+  return r.json();
+}
+
+// 계약정보(계약시작일·월대여료)를 Firebase에서 불러와 VEHICLES에 반영
+async function loadContractsFromFirebase(){
+  try{
+    const raw = await fbGet(`${DEDICATED_STORAGE_KEY}/contracts`);
+    if(!raw) return;
+    VEHICLES.forEach(v=>{
+      const c = raw[v.key];
+      if(c){
+        if(c.contractStartDate) v.contractStartDate = c.contractStartDate;
+        if(c.monthlyFee!=null) v.monthlyFee = c.monthlyFee;
+      }
+    });
+  }catch(e){
+    console.error('[전용차량 대시보드] 계약정보 로드 실패:', e);
+  }
+}
+
+// 계약시작일 ~ 오늘까지 개월수(첫 달 포함, 반올림 없이 경과 개월 기준)를 계산해 총대여료를 산출
+function monthsElapsed(startDateStr){
+  if(!startDateStr) return 0;
+  const start = new Date(startDateStr);
+  if(isNaN(start.getTime())) return 0;
+  const now = new Date();
+  let months = (now.getFullYear()-start.getFullYear())*12 + (now.getMonth()-start.getMonth());
+  if(now.getDate() >= start.getDate()) months += 1; // 해당 월의 계약일이 지났으면 그 달도 포함
+  return Math.max(0, months);
+}
+function totalRentalFor(v){
+  return monthsElapsed(v.contractStartDate) * (v.monthlyFee||0);
 }
 
 // Firebase에서 세 차량의 trips를 모두 읽어와 대시보드 표시용 평탄 배열(TRIPS)로 변환합니다.
@@ -462,6 +545,7 @@ async function refreshDashboard(){
   const refreshBtn = document.getElementById('refreshDataBtn');
   if(refreshBtn){ refreshBtn.disabled = true; refreshBtn.textContent = '⟳ 불러오는 중…'; }
   try{
+    await loadContractsFromFirebase();
     TRIPS = await loadTripsFromFirebase();
     document.getElementById('fbWarnBanner')?.remove();
   }catch(e){
@@ -494,14 +578,17 @@ function renderStats(){
   const totalDist = TRIPS.reduce((s,t)=>s+t.km,0);
   const totalTrips = TRIPS.length;
   const totalFuel = TRIPS.reduce((s,t)=>s+(t.fuel||0),0);
-  const totalFee = VEHICLES.reduce((s,v)=>s+(v.monthlyFee||0),0);
+  const monthlyFeeSum = VEHICLES.reduce((s,v)=>s+(v.monthlyFee||0),0);
+  const hasAnyContract = VEHICLES.some(v=>v.contractStartDate);
+  const totalRental = VEHICLES.reduce((s,v)=>s+totalRentalFor(v),0);
   const wrap = document.getElementById('statStrip');
   wrap.innerHTML = `
     <div class="ded-stat-card"><div class="label">총 누적 운행거리</div><div class="val">${totalDist.toLocaleString()}<span class="unit">km</span></div></div>
     <div class="ded-stat-card"><div class="label">관리 차량</div><div class="val">${VEHICLES.length}<span class="unit">대</span></div></div>
     <div class="ded-stat-card"><div class="label">누적 운행 건수</div><div class="val">${totalTrips}<span class="unit">건</span></div></div>
     <div class="ded-stat-card"><div class="label">누적 주유비</div><div class="val">${totalFuel.toLocaleString()}<span class="unit">원</span></div></div>
-    <div class="ded-stat-card"><div class="label">총대여료 합계</div><div class="val">${totalFee.toLocaleString()}<span class="unit">원 / 월</span></div></div>
+    <div class="ded-stat-card"><div class="label">월 대여료 합계</div><div class="val">${monthlyFeeSum.toLocaleString()}<span class="unit">원 / 월</span></div></div>
+    <div class="ded-stat-card"><div class="label">총대여료 누계(계약 시작일 기준)</div><div class="val">${hasAnyContract ? totalRental.toLocaleString() : '–'}<span class="unit">${hasAnyContract?'원':'계약정보 관리에서 계약시작일 입력 필요'}</span></div></div>
   `;
 }
 
@@ -520,6 +607,8 @@ function renderCards(){
       <div class="stat-row"><span class="l">이번달 주행거리</span><span class="v">${m.km.toLocaleString()}km</span></div>
       <div class="stat-row"><span class="l">운행 건수</span><span class="v">${vTrips.length}건</span></div>
       <div class="stat-row"><span class="l">주유비</span><span class="v">${vFuel.toLocaleString()}원</span></div>
+      <div class="stat-row"><span class="l">월 대여료</span><span class="v">${(v.monthlyFee||0).toLocaleString()}원</span></div>
+      <div class="stat-row"><span class="l">총대여료 누계</span><span class="v">${v.contractStartDate ? totalRentalFor(v).toLocaleString()+'원' : '계약정보 미입력'}</span></div>
       <button class="qr-btn" onclick="event.stopPropagation(); openQrModal('${v.key}')">📱 QR / 링크 보기</button>
     </div>
   `;
@@ -572,14 +661,15 @@ function renderLog(){
 }
 
 // ── QR / 링크 모달 ──
-// 차량 카드의 "QR / 링크 보기" 버튼에서 호출. dedicated-driver-input.html?plate=차량번호 URL로
+// 차량 카드의 "QR / 링크 보기" 버튼에서 호출. dedicated-driver-input.html?t=토큰 URL로
 // QR을 생성하고, 스캔한 기사님 화면이 해당 차량으로 자동 고정되도록 한다(applyQrLock 참조).
+// 차량번호를 URL에 그대로 노출하지 않도록 VEHICLES.token(임의 12자리 hex)을 사용한다.
 let _dedQrInstance = null;
 
 function openQrModal(vKey){
   const v = VEHICLES.find(x=>x.key===vKey);
   if(!v) return;
-  const url = `${DEDICATED_APP_URL}?plate=${encodeURIComponent(v.plate)}`;
+  const url = `${DEDICATED_APP_URL}?t=${encodeURIComponent(v.token)}`;
 
   document.getElementById('dedQrPlate').textContent = `${v.plate} · ${v.model}`;
   document.getElementById('dedQrOrg').textContent = `${v.role} · ${v.org}`;
@@ -603,6 +693,87 @@ function closeQrModal(){
   document.getElementById('dedQrOverlay').classList.remove('open');
   document.getElementById('dedQrContainer').innerHTML = '';
   _dedQrInstance = null;
+}
+
+// ── 계약정보 관리 모달 ──
+function openContractModal(){
+  const wrap = document.getElementById('contractFormRows');
+  wrap.innerHTML = VEHICLES.map(v => `
+    <div class="contract-row">
+      <div class="veh-label">${v.org} · ${v.model} · ${v.plate}</div>
+      <div class="field-line">
+        <label>계약시작일</label>
+        <input type="date" id="cStart_${v.key}" value="${v.contractStartDate||''}">
+      </div>
+      <div class="field-line">
+        <label>월대여료(원)</label>
+        <input type="number" id="cFee_${v.key}" value="${v.monthlyFee!=null?v.monthlyFee:''}" min="0" step="10000">
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('contractSaveMsg').textContent = '';
+  document.getElementById('dedContractOverlay').classList.add('open');
+}
+function closeContractModal(){
+  document.getElementById('dedContractOverlay').classList.remove('open');
+}
+async function saveContracts(){
+  const btn = document.getElementById('contractSaveBtn');
+  const msg = document.getElementById('contractSaveMsg');
+  btn.disabled = true; btn.textContent = '저장 중…';
+  try{
+    const payload = {};
+    VEHICLES.forEach(v=>{
+      const startEl = document.getElementById(`cStart_${v.key}`);
+      const feeEl = document.getElementById(`cFee_${v.key}`);
+      const startVal = startEl.value || null;
+      const feeVal = feeEl.value !== '' ? Number(feeEl.value) : null;
+      v.contractStartDate = startVal;
+      if(feeVal!=null) v.monthlyFee = feeVal;
+      payload[v.key] = {contractStartDate: startVal, monthlyFee: v.monthlyFee};
+    });
+    await fbPut(`${DEDICATED_STORAGE_KEY}/contracts`, payload);
+    msg.style.color = 'var(--ded-good)';
+    msg.textContent = '저장되었습니다.';
+    renderStats();
+    renderCards();
+    setTimeout(()=>{ closeContractModal(); }, 700);
+  }catch(e){
+    console.error('[전용차량 대시보드] 계약정보 저장 실패:', e);
+    msg.style.color = 'var(--ded-red)';
+    msg.textContent = `저장 실패: ${e.message}`;
+  }finally{
+    btn.disabled = false; btn.textContent = '💾 저장';
+  }
+}
+
+// ── 엑셀 내보내기 ──
+// 현재 필터 기준 운행기록 시트 + 차량별 계약/누적 요약 시트 두 개를 하나의 워크북으로 내보낸다.
+function exportTripsExcel(){
+  if(!window.XLSX){ alert('엑셀 라이브러리 로드에 실패했습니다. 새로고침 후 다시 시도해주세요.'); return; }
+  const rows = TRIPS.filter(t => currentFilter==='all' || t.v===currentFilter);
+  const tripSheetData = rows.map(t=>{
+    const v = VEHICLES.find(x=>x.key===t.v);
+    return {
+      '사업장': v?v.org:t.v, '차종': v?v.model:'', '차량번호': v?v.plate:'',
+      '날짜': t.date, '운행자': t.driver, '출발/구간': t.from, '도착/행선지': t.to,
+      '거리(km)': t.km, '대리운전': t.sub?'사용':'미사용', '비고': t.note||'', '주유비(원)': t.fuel||0
+    };
+  });
+  const summarySheetData = VEHICLES.map(v=>({
+    '사업장': v.org, '역할': v.role, '차종': v.model, '차량번호': v.plate,
+    '계약시작일': v.contractStartDate||'(미입력)', '월대여료(원)': v.monthlyFee||0,
+    '총대여료 누계(원)': v.contractStartDate ? totalRentalFor(v) : '(계약시작일 미입력)'
+  }));
+  const wb = XLSX.utils.book_new();
+  const ws1 = XLSX.utils.json_to_sheet(tripSheetData);
+  ws1['!cols'] = [{wch:14},{wch:8},{wch:12},{wch:11},{wch:10},{wch:14},{wch:14},{wch:9},{wch:9},{wch:24},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws1, '운행기록');
+  const ws2 = XLSX.utils.json_to_sheet(summarySheetData);
+  ws2['!cols'] = [{wch:14},{wch:14},{wch:8},{wch:12},{wch:12},{wch:12},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws2, '계약·대여료요약');
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `전용차량_운행기록_${today}.xlsx`);
 }
 
 async function copyDriverLink(){
