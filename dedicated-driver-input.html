@@ -55,7 +55,6 @@
   .ded-header-wordmark{display:block; width:96px; height:auto;}
   .ded-slogan-mark{display:block; width:96px; height:auto; margin-bottom:6px;}
   .ded-logo-block{display:flex; flex-direction:column; align-items:flex-start;}
-  .ded-logo-text{margin-top:2px;}
 
   /* ── 데모 전용 차량 스위처 (실서비스에서는 QR ?plate= 파라미터로 잠금, 이 UI는 제거) ── */
   .ded-demo-bar{
@@ -77,10 +76,11 @@
     border-bottom:1px solid var(--ded-line);
   }
   .ded-header-grid{
-    display:flex; align-items:flex-start; justify-content:space-between;
-    gap:16px; flex-wrap:wrap;
+    display:flex; align-items:center; justify-content:space-between;
+    gap:14px; flex-wrap:nowrap;
   }
-  .ded-header-left{display:flex; flex-direction:row; align-items:center; gap:14px; min-width:0;}
+  .ded-header-eyebrow-block{display:flex; flex-direction:column; gap:2px; flex:0 0 auto;}
+  .ded-header-eyebrow-block .ded-eyebrow{margin-bottom:0;}
   .ded-header-right{display:flex; flex-direction:column; align-items:center; text-align:center; min-width:0;}
   .ded-header .ded-eyebrow{margin-bottom:8px;}
   .ded-header h1{
@@ -94,6 +94,7 @@
   .ded-header .ded-sub{
     font-size:13.5px;
     color:var(--ded-muted);
+    margin-top:14px;
   }
   .ded-plate-chip{
     display:inline-flex; align-items:center; gap:6px;
@@ -102,22 +103,6 @@
     font-family:'Outfit',sans-serif; font-size:23px; font-weight:500; letter-spacing:.03em;
     color:var(--ded-beige);
   }
-
-  /* ── 명언 영역 ── */
-  .ded-quote-block{
-    margin-top:20px; padding-top:18px; border-top:1px solid var(--ded-line);
-  }
-  .ded-quote-text{
-    font-size:14.5px; line-height:1.6; color:var(--ded-text);
-    text-align:center;
-  }
-  .ded-quote-meta{
-    margin-top:8px; font-size:12.5px; color:var(--ded-muted);
-    text-align:right;
-  }
-  .ded-quote-meta .kw{color:var(--ded-beige);}
-  .ded-quote-meta .quote-person{cursor:pointer; text-decoration:underline; text-underline-offset:2px;}
-  .ded-quote-meta .quote-person:hover{color:var(--ded-beige);}
 
   /* ── 섹션 (여백 최소화) ── */
   .ded-section{
@@ -166,11 +151,16 @@
   .ded-date-range .sep{color:var(--ded-muted-2); font-family:'Outfit',sans-serif; font-size:14px; flex:0 0 auto;}
   /* 네이티브 날짜 입력의 텍스트(YYYY. MM. DD. 등 브라우저 로케일 포맷)는 숨기고,
      동일 위치에 YY-MM-DD 형식의 커스텀 표시를 오버레이한다. 달력 아이콘/피커는 그대로 네이티브 동작 유지. */
-  .ded-date-range input[type="date"]{color:transparent; -webkit-text-fill-color:transparent;}
+  .ded-date-range input[type="date"]{color:transparent; -webkit-text-fill-color:transparent; padding-right:26px;}
+  .ded-date-range input[type="date"]::-webkit-calendar-picker-indicator{
+    filter:invert(1) brightness(1.6);
+    opacity:0.85;
+    cursor:pointer;
+  }
   .ded-date-range .date-fmt{
     position:absolute; left:0; right:26px; top:0; bottom:0;
     display:flex; align-items:center; justify-content:center;
-    font-family:'Outfit',sans-serif; font-size:14px; color:var(--ded-text);
+    font-family:'Outfit',sans-serif; font-size:17px; color:var(--ded-text);
     pointer-events:none;
   }
   .ded-line-field input:focus{border-bottom-color:var(--ded-beige);}
@@ -316,9 +306,6 @@
     transition:background .15s ease, color .15s ease;
   }
   .ded-submit:hover{background:var(--ded-beige); color:var(--ded-bg-pure);}
-  .ded-footnote{
-    text-align:center; margin-top:14px; font-size:12.5px; color:var(--ded-muted-2);
-  }
 
   .ded-toast{
     position:fixed; left:50%; bottom:24px; transform:translate(-50%,12px);
@@ -332,10 +319,43 @@
   .ded-toast.show{opacity:1; transform:translate(-50%,0);}
   .ded-toast.err{border-color:var(--ded-red);}
 
+  /* ── 제출 완료 확인 팝업 ── */
+  .ded-confirm-overlay{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:400;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .ded-confirm-overlay.open{display:flex;}
+  .ded-confirm-card{
+    background:#111111; border:1px solid var(--ded-line); max-width:380px; width:100%;
+    padding:0; overflow:hidden;
+  }
+  .ded-confirm-quote{
+    padding:22px 24px 18px; border-bottom:1px solid var(--ded-line);
+  }
+  .ded-confirm-quote-text{
+    font-size:14.5px; line-height:1.6; color:var(--ded-text); text-align:center;
+  }
+  .ded-confirm-quote-meta{
+    margin-top:8px; font-size:12.5px; color:var(--ded-muted); text-align:right;
+  }
+  .ded-confirm-quote-meta .kw{color:var(--ded-beige);}
+  .ded-confirm-quote-meta .quote-person{cursor:pointer; text-decoration:underline; text-underline-offset:2px;}
+  .ded-confirm-quote-meta .quote-person:hover{color:var(--ded-beige);}
+  .ded-confirm-body{padding:22px 24px 24px; text-align:center;}
+  .ded-confirm-icon{font-size:30px; margin-bottom:10px;}
+  .ded-confirm-msg{font-size:15px; color:var(--ded-text); line-height:1.5; white-space:pre-line;}
+  .ded-confirm-close{
+    width:100%; margin-top:20px; padding:13px; border:1px solid var(--ded-beige); background:transparent;
+    color:var(--ded-beige); font-family:'Pretendard',sans-serif; font-size:14px; cursor:pointer;
+  }
+  .ded-confirm-close:hover{background:var(--ded-beige); color:var(--ded-bg-pure);}
+
   @media (max-width:400px){
     .ded-header h1{font-size:24px;}
     .ded-plate-chip{font-size:19px; padding:7px 13px;}
     .ded-slogan-mark, .ded-header-wordmark{width:76px;}
+    .ded-header-grid{gap:8px;}
+    .ded-header-eyebrow-block .ded-eyebrow{font-size:10.5px; letter-spacing:.1em;}
   }
 </style>
 </head>
@@ -354,25 +374,20 @@
 
   <div class="ded-header">
     <div class="ded-header-grid">
-      <div class="ded-header-left">
-        <div class="ded-logo-block">
-          <img class="ded-slogan-mark" id="sloganMark" alt="KSA">
-          <img class="ded-header-wordmark" id="headerWordmark" alt="GENESIS">
-        </div>
-        <div class="ded-logo-text">
-          <div class="ded-eyebrow">EXECUTIVE VEHICLE LOG</div>
-          <div class="ded-sub" id="modelName">G90 (G)3.5T 20"다이아몬드</div>
-        </div>
+      <div class="ded-logo-block">
+        <img class="ded-slogan-mark" id="sloganMark" alt="KSA">
+        <img class="ded-header-wordmark" id="headerWordmark" alt="GENESIS">
+      </div>
+      <div class="ded-header-eyebrow-block">
+        <div class="ded-eyebrow">EXECUTIVE</div>
+        <div class="ded-eyebrow">VEHICLE LOG</div>
       </div>
       <div class="ded-header-right">
         <h1 id="orgName">한국표준협회</h1>
         <div class="ded-plate-chip" id="plateChip">177호1673</div>
       </div>
     </div>
-    <div class="ded-quote-block">
-      <div class="ded-quote-text" id="quoteText"></div>
-      <div class="ded-quote-meta" id="quoteMeta"></div>
-    </div>
+    <div class="ded-sub" id="modelName">G90 (G)3.5T 20"다이아몬드</div>
   </div>
 
   <!-- 회장차 전용: 수행기사 / KSA직원 구분 -->
@@ -387,7 +402,7 @@
   <!-- 수행기사 전용: 출발/도착 QR 이중화 안내 배너 -->
   <div class="ded-qr-phase-banner" id="qrPhaseBanner" style="display:none;">
     <div class="phase-label" id="qrPhaseLabel">출발 등록</div>
-    <div class="phase-desc" id="qrPhaseDesc">시작 시각·근로 시작 시간이 현재 시각으로 자동입력됩니다. 시작 계기판을 입력 후 제출해주세요.</div>
+    <div class="phase-desc" id="qrPhaseDesc">시작 시각·근로 시작 시간이 현재 시각으로 자동입력됩니다. 시작거리를 입력 후 제출해주세요.</div>
   </div>
 
   <!-- 운행자 -->
@@ -429,19 +444,6 @@
       <div class="in-wrap"><input type="time" id="startTime" oninput="syncWorkTime('start')"></div>
     </div>
 
-    <div class="ded-line-field">
-      <label>시작 계기판</label>
-      <div class="in-wrap">
-        <input type="number" id="startOdo" inputmode="numeric" placeholder="0" oninput="calcDistance()">
-        <span class="ded-unit">km</span>
-      </div>
-    </div>
-
-    <div class="ded-line-field">
-      <label>행선지</label>
-      <div class="in-wrap"><input type="text" id="routeNote" placeholder="예시: 지역명, 업체명 등"></div>
-    </div>
-
     <div class="ded-line-field" id="endLocationRow">
       <label>도착지</label>
       <div class="in-wrap"><input type="text" id="endLocation" placeholder="예: 본사"></div>
@@ -453,9 +455,17 @@
     </div>
 
     <div class="ded-line-field">
-      <label>종료 계기판</label>
+      <label>시작거리</label>
       <div class="in-wrap">
-        <input type="number" id="endOdo" inputmode="numeric" placeholder="0" oninput="calcDistance()">
+        <input type="number" id="startOdo" inputmode="numeric" placeholder="0" style="text-align:right" oninput="calcDistance()">
+        <span class="ded-unit">km</span>
+      </div>
+    </div>
+
+    <div class="ded-line-field">
+      <label>종료거리</label>
+      <div class="in-wrap">
+        <input type="number" id="endOdo" inputmode="numeric" placeholder="0" style="text-align:right" oninput="calcDistance()">
         <span class="ded-unit">km</span>
       </div>
     </div>
@@ -463,6 +473,11 @@
     <div class="ded-readout">
       <span class="lbl">주행거리</span>
       <span class="val" id="distanceVal">0<span>km</span></span>
+    </div>
+
+    <div class="ded-line-field">
+      <label>행선지</label>
+      <div class="in-wrap"><input type="text" id="routeNote" placeholder="예시: 지역명, 업체명 등"></div>
     </div>
   </div>
 
@@ -490,9 +505,10 @@
     </div>
     <div class="ded-conditional" id="substituteCond">
       <div class="ded-line-field">
-        <label>사유</label>
-        <div class="in-wrap"><input type="text" id="substituteDriverReason" placeholder="예시: 고객사명, 행사명 / 미팅, 네트워킹 등"></div>
+        <label>사유<span class="req">*</span></label>
+        <div class="in-wrap"><input type="text" id="substituteDriverReason" placeholder="예: 수행기사 휴가"></div>
       </div>
+      <div class="err" id="substituteReasonErr">대리운전 사유를 입력해 주세요.</div>
     </div>
 
     <div class="ded-toggle-row">
@@ -576,12 +592,26 @@
       <button type="button" class="ded-edit-cancel" onclick="cancelEditMode()">취소</button>
     </div>
     <button class="ded-submit" id="submitBtnMain" onclick="submitLog()">운행기록 제출</button>
-    <div class="ded-footnote">제출 후에도 당일 중에는 관리자에게 수정 요청이 가능합니다</div>
   </div>
 
 </div>
 
 <div class="ded-toast" id="toast"></div>
+
+<!-- 제출 완료 확인 팝업: 최종 운행정보 입력 완료 후 표시, 상단에 명언 노출 -->
+<div class="ded-confirm-overlay" id="submitConfirmOverlay" onclick="if(event.target===this)closeSubmitConfirm()">
+  <div class="ded-confirm-card">
+    <div class="ded-confirm-quote">
+      <div class="ded-confirm-quote-text" id="confirmQuoteText"></div>
+      <div class="ded-confirm-quote-meta" id="confirmQuoteMeta"></div>
+    </div>
+    <div class="ded-confirm-body">
+      <div class="ded-confirm-icon">✓</div>
+      <div class="ded-confirm-msg" id="confirmMsgText">운행기록이 저장되었습니다.</div>
+      <button type="button" class="ded-confirm-close" onclick="closeSubmitConfirm()">확인</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // 관리자 선호 명언 DB (quotes_db.json 임베드)
@@ -750,6 +780,29 @@ function switchVehicle(key){
   loadMyRecords();
 }
 
+// 해당 차량의 가장 최근 운행기록 종료거리를 시작거리 입력창에 자동 반영
+// (회장차·수행기사 모드의 도착 등록 단계는 당일 출발 기록의 시작거리를 그대로 이어받으므로 제외)
+async function prefillStartOdoFromHistory(){
+  if(currentVehicleKey === 'hoegjang' && hoegjangMode === 'driver' && qrPhase === 'arrive') return;
+  if(editingIndex !== null) return;
+  const v = VEHICLES[currentVehicleKey];
+  const startOdoEl = document.getElementById('startOdo');
+  if(!startOdoEl || startOdoEl.value) return;
+  try{
+    const existing = await fbGet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`);
+    const trips = Array.isArray(existing) ? existing.filter(t=>t) : (existing && typeof existing==='object' ? Object.values(existing) : []);
+    if(!trips.length) return;
+    const sorted = [...trips].sort((a,b)=>(a.submittedAt||'').localeCompare(b.submittedAt||''));
+    const last = sorted[sorted.length-1];
+    if(last && last.endOdo != null && !startOdoEl.value){
+      startOdoEl.value = last.endOdo;
+      calcDistance();
+    }
+  }catch(e){
+    console.error('[전용차량] 이전 종료거리 조회 실패:', e);
+  }
+}
+
 function setHoegjangMode(mode){
   hoegjangMode = mode;
   document.getElementById('modeBtnDriver').classList.toggle('active', mode==='driver');
@@ -790,6 +843,7 @@ function refreshHoegjangLayout(){
     qrPhase = null;
     document.getElementById('qrPhaseBanner').style.display = 'none';
     document.getElementById('submitBtnMain').textContent = '운행기록 제출';
+    prefillStartOdoFromHistory();
   }
 }
 
@@ -829,7 +883,7 @@ async function checkQrPhase(){
 
 function enterDepartPhase(){
   document.getElementById('qrPhaseLabel').textContent = '🚗 출발 등록';
-  document.getElementById('qrPhaseDesc').textContent = '시작 시각·근로 시작 시간이 현재 시각으로 자동입력됩니다. 출발지·시작 계기판을 확인 후 제출해주세요.';
+  document.getElementById('qrPhaseDesc').textContent = '시작 시각·근로 시작 시간이 현재 시각으로 자동입력됩니다. 출발지·시작거리를 확인 후 제출해주세요.';
   document.getElementById('startTimeRow').style.display = 'flex';
   document.getElementById('startLocationRow').style.display = 'flex';
   document.getElementById('endTimeRow').style.display = 'none';
@@ -840,11 +894,12 @@ function enterDepartPhase(){
   document.getElementById('workStart').value = document.getElementById('startTime').value;
   document.getElementById('submitBtnMain').textContent = '출발 등록 저장';
   syncDateDisplays();
+  prefillStartOdoFromHistory();
 }
 
 function enterArrivePhase(){
   document.getElementById('qrPhaseLabel').textContent = '🏁 도착 등록';
-  document.getElementById('qrPhaseDesc').textContent = '종료 시각·근로 종료 시간이 현재 시각으로 자동입력됩니다. 도착지·종료 계기판을 확인 후 제출하면 오늘 운행이 완료됩니다.';
+  document.getElementById('qrPhaseDesc').textContent = '종료 시각·근로 종료 시간이 현재 시각으로 자동입력됩니다. 도착지·종료거리를 확인 후 제출하면 오늘 운행이 완료됩니다.';
   document.getElementById('startTimeRow').style.display = 'none';
   document.getElementById('startLocationRow').style.display = 'none';
   document.getElementById('endTimeRow').style.display = 'flex';
@@ -934,8 +989,19 @@ async function submitLog(){
   const isDepartArrivalFlow = currentVehicleKey === 'hoegjang' && hoegjangMode === 'driver' && qrPhase && editingIndex === null;
   const isDepartStep = isDepartArrivalFlow && qrPhase === 'depart';
 
-  // 대차 차량 사용 시 차량정보 필수 검증 (출발 등록 단계는 아직 해당 없음)
+  // 대리운전/대차 차량 사용 시 필수 입력 검증 (출발 등록 단계는 아직 해당 없음)
   if(!isDepartStep){
+    const subSwitch = document.getElementById('substituteSwitch');
+    const subCond = document.getElementById('substituteCond');
+    const subInput = document.getElementById('substituteDriverReason');
+    if(subSwitch.classList.contains('on') && !subInput.value.trim()){
+      subCond.classList.add('invalid');
+      subInput.focus();
+      showToast('대리운전 사유를 입력해주세요.', true);
+      return;
+    }
+    subCond.classList.remove('invalid');
+
     const vehSwitch = document.getElementById('substituteVehicleSwitch');
     const vehCond = document.getElementById('substituteVehicleCond');
     const vehInput = document.getElementById('substituteVehicle');
@@ -993,7 +1059,7 @@ async function submitLog(){
     return;
   }
   if(endOdo < startOdo){
-    showToast('종료 계기판 값이 시작 계기판보다 작습니다. 확인해주세요.', true);
+    showToast('종료거리 값이 시작거리보다 작습니다. 확인해주세요.', true);
     return;
   }
 
@@ -1051,10 +1117,10 @@ async function submitLog(){
       qrPhase = 'depart';
     }
 
-    showToast(wasEditing ? '운행기록이 수정되었습니다.' : (isDepartArrivalFlow ? '도착 등록이 완료되어 운행기록이 저장되었습니다.' : '운행기록이 저장되었습니다.'));
+    openSubmitConfirm(wasEditing ? '운행기록이 수정되었습니다.' : (isDepartArrivalFlow ? '도착 등록이 완료되어\n운행기록이 저장되었습니다.' : '운행기록이 저장되었습니다.'));
     editingIndex = null;
     document.getElementById('editBanner').style.display = 'none';
-    resetFormAfterSubmit();
+    resetFormAfterSubmit(trip.endOdo);
     refreshHoegjangLayout();
     loadMyRecords();
   }catch(e){
@@ -1066,11 +1132,15 @@ async function submitLog(){
   }
 }
 
-function resetFormAfterSubmit(){
+function resetFormAfterSubmit(carryStartOdo){
   ['startOdo','endOdo','routeNote','substituteVehicle','substituteDriverReason','fuelCost','startLocation','endLocation','startTime','endTime','workStart','workEnd','overtimeStart','overtimeEnd'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.value = '';
   });
+  // 이전에 입력한 종료거리를 다음 운행의 시작거리로 자동 반영
+  if(carryStartOdo !== undefined && carryStartOdo !== null){
+    document.getElementById('startOdo').value = carryStartOdo;
+  }
   document.getElementById('distanceVal').innerHTML = '0<span>km</span>';
   document.getElementById('workTotalVal').textContent = '–';
   document.getElementById('waitPeriodsList').innerHTML = '';
@@ -1259,26 +1329,35 @@ async function sendMaintenanceRequest(){
   setTimeout(()=>toast.classList.remove('show','err'), 3200);
 }
 
-// ── 명언 영역 (quotes_db.json 기반, 페이지 로드 시 1건 무작위 선택) ──
-function pickRandomQuote(){
+// ── 명언 영역 (quotes_db.json 기반) — 운행기록 제출 완료 팝업 상단에 표시 ──
+function renderRandomQuoteInto(textElId, metaElId){
   const list = QUOTES_DB.quotes;
   const q = list[Math.floor(Math.random() * list.length)];
-  const quoteTextEl = document.getElementById('quoteText');
+  const quoteTextEl = document.getElementById(textElId);
   // 출처 미확인 note는 화면에 노출하지 않는다 (내부 검증용 메타데이터일 뿐 사용자 노출용 아님)
   quoteTextEl.innerHTML = `“${q.quote}”`;
-  quoteTextEl.onclick = null;
-  quoteTextEl.style.cursor = 'default';
   const kw = (q.keywords||[]).join(', ');
-  const metaEl = document.getElementById('quoteMeta');
+  const metaEl = document.getElementById(metaElId);
+  const personSpanId = metaElId + 'PersonName';
   metaEl.innerHTML =
-    `<span class="kw">[${kw}]</span> ${q.nationality} · <span class="quote-person" id="quotePersonName">${q.person}</span> (${q.life})`;
+    `<span class="kw">[${kw}]</span> ${q.nationality} · <span class="quote-person" id="${personSpanId}">${q.person}</span> (${q.life})`;
   // 인물명 클릭 시에만 해당 인물에 대한 구글 검색 (명언 문구 자체는 검색하지 않음)
-  const personEl = document.getElementById('quotePersonName');
+  const personEl = document.getElementById(personSpanId);
   if(personEl){
     personEl.onclick = function(){
       window.open('https://www.google.com/search?q=' + encodeURIComponent(q.person), '_blank', 'noopener');
     };
   }
+}
+
+// 운행기록 제출 완료 확인 팝업: 상단에 명언을 새로 뽑아 표시하고 안내 메시지를 보여준다
+function openSubmitConfirm(message){
+  renderRandomQuoteInto('confirmQuoteText', 'confirmQuoteMeta');
+  document.getElementById('confirmMsgText').textContent = message || '운행기록이 저장되었습니다.';
+  document.getElementById('submitConfirmOverlay').classList.add('open');
+}
+function closeSubmitConfirm(){
+  document.getElementById('submitConfirmOverlay').classList.remove('open');
 }
 
 // GENESIS 워드마크(화이트, 비상업적 참고용 데모 자산) — 어두운 배경 헤더 전용, 임의 변형 금지 원칙 준수
@@ -1290,7 +1369,6 @@ document.getElementById('sloganMark').src = KSA_SLOGAN_MARK;
 // 초기화
 initDates();
 switchVehicle('hoegjang');
-pickRandomQuote();
 applyQrLock();
 </script>
 

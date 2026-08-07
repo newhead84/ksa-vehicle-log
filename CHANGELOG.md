@@ -4,6 +4,19 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 형식: 각 항목은 `요청내용 요약 | 변경: 함수/영역`
 
+## 2026-08-07 (4)
+
+- 전용차량 기사님 입력화면 UI 재정비 및 계약정보 오류 수정 일괄 반영.
+  ① 헤더 레이아웃 재구성: 슬로건+로고(좌) / EXECUTIVE·VEHICLE LOG 2줄 라벨(중) / 사업장명·차량번호칩(우) 3열 그리드로 변경, 모델명은 그리드 하단 전체너비 줄로 이동.
+  ② 운행기간 날짜: 오버레이 표시 폰트 14px→17px(다른 입력항목과 동일)로 확대, `::-webkit-calendar-picker-indicator`에 `filter:invert(1)` 적용해 다크 배경에서 보이지 않던 달력 아이콘 노출.
+  ③ 운행정보 필드 순서 개편: 출발지→시작시각→도착지→종료시각→시작거리(우측정렬)→종료거리(우측정렬)→주행거리(자동)→행선지 순으로 재배치, "시작 계기판"/"종료 계기판" 라벨 및 안내문구를 "시작거리"/"종료거리"로 통일.
+  ④ 이전 종료거리 자동연동: `prefillStartOdoFromHistory()` 신규 — Firebase에 저장된 해당 차량의 가장 최근 운행기록 종료거리를 다음 입력 시작거리에 자동 채움(차량/모드 전환, 회장차 새 출발 등록 시점에 호출). 제출 직후에는 네트워크 재조회 없이 방금 제출한 `trip.endOdo`를 바로 다음 시작거리로 반영(`resetFormAfterSubmit(carryStartOdo)`로 시그니처 변경).
+  ⑤ 대리운전 사유 필수화: 토글 on 시 사유 미입력이면 제출 차단 + 인라인 에러 노출(대차 차량 검증과 동일 패턴), placeholder를 좁은 입력창에서 잘리지 않도록 축약.
+  ⑥ "제출 후에도 당일 중 관리자 수정요청 가능" 안내문구 삭제.
+  ⑦ 전용차량 계약정보 오류 수정: 잘못 반영되어 있던 월대여료·계약시작일을 설계 확정본 값으로 복구(회장 2,198,000원/2024-11-21, 전무이사 2명 각 1,350,000원/2024-08-28·2024-12-30). 단, Firebase에 이미 잘못된 값이 저장되어 있다면 관리자 대시보드 "계약정보 관리" 모달에서 재저장 필요.
+  ⑧ 명언 영역을 헤더에서 제거하고, 최종 운행기록 제출 완료 시 뜨는 확인 팝업(`#submitConfirmOverlay`) 상단으로 이동 — 제출할 때마다 명언을 새로 무작위 선택해 표시, 인물명 클릭 시 구글 검색은 기존과 동일하게 유지. 기존 `pickRandomQuote()`는 `renderRandomQuoteInto()` + `openSubmitConfirm()`/`closeSubmitConfirm()`으로 재구성.
+  | 변경: dedicated-driver-input.html(CSS 헤더 그리드·date-fmt·calendar-picker-indicator·ded-confirm-* 신규, HTML 헤더 구조/TRIP 필드 순서/대리운전 에러 마크업/제출확인 팝업 마크업 변경, JS resetFormAfterSubmit()/switchVehicle()/refreshHoegjangLayout()/enterDepartPhase()/submitLog() 수정, prefillStartOdoFromHistory()/renderRandomQuoteInto()/openSubmitConfirm()/closeSubmitConfirm() 신규, pickRandomQuote() 삭제), dedicated-admin-dashboard.html(VEHICLES 계약정보 기본값 수정)
+
 ## 2026-08-07 (3)
 
 - 전용차량 두 화면 모바일 최적화 및 다수 버그 수정 일괄 반영.
