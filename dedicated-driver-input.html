@@ -52,9 +52,9 @@
     text-transform:uppercase;
   }
   .ded-shell{max-width:520px;margin:0 auto;}
-  .ded-header-wordmark{display:block; width:96px; height:auto;}
-  .ded-slogan-mark{display:block; width:96px; height:auto; margin-bottom:6px;}
-  .ded-logo-block{display:flex; flex-direction:column; align-items:flex-start;}
+  .ded-header-wordmark{display:block; width:78px; height:auto;}
+  .ded-slogan-mark{display:block; width:78px; height:auto; margin-bottom:6px;}
+  .ded-logo-block{display:flex; flex-direction:column; align-items:flex-start; flex:0 0 auto;}
 
   /* ── 데모 전용 차량 스위처 (실서비스에서는 QR ?plate= 파라미터로 잠금, 이 UI는 제거) ── */
   .ded-demo-bar{
@@ -75,15 +75,17 @@
     padding:22px 22px 18px;
     border-bottom:1px solid var(--ded-line);
   }
-  .ded-header-top{
+  .ded-header-row{
     display:flex; align-items:flex-end; justify-content:space-between;
-    gap:14px; flex-wrap:nowrap;
+    gap:10px; flex-wrap:nowrap;
   }
-  .ded-header-eyebrow-block{display:flex; flex-direction:column; gap:2px; flex:0 0 auto;}
+  .ded-header-eyebrow-block{
+    display:flex; flex-direction:column; gap:2px; flex:1 1 auto;
+    text-align:center; min-width:0; padding:0 6px;
+  }
   .ded-header-eyebrow-block .ded-eyebrow{margin-bottom:0;}
-  .ded-header-bottom{
-    display:flex; align-items:flex-end; justify-content:space-between;
-    gap:14px; margin-top:20px;
+  .ded-header-model{
+    font-size:13.5px; color:var(--ded-muted-2); margin-top:14px;
   }
   .ded-header-right{display:flex; flex-direction:column; align-items:flex-end; text-align:right; min-width:0; flex:0 0 auto;}
   .ded-header h1{
@@ -93,11 +95,6 @@
     margin:0 0 8px;
     letter-spacing:0;
     color:var(--ded-muted);
-  }
-  .ded-header .ded-sub{
-    font-size:13.5px;
-    color:var(--ded-muted);
-    flex:1 1 auto; min-width:0;
   }
   .ded-plate-chip{
     display:inline-flex; align-items:center; gap:6px;
@@ -335,6 +332,9 @@
   }
   .ded-total-line .val{font-family:'Outfit',sans-serif; color:var(--ded-beige); font-size:18px;}
 
+  /* ── 도착 등록 단계: 출발 시 입력한 근로시작 시각을 읽기전용으로 표시 ── */
+  .ded-readonly-input{opacity:0.62; pointer-events:none;}
+
   /* ── 제출 ── */
   .ded-submit-wrap{padding:24px 22px 40px;}
   .ded-submit{
@@ -396,8 +396,8 @@
   @media (max-width:400px){
     .ded-header h1{font-size:13px;}
     .ded-plate-chip{font-size:19px; padding:7px 13px;}
-    .ded-slogan-mark, .ded-header-wordmark{width:76px;}
-    .ded-header-top, .ded-header-bottom{gap:8px;}
+    .ded-slogan-mark, .ded-header-wordmark{width:62px;}
+    .ded-header-row{gap:8px;}
     .ded-header-eyebrow-block .ded-eyebrow{font-size:10.5px; letter-spacing:.1em;}
   }
 </style>
@@ -416,7 +416,7 @@
 <div class="ded-shell">
 
   <div class="ded-header">
-    <div class="ded-header-top">
+    <div class="ded-header-row">
       <div class="ded-logo-block">
         <img class="ded-slogan-mark" id="sloganMark" alt="KSA">
         <img class="ded-header-wordmark" id="headerWordmark" alt="GENESIS">
@@ -425,14 +425,12 @@
         <div class="ded-eyebrow">EXECUTIVE</div>
         <div class="ded-eyebrow">VEHICLE LOG</div>
       </div>
-    </div>
-    <div class="ded-header-bottom">
-      <div class="ded-sub" id="modelName">G90 (G)3.5T 20"다이아몬드</div>
       <div class="ded-header-right">
         <h1 id="orgName">회장</h1>
         <div class="ded-plate-chip" id="plateChip">177호1673</div>
       </div>
     </div>
+    <div class="ded-header-model" id="modelName">G90 (G)3.5T 20"다이아몬드</div>
   </div>
 
   <!-- 회장차 전용: 수행기사 / KSA직원 구분 -->
@@ -553,21 +551,6 @@
     </div>
   </div>
 
-  <!-- 점검요청 -->
-  <div class="ded-section">
-    <div class="ded-eyebrow">VEHICLE STATUS</div>
-    <button type="button" class="ded-maint-btn" id="maintBtn" onclick="toggleMaintPanel()">⚠ 점검요청</button>
-    <div class="ded-conditional" id="maintPanel">
-      <div class="ded-line-field">
-        <label>사유<span class="req">*</span></label>
-        <div class="in-wrap"><input type="text" id="maintReason" placeholder="예시: 이상 소음, 경고등 점등 등"></div>
-      </div>
-      <div class="err" id="maintErr">점검 사유를 입력해 주세요.</div>
-      <button type="button" class="ded-add-btn" onclick="sendMaintenanceRequest()">담당자에게 메일 발송</button>
-    </div>
-    <div class="ded-maint-hotline">급한 정비/사고 등은 롯데렌터카 대표번호 <a href="tel:15881230">1588-1230</a>으로 직접 접수하실 수도 있습니다.</div>
-  </div>
-
   <!-- 대리운전 / 대차 / 주유 -->
   <div class="ded-section">
     <div class="ded-eyebrow">ETC</div>
@@ -615,17 +598,17 @@
         <label>근로 시작</label>
         <div class="in-wrap"><input type="time" id="workStart" oninput="calcWorkTotal()"></div>
       </div>
-      <div class="ded-line-field">
+      <div class="ded-line-field" id="workEndRow">
         <label>근로 종료</label>
         <div class="in-wrap"><input type="time" id="workEnd" oninput="calcWorkTotal()"></div>
       </div>
-      <div class="ded-total-line">
+      <div class="ded-total-line" id="workTotalRow">
         <span>총 근로시간</span>
         <span class="val" id="workTotalVal">–</span>
       </div>
     </div>
 
-    <div class="ded-section">
+    <div class="ded-section" id="standbyRestSection">
       <div class="ded-eyebrow">STANDBY / REST</div>
       <div style="font-size:14px;color:var(--ded-muted);margin:6px 0 0;">대기시간</div>
       <div class="ded-period-list" id="waitPeriodsList"></div>
@@ -636,7 +619,7 @@
       <button type="button" class="ded-add-btn" onclick="addPeriod('restPeriodsList')">+ 휴게시간 구간 추가</button>
     </div>
 
-    <div class="ded-section">
+    <div class="ded-section" id="overtimeSection">
       <div class="ded-eyebrow">OVERTIME (심야, 해당 시만)</div>
       <div class="ded-line-field">
         <label>시작</label>
@@ -659,6 +642,21 @@
     </div>
   </div>
 
+  <!-- 점검요청: 제출 직전 맨 아래로 배치 -->
+  <div class="ded-section">
+    <div class="ded-eyebrow">VEHICLE STATUS</div>
+    <button type="button" class="ded-maint-btn" id="maintBtn" onclick="toggleMaintPanel()">⚠ 점검요청</button>
+    <div class="ded-conditional" id="maintPanel">
+      <div class="ded-line-field">
+        <label>사유<span class="req">*</span></label>
+        <div class="in-wrap"><input type="text" id="maintReason" placeholder="예시: 이상 소음, 경고등 점등 등"></div>
+      </div>
+      <div class="err" id="maintErr">점검 사유를 입력해 주세요.</div>
+      <button type="button" class="ded-add-btn" onclick="sendMaintenanceRequest()">담당자에게 메일 발송</button>
+    </div>
+    <div class="ded-maint-hotline">급한 정비/사고 등은 롯데렌터카 대표번호 <a href="tel:15881230">1588-1230</a>으로 직접 접수하실 수도 있습니다.</div>
+  </div>
+
   <div class="ded-submit-wrap">
     <div class="ded-edit-banner" id="editBanner" style="display:none;">
       <span id="editBannerText">기존 기록을 수정하는 중입니다.</span>
@@ -674,7 +672,7 @@
 <!-- 제출 완료 확인 팝업: 최종 운행정보 입력 완료 후 표시, 상단에 명언 노출 -->
 <div class="ded-confirm-overlay" id="submitConfirmOverlay" onclick="if(event.target===this)closeSubmitConfirm()">
   <div class="ded-confirm-card">
-    <div class="ded-confirm-quote">
+    <div class="ded-confirm-quote" id="confirmQuoteBlock">
       <div class="ded-confirm-quote-text" id="confirmQuoteText"></div>
       <div class="ded-confirm-quote-meta" id="confirmQuoteMeta"></div>
     </div>
@@ -942,6 +940,14 @@ async function refreshHoegjangLayout(){
     document.getElementById('startOdoRow').style.display = 'flex';
     document.getElementById('endOdoRow').style.display = 'flex';
     document.getElementById('distanceRow').style.display = 'flex';
+    // 수행기사(회장차) 출발/도착 2단계 전용으로 숨겼던 항목들을 원상 복구(KSA직원·전무이사 차량·기존 기록 수정은 한 화면에 모두 노출)
+    document.getElementById('workEndRow').style.display = 'flex';
+    document.getElementById('workTotalRow').style.display = 'flex';
+    document.getElementById('standbyRestSection').style.display = 'block';
+    document.getElementById('overtimeSection').style.display = 'block';
+    const workStartInput = document.getElementById('workStart');
+    workStartInput.readOnly = false;
+    workStartInput.classList.remove('ded-readonly-input');
     document.getElementById('submitBtnMain').textContent = editingIndex!==null ? '수정 저장' : '운행기록 제출';
   }
   prefillStartOdoFromHistory();
@@ -993,6 +999,23 @@ function renderDriverPhaseUI(openTrip){
   document.getElementById('endOdoRow').style.display = driverPhase==='end' ? 'flex' : 'none';
   document.getElementById('distanceRow').style.display = driverPhase==='end' ? 'flex' : 'none';
 
+  // 출발 등록 단계에서는 입력할 수 없는 항목(행선지·근로종료·대기시간·휴게시간·오버타임)은
+  // 도착 등록 단계에서만 노출한다. 근로시작은 출발 등록 시 입력한 값을 읽기전용으로 이어받아 표시.
+  document.getElementById('routeNoteRow').style.display = driverPhase==='end' ? 'flex' : 'none';
+  document.getElementById('workEndRow').style.display = driverPhase==='end' ? 'flex' : 'none';
+  document.getElementById('workTotalRow').style.display = driverPhase==='end' ? 'flex' : 'none';
+  document.getElementById('standbyRestSection').style.display = driverPhase==='end' ? 'block' : 'none';
+  document.getElementById('overtimeSection').style.display = driverPhase==='end' ? 'block' : 'none';
+  const workStartInput = document.getElementById('workStart');
+  if(driverPhase==='end'){
+    if(openTrip && !workStartInput.value) workStartInput.value = openTrip.workStart || '';
+    workStartInput.readOnly = true;
+    workStartInput.classList.add('ded-readonly-input');
+  } else {
+    workStartInput.readOnly = false;
+    workStartInput.classList.remove('ded-readonly-input');
+  }
+
   const summary = document.getElementById('startPhaseSummary');
   if(driverPhase==='end' && openTrip){
     summary.style.display = 'block';
@@ -1006,6 +1029,7 @@ function renderDriverPhaseUI(openTrip){
   }
 
   document.getElementById('submitBtnMain').textContent = driverPhase==='end' ? '도착 등록' : '출발 등록';
+  calcWorkTotal();
 }
 
 function initDates(){
@@ -1360,6 +1384,13 @@ function startEditRecord(idx){
   document.getElementById('endOdoRow').style.display = 'flex';
   document.getElementById('distanceRow').style.display = 'flex';
   document.getElementById('chairmanOnlyBlock').style.display = v.chairman ? 'block' : 'none';
+  document.getElementById('routeNoteRow').style.display = 'flex';
+  document.getElementById('workEndRow').style.display = 'flex';
+  document.getElementById('workTotalRow').style.display = 'flex';
+  document.getElementById('standbyRestSection').style.display = 'block';
+  document.getElementById('overtimeSection').style.display = 'block';
+  document.getElementById('workStart').readOnly = false;
+  document.getElementById('workStart').classList.remove('ded-readonly-input');
 
   document.getElementById('driverName').value = t.driver || '';
   document.getElementById('startDate').value = t.isoDateFrom || t.dateFrom || '';
@@ -1500,8 +1531,15 @@ function renderRandomQuoteInto(textElId, metaElId){
 }
 
 // 운행기록 제출 완료 확인 팝업: 상단에 명언을 새로 뽑아 표시하고 안내 메시지를 보여준다
+// 단, 수행기사 페이지(회장차 수행기사 모드로 제출하는 경우)에는 명언을 노출하지 않는다.
 function openSubmitConfirm(message){
-  renderRandomQuoteInto('confirmQuoteText', 'confirmQuoteMeta');
+  const quoteBlock = document.getElementById('confirmQuoteBlock');
+  if(isChauffeurMode()){
+    quoteBlock.style.display = 'none';
+  } else {
+    quoteBlock.style.display = '';
+    renderRandomQuoteInto('confirmQuoteText', 'confirmQuoteMeta');
+  }
   document.getElementById('confirmMsgText').textContent = message || '운행기록이 저장되었습니다.';
   document.getElementById('submitConfirmOverlay').classList.add('open');
 }
