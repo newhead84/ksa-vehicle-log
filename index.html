@@ -54,6 +54,13 @@
   resolveLateEntryInsert()(신규), notifyLateEntryAdjustment()(신규), doSubmit()(트립 저장 시 체인
   겹침 판정·보정 호출, 알림 호출), openVehicle()(운행기록 표 자동보정/확인필요 배지),
   CSS(.lateadjust-badge/.lateconflict-badge 신규)
+  [2026-08-07] 전용차량(회장차·전무차 2대) 운행정보 대시보드/기사님 입력화면 신규 연동. 두 화면은
+  공용차량 시스템과 완전히 분리된 별도 디자인 언어(제네시스 톤 블랙·베이지, DEDICATED-VEHICLE-DESIGN-GUIDE.md
+  참조)로 제작되어 index.html과 별개 파일(dedicated-admin-dashboard.html, dedicated-driver-input.html)로
+  유지하고, index.html에는 관리자 상단 툴바 진입 버튼만 추가(새 창으로 열림). 열람전용 URL(전체/지역별)에는
+  화이트리스트 방식(VIEWER_ALLOWED_TOOLBAR_BTN_IDS)에 의해 신규 버튼이 자동으로 노출되지 않음(추가 조치
+  불필요) | 변경: HTML(#dedicatedVehicleBtn 신규), 신규 파일 dedicated-admin-dashboard.html/
+  dedicated-driver-input.html 추가
   [2026-08-06] "사업장별 차량 가동율 운행거리 비교차트" 섹션이 접힌 상태에서도 헤더의 가동율/운행거리·
   사업장별/차량별 전환 버튼이 계속 노출되던 버그 수정: 섹션이 접혔을 때는 해당 버튼들도 함께 숨기고
   펼쳤을 때만 노출되도록 변경 | 변경: CSS(.section-head:has(+ .section-body.collapsed) .month-controls 신규)
@@ -1209,6 +1216,7 @@
       <input type="file" id="restoreInput" accept=".json" style="display:none;" onchange="restoreData(this)">
       <button class="reset-btn" id="copyReadonlyUrlBtn" onclick="copyReadonlyUrl()" style="border-color:#7eb138;color:#7eb138;">🔗 열람전용URL</button>
       <button class="reset-btn" id="regionUrlBtn" onclick="openRegionUrlModal()" style="border-color:#7eb138;color:#7eb138;">🔗 지역별 열람URL</button>
+      <button class="reset-btn" id="dedicatedVehicleBtn" onclick="window.open('dedicated-admin-dashboard.html','_blank')" title="회장차·전무차(전용차량) 운행정보 대시보드를 새 창으로 엽니다" style="border-color:#5E4630;color:#5E4630;">🚘 전용차량 대시보드</button>
       <button class="reset-btn" id="logoutBtn" onclick="exitToRole()">로그아웃</button>
     </div>
   </div>
