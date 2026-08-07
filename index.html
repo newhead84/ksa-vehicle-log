@@ -35,6 +35,25 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-07] 위 늦은입력 자동보정 로직에 날짜 검증 보강: 시작거리가 겹치는 것(수치 조건)만으로는
+  자동보정하지 않고, A의 운행기간 마지막 날(dateTo, 없으면 dateFrom)이 B의 시작일(isoDate)보다
+  이후이면(=시간 순서가 맞지 않으면) 자동보정 대상에서 제외하고 "확인필요" 경로로 전환하도록 수정.
+  시작거리 우연 일치 + 날짜 역전 조합(오타 등 다른 오류 가능성)에 자동보정이 잘못 실행되는 것을
+  방지 | 변경: resolveLateEntryInsert()(dateOrderOk 조건 추가), notifyLateEntryAdjustment()/
+  openVehicle()(확인필요 안내문구를 거리역전·날짜순서 두 사유 모두 아우르도록 일반화)
+  [2026-08-07] 이전 사용자(A)가 QR 운행정보 입력을 깜박해 다음 사용자(B)가 먼저 입력하면 두 사람분
+  거리가 B의 기록 한 건에 합산되는 문제를 자동으로 바로잡는 기능 추가. 평균거리 비교 방식은 공용차량
+  특성상(사용자마다 운행거리가 제각각) 의미가 없다고 판단해 채택하지 않고, 실제 시작/종료거리 체인이
+  겹치는 지점을 직접 찾아 보정하는 방식으로 구현: ① A가 뒤늦게 입력하면, A의 시작거리와 동일한
+  시작거리를 가진 기존 B의 기록을 찾아 B의 시작거리를 A의 종료거리로 자동 갱신하고 B의 주행거리를
+  재계산(원본 시작거리·주행거리는 originalStartOdo/originalDistance로 보존 — 무손실 원칙), ② 자동
+  보정 시 B의 기록에 "🔧 자동보정됨" 배지 표시(마우스오버 시 보정 전 값 확인), ③ A의 종료거리가 B의
+  종료거리 이상이라 자동 보정 시 거리가 역전되는 경우는 값을 그대로 두고 A의 기록에 "⚠ 확인필요" 배지만
+  표시(관리자 수동 확인 유도), ④ 자동보정 또는 확인필요 건이 발생하면 기존 점검요망 알림과 별도의
+  EmailJS 이메일을 관리자에게 발송(어느 기록이 어떻게 보정됐는지 상세 포함) | 변경:
+  resolveLateEntryInsert()(신규), notifyLateEntryAdjustment()(신규), doSubmit()(트립 저장 시 체인
+  겹침 판정·보정 호출, 알림 호출), openVehicle()(운행기록 표 자동보정/확인필요 배지),
+  CSS(.lateadjust-badge/.lateconflict-badge 신규)
   [2026-08-06] "사업장별 차량 가동율 운행거리 비교차트" 섹션이 접힌 상태에서도 헤더의 가동율/운행거리·
   사업장별/차량별 전환 버튼이 계속 노출되던 버그 수정: 섹션이 접혔을 때는 해당 버튼들도 함께 숨기고
   펼쳤을 때만 노출되도록 변경 | 변경: CSS(.section-head:has(+ .section-body.collapsed) .month-controls 신규)
@@ -733,6 +752,8 @@
     .modal:has(.trip-table){width:min(1220px,92vw);}
   }
   .flag-bad-status{color:var(--bad);font-weight:600;}
+  .lateadjust-badge{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:10px;background:var(--muted);color:#fff;font-size:10px;font-weight:700;white-space:nowrap;vertical-align:middle;cursor:help;}
+  .lateconflict-badge{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:10px;background:var(--bad);color:#fff;font-size:10px;font-weight:700;white-space:nowrap;vertical-align:middle;cursor:help;}
 
   /* ===== 운행기록 필터 탭 + 더보기(페이지네이션) ===== */
   .trip-filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
@@ -3851,7 +3872,7 @@ function openVehicle(plate){
           </td>
           <td class="mono" data-label="시작거리"><span class="view-val">${t.startOdo!=null&&t.startOdo!==''?Number(t.startOdo).toLocaleString():''}</span><input class="edit-inp mono" value="${t.startOdo!=null&&t.startOdo!==''?Number(t.startOdo).toLocaleString():''}" data-f="startOdo" oninput="formatOdoInput(this)" style="display:none;width:65px;"></td>
           <td class="mono" data-label="종료거리"><span class="view-val">${t.endOdo!=null&&t.endOdo!==''?Number(t.endOdo).toLocaleString():''}</span><input class="edit-inp mono" value="${t.endOdo!=null&&t.endOdo!==''?Number(t.endOdo).toLocaleString():''}" data-f="endOdo" oninput="formatOdoInput(this)" style="display:none;width:65px;"></td>
-          <td class="mono" data-label="거리(누계, 자동계산)"><span class="view-val dist-view">${t.distance!=null&&t.distance!==''?Number(t.distance).toLocaleString():''}</span><input class="edit-inp mono dist-inp" value="${t.distance!=null&&t.distance!==''?Number(t.distance).toLocaleString():''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1" title="종료거리-시작거리로 자동계산되며 직접 수정할 수 없습니다."></td>
+          <td class="mono" data-label="거리(누계, 자동계산)"><span class="view-val dist-view">${t.distance!=null&&t.distance!==''?Number(t.distance).toLocaleString():''}</span>${t.lateAdjustedAt?`<span class="lateadjust-badge" title="늦게 입력된 다른 기록으로 인해 시작거리가 자동 보정되었습니다. (보정 전 시작거리 ${t.originalStartOdo!=null?Number(t.originalStartOdo).toLocaleString():'?'}km / 보정 전 주행거리 ${t.originalDistance!=null?Number(t.originalDistance).toLocaleString():'?'}km / 보정일시 ${new Date(t.lateAdjustedAt).toLocaleString('ko-KR')})">🔧 자동보정됨</span>`:''}${t.lateEntryConflict?`<span class="lateconflict-badge" title="같은 시작거리를 가진 다른 기록이 이미 있어 순서가 겹칩니다. 거리 역전 또는 운행일자 순서가 맞지 않아 자동 보정하지 않고 값을 그대로 두었습니다. 관리자가 직접 두 기록을 확인해 주세요.">⚠ 확인필요</span>`:''}<input class="edit-inp mono dist-inp" value="${t.distance!=null&&t.distance!==''?Number(t.distance).toLocaleString():''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1" title="종료거리-시작거리로 자동계산되며 직접 수정할 수 없습니다."></td>
           <td data-label="제출자"><span class="view-val" style="color:var(--accent);font-size:11px;">${escapeHtml(t.submitter||'')}</span></td>
           <td data-label="운행자"><span class="view-val">${escapeHtml(t.user||'')}</span><input class="edit-inp" value="${escapeHtml(t.user||'')}" data-f="user" style="display:none;width:60px;"></td>
           <td data-label="행선지"><span class="view-val">${escapeHtml(t.dest||'')}</span><input class="edit-inp" value="${escapeHtml(t.dest||'')}" data-f="dest" style="display:none;width:90px;"></td>
@@ -6071,6 +6092,73 @@ async function submitDirectInput(){
   showSubmitConfirm(submitter, plate, rows);
 }
 
+// 이전 사용자(A)가 QR 입력을 깜박한 상태에서 다음 사용자(B)가 먼저 입력하면, B의 시작거리는
+// 실제 A의 종료거리가 아니라 그 이전(P)의 종료거리로 기록된다. 이후 A가 뒤늦게 입력하면 A의
+// 시작거리(=P의 종료거리)가 이미 저장되어 있는 B의 시작거리와 그대로 겹치게 되는데, 이 함수는
+// 그 겹침을 찾아 B의 시작거리를 A의 종료거리로 자동 갱신하고 B의 주행거리를 재계산한다.
+// (평균거리 비교 방식이 아니라, 실제 시작/종료거리 체인이 어긋난 지점을 정확히 찾아 보정하는 방식)
+// 자동보정은 시작거리가 겹치는 것(수치 조건)만으로는 충분하지 않고, A의 운행기간이 B보다
+// 앞서거나 같아야(시간 조건) 실행한다 — 두 조건을 모두 만족해야 "누락 후 사후입력" 상황으로 보고,
+// 시작거리만 우연히 같고 날짜 순서가 맞지 않는 경우(오타 등 다른 오류 가능성)는 자동 보정하지 않는다.
+// 반환: null(겹침 없음) | {adjusted:true, targetTrip, oldStart, oldDistance}(자동 보정됨)
+//       | {adjusted:false, conflict:true, targetTrip}(겹침은 있으나 ① A의 종료거리가 B의 종료거리
+//         이상이라 보정 시 거리가 역전/음수가 되거나, ② A의 운행기간이 B보다 나중이라 시간 순서가
+//         맞지 않는 경우 — 값은 그대로 두고 관리자 확인만 요청)
+function resolveLateEntryInsert(plate, row){
+  if(row.isPersonal || row.isCommute) return null; // 개인사용/출퇴근은 체인 대상에서 제외
+  const trips = data.vehicles[plate]?.trips || [];
+  const rowStart = Number(row.startOdo);
+  const rowEnd = Number(row.endOdo);
+  const collide = trips.find(t => !t.isPersonal && !t.isCommute && Number(t.startOdo)===rowStart);
+  if(!collide) return null;
+  // 날짜 조건: A의 운행기간 마지막 날(dateTo, 없으면 dateFrom)이 B의 시작일(isoDate)보다
+  // 이후이면 시간 순서가 맞지 않는 것으로 보고 자동보정 대상에서 제외한다.
+  const rowDateTo = row.dateTo || row.dateFrom || '';
+  const collideDateFrom = collide.isoDate || '';
+  const dateOrderOk = !rowDateTo || !collideDateFrom || rowDateTo <= collideDateFrom;
+  if(rowEnd < Number(collide.endOdo) && dateOrderOk){
+    const oldStart = collide.startOdo, oldDistance = collide.distance;
+    // 최초 원본값은 한 번만 보존(이미 보정 이력이 있는 기록이 재차 보정되는 경우를 대비)
+    if(collide.originalStartOdo==null) collide.originalStartOdo = oldStart;
+    if(collide.originalDistance==null) collide.originalDistance = oldDistance;
+    collide.startOdo = rowEnd;
+    collide.distance = Number(collide.endOdo) - rowEnd;
+    collide.lateAdjustedAt = new Date().toISOString();
+    return {adjusted:true, targetTrip:collide, oldStart, oldDistance};
+  }
+  return {adjusted:false, conflict:true, targetTrip:collide};
+}
+
+// 늦은입력 자동보정(또는 자동보정 불가로 수동확인이 필요한 겹침)이 있으면 관리자에게 이메일 알림 발송 (EmailJS)
+// - 정상 제출 흐름을 막지 않도록 실패해도 조용히 콘솔에만 기록합니다.
+async function notifyLateEntryAdjustment(plate, branch, submitter, adjustments, conflicts){
+  if((!adjustments||!adjustments.length) && (!conflicts||!conflicts.length)) return;
+  if(!window.emailjs || !EMAILJS_PUBLIC_KEY || EMAILJS_PUBLIC_KEY.startsWith('YOUR_')){
+    console.warn('[늦은입력 보정 알림] EmailJS 설정이 완료되지 않아 이메일을 발송하지 않았습니다. (index.html 상단 EMAILJS_* 값을 설정하세요)');
+    return;
+  }
+  const adjLines = (adjustments||[]).map(a=>
+    `- ${submitter}님이 뒤늦게 입력: ${a.row.dateFrom||''} / ${Number(a.row.startOdo||0).toLocaleString()}→${Number(a.row.endOdo||0).toLocaleString()}km\n  → 기존 "${a.target.submitter||''}"님 기록(${a.target.isoDate||''}, ${a.target.dest||'-'})의 시작거리를 ${Number(a.oldStart||0).toLocaleString()}km → ${Number(a.target.startOdo||0).toLocaleString()}km로 자동 보정 (주행거리 ${Number(a.oldDistance||0).toLocaleString()}km → ${Number(a.target.distance||0).toLocaleString()}km)`
+  );
+  const conflictLines = (conflicts||[]).map(c=>
+    `- ⚠ 수동확인 필요: ${submitter}님이 입력한 ${c.row.dateFrom||''} 기록(시작 ${Number(c.row.startOdo||0).toLocaleString()}km→종료 ${Number(c.row.endOdo||0).toLocaleString()}km)이 기존 "${c.target.submitter||''}"님 기록(${c.target.isoDate||''}, 시작 ${Number(c.target.startOdo||0).toLocaleString()}km→종료 ${Number(c.target.endOdo||0).toLocaleString()}km)과 시작거리가 겹치지만, 거리 역전(종료거리가 더 크거나 같음) 또는 운행일자 순서가 맞지 않아 자동으로 값을 바꾸지 못했습니다. 관리자 대시보드에서 두 기록을 직접 확인해 주세요.`
+  );
+  const detail = [...adjLines, ...conflictLines].join('\n');
+  try{
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: ADMIN_EMAIL,
+      plate,
+      branch: branch||'',
+      submitter,
+      status: (conflicts&&conflicts.length) ? '⚠ 늦은입력 보정(수동확인 필요 포함)' : '늦은입력 자동보정',
+      detail,
+      submitted_at: new Date().toLocaleString('ko-KR')
+    });
+  }catch(e){
+    console.error('[늦은입력 보정 알림] 이메일 발송 실패:', e);
+  }
+}
+
 // 점검요망으로 제출된 운행기록이 있으면 관리자에게 이메일 알림 발송 (EmailJS)
 // - 정상 제출 흐름을 막지 않도록 실패해도 조용히 콘솔에만 기록합니다.
 async function notifyMaintenanceNeeded(plate, branch, submitter, rows){
@@ -6106,6 +6194,8 @@ async function doSubmit(submitter, plate, rows){
   const existingKeys = new Set((data.vehicles[plate].trips||[]).map(t=>`${t.isoDate}|${t.startOdo}|${t.endOdo}`));
   let added=0, skipped=0;
   const addedDates=[];
+  const lateAdjustments=[]; // 늦은입력으로 인해 다른 기록이 자동 보정된 건 (관리자 이메일 알림용)
+  const lateConflicts=[];   // 겹침은 있으나 자동 보정 불가(수동확인 필요)한 건
 
   rows.forEach(r=>{
     const isoDate = r.dateFrom;
@@ -6119,7 +6209,10 @@ async function doSubmit(submitter, plate, rows){
     const key = `${isoDate}|${r.startOdo}|${r.endOdo}`;
     if(existingKeys.has(key)){ skipped++; return; }
     existingKeys.add(key);
-    data.vehicles[plate].trips.push({
+    // 이 기록의 시작거리가 이미 저장된 다른 기록의 시작거리와 겹치는지 확인(늦은입력 케이스).
+    // 겹치면 대상 기록을 이 함수 내부에서 직접 보정하고(startOdo/distance 갱신), 결과를 반환한다.
+    const resolution = resolveLateEntryInsert(plate, r);
+    const newTrip = {
       date: dateDisplay, isoDate, dateTo, usageDates: allDates,
       startOdo:r.startOdo, endOdo:r.endOdo, distance:r.distance,
       user:r.user, dest:r.dest, fuel:r.fuel, status:r.status, note:r.note,
@@ -6128,7 +6221,11 @@ async function doSubmit(submitter, plate, rows){
       isCommute:r.isCommute||false, commuteDir:r.commuteDir||'',
       submittedAt: new Date().toISOString(),
       editToken: getDeviceEditToken() // 이 트립을 제출한 기기 식별용(본인수정화면 접근 제어에 사용)
-    });
+    };
+    if(resolution && resolution.conflict) newTrip.lateEntryConflict = true;
+    data.vehicles[plate].trips.push(newTrip);
+    if(resolution && resolution.adjusted) lateAdjustments.push({row:r, target:resolution.targetTrip, oldStart:resolution.oldStart, oldDistance:resolution.oldDistance});
+    else if(resolution && resolution.conflict) lateConflicts.push({row:r, target:resolution.targetTrip});
     addedDates.push(isoDate);
     added++;
   });
@@ -6141,6 +6238,8 @@ async function doSubmit(submitter, plate, rows){
 
   // 점검요망 상태로 제출된 건이 있으면 관리자에게 이메일 알림 (실패해도 제출 자체는 정상 처리됨)
   notifyMaintenanceNeeded(plate, branchAtTime, submitter, rows);
+  // 늦은입력으로 다른 기록이 자동 보정되었거나(또는 수동확인이 필요하면) 관리자에게 별도 이메일 알림
+  notifyLateEntryAdjustment(plate, branchAtTime, submitter, lateAdjustments, lateConflicts);
 
   document.getElementById('tripRows').innerHTML='';
   document.getElementById('userPlateSelect').value='';
