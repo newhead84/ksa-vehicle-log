@@ -35,6 +35,15 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-07] 가동율 계산 불일치 버그 수정: 차량상세 모달 상단 "가동율" 요약과 지역구분별 가동현황 표의
+  가동율이 "최초 운행일~최종 운행일 사이의 업무일수"를 분모로 계산되어, 최근 재배치된 차량처럼 운행기록이
+  짧은 기간에 몰려있으면 실제로는 대부분 개인사용/출퇴근이어도 100%에 가깝게 표시되던 문제(예: 181호6040
+  8/3~4가 개인사용·출퇴근인데도 상단 가동율 100% vs 바로 아래 월별표 8월 10%로 서로 다르게 표시) 수정.
+  차량상세 모달은 월별표(연평균)와 동일한 "유효 월 평균" 방식으로, 지역구분별 표는 "월별 업무일수 대비
+  비율의 평균" 방식으로 변경해 항상 서로 일치하는 값을 보여주도록 통일. 월별 가동율 표·비교차트(연평균)는
+  이미 올바른 방식이었으므로 변경 없음 | 변경: plateAnnualAvg()(신규), monthlyAvgRateFromDates()(신규),
+  openVehicle()(util 계산을 plateAnnualAvg()로 교체), renderRegionSummary()(rate 계산을
+  monthlyAvgRateFromDates()로 교체)
   [2026-08-07] 위 늦은입력 자동보정 로직에 날짜 검증 보강: 시작거리가 겹치는 것(수치 조건)만으로는
   자동보정하지 않고, A의 운행기간 마지막 날(dateTo, 없으면 dateFrom)이 B의 시작일(isoDate)보다
   이후이면(=시간 순서가 맞지 않으면) 자동보정 대상에서 제외하고 "확인필요" 경로로 전환하도록 수정.
@@ -2703,6 +2712,24 @@ function utilBar(r){
 
 function monthRangeIso(y,m){ return{startIso:iso(new Date(y,m-1,1)),endIso:iso(new Date(y,m,0))}; }
 function bizDaysInMonth(y,m){ const{startIso,endIso}=monthRangeIso(y,m); return countBizDays(startIso,endIso); }
+
+// 2026-08-07: 지역구분별 가동현황 표 전용 가동율 계산.
+// 기존에는 "최초 운행일~최종 운행일 사이의 업무일수"를 분모로 써서, 운행기록이 짧은 기간에 몰려있는
+// 경우(예: 최근 재배치된 차량이 이틀만 업무용으로 운행) 실제로는 그 달 대부분이 개인사용/출퇴근이어도
+// 100%에 가깝게 표시되는 문제가 있었음. 이를 "그 달의 실제 업무일수" 대비 비율을 달 단위로 구한 뒤
+// 평균내는 방식(연평균 가동율과 동일 철학)으로 변경.
+function monthlyAvgRateFromDates(dateList){
+  const bizDates=(dateList||[]).filter(ds=>isBizDay(new Date(ds+'T00:00:00')));
+  if(!bizDates.length) return 0;
+  const byMonth={};
+  bizDates.forEach(d=>{const ym=d.slice(0,7);if(!byMonth[ym])byMonth[ym]=new Set();byMonth[ym].add(d);});
+  const rates=Object.keys(byMonth).map(ym=>{
+    const[y,m]=ym.split('-').map(Number);
+    const total=bizDaysInMonth(y,m);
+    return total>0?Math.min(100,(byMonth[ym].size/total)*100):0;
+  });
+  return rates.reduce((s,r)=>s+r,0)/rates.length;
+}
 function monthlyUtilForPlate(plate,year){
   const v=data.vehicles[plate]||{};
   const trips=v.trips||[];
@@ -2748,6 +2775,15 @@ function hasMonthlyDataFor(plate,year){
   const trips=v.trips||[];
   const manual=(v.manualMonthly&&v.manualMonthly[year])||{};
   return trips.length>0 || Object.keys(manual).length>0;
+}
+// 2026-08-07: 차량상세 모달 상단 "가동율" 요약 전용. 월별표(renderMonthly)의 "연평균"과 동일한 방식
+// (유효 월만 평균, beforeService/futureMonth/noData 제외)으로 계산해 바로 아래 월별 가동율 미니표와
+// 항상 일치시킨다. 기존 calcUtilization()(최초~최종 운행일 사이 업무일 기준)은 짧은 기간에 운행이
+// 몰려있으면 실제보다 높게(예: 100%) 표시되는 문제가 있었음.
+function plateAnnualAvg(plate,year){
+  const hasAnyTrip=hasMonthlyDataFor(plate,year);
+  const validMonths=monthlyUtilForPlate(plate,year).filter(m=>!m.beforeService&&!m.futureMonth&&!m.noData);
+  return hasAnyTrip&&validMonths.length?validMonths.reduce((s,m)=>s+m.rate,0)/validMonths.length:0;
 }
 function availableYears(){
   const years=new Set();
@@ -3404,10 +3440,7 @@ function renderRegionSummary(){
   const rows=branches.map(branch=>{
     const cars=carsByBranch[branch]||0;
     const tb=tripsByBranch[branch]||{dist:0,fuel:0,count:0,usageDates:[]};
-    const bizUsed=new Set(tb.usageDates.filter(ds=>isBizDay(new Date(ds+'T00:00:00')))).size;
-    const sorted=tb.usageDates.slice().sort();
-    const spanDays=sorted.length?Math.max(1,countBizDays(sorted[0],sorted[sorted.length-1])):1;
-    const rate=tb.usageDates.length?Math.min(100,(bizUsed/spanDays)*100):0;
+    const rate=monthlyAvgRateFromDates(tb.usageDates);
     const cb=contractByBranch[branch];
     let repStart='',repEnd='';
     if(cb){
@@ -3722,7 +3755,7 @@ function openVehicle(plate){
     return `${line}<text x="${x}" y="${h-4}" font-size="7" fill="var(--ink)" text-anchor="start">${mi+1}월</text>`;
   }).join('');
   const sparkDotsSvg=distances.map((d,i)=>`<circle cx="${xs[i]}" cy="${yOf(d)}" r="2.5" fill="var(--accent)"/>`).join('');
-  const util=calcUtilization(trips);
+  const util={rate:plateAnnualAvg(plate,monthlyYear||new Date().getFullYear())};
   const allBranches=Array.from(new Set(FLEET_REGISTRY.map(r=>r.branch).concat(Object.values(data.vehicles).map(x=>x.branch||'')))).filter(Boolean).sort(compareByOrg);
   document.getElementById('modalBody').innerHTML=`
     <div class="modal-head">
