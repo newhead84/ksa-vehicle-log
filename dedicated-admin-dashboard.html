@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css');
 
@@ -139,6 +140,47 @@
   .ded-card .stat-row{display:flex; justify-content:space-between; align-items:baseline; margin-top:10px;}
   .ded-card .stat-row .l{font-size:12px; color:var(--ded-muted);}
   .ded-card .stat-row .v{font-family:'Outfit',sans-serif; font-size:15px; color:var(--ded-beige);}
+  .ded-card .qr-btn{
+    margin-top:18px; width:100%; padding:9px; background:transparent;
+    border:1px solid var(--ded-beige); border-radius:0; color:var(--ded-beige);
+    font-family:'Pretendard',sans-serif; font-size:12px; cursor:pointer; transition:background .15s ease,color .15s ease;
+  }
+  .ded-card .qr-btn:hover{background:var(--ded-beige); color:#0A0A0A;}
+
+  /* QR 모달 */
+  .ded-qr-overlay{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:400;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .ded-qr-overlay.open{display:flex;}
+  .ded-qr-card{
+    background:#111111; border:1px solid var(--ded-line); max-width:340px; width:100%;
+    padding:0; overflow:hidden;
+  }
+  .ded-qr-head{
+    padding:18px 20px; border-bottom:1px solid var(--ded-line);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .ded-qr-head .plate{font-family:'Outfit',sans-serif; font-size:16px; color:var(--ded-text);}
+  .ded-qr-head .org{font-size:12px; color:var(--ded-muted-2); margin-top:2px;}
+  .ded-qr-close{background:transparent; border:none; color:var(--ded-muted); font-size:16px; cursor:pointer;}
+  .ded-qr-body{padding:24px; text-align:center;}
+  #dedQrContainer{display:inline-block; padding:12px; background:#fff;}
+  .ded-qr-hint1{font-size:12px; font-weight:700; color:var(--ded-red); margin-top:14px;}
+  .ded-qr-hint2{font-size:11px; color:var(--ded-beige); margin-top:3px;}
+  .ded-qr-link-row{
+    margin-top:16px; display:flex; align-items:center; gap:6px; background:#0A0A0A;
+    border:1px solid var(--ded-line); padding:8px 10px; font-family:'Outfit',sans-serif; font-size:11px;
+    color:var(--ded-muted); word-break:break-all; overflow-wrap:break-word; text-align:left;
+  }
+  .ded-qr-actions{display:flex; gap:8px; margin-top:16px;}
+  .ded-qr-actions button{
+    flex:1; padding:11px; border:1px solid var(--ded-beige); background:transparent;
+    color:var(--ded-beige); font-family:'Pretendard',sans-serif; font-size:12.5px; cursor:pointer;
+  }
+  .ded-qr-actions button:hover{background:var(--ded-beige); color:#0A0A0A;}
+  .ded-qr-actions button.primary{background:var(--ded-beige); color:#0A0A0A;}
+  .ded-qr-actions button.primary:hover{opacity:.85;}
 
   /* 필터탭 */
   .ded-tabs{display:flex; gap:0; border-bottom:1px solid var(--ded-line); margin-bottom:0;}
@@ -258,6 +300,33 @@
   </div>
 </div>
 
+<!-- ═══════ QR / 링크 모달 ═══════ -->
+<div class="ded-qr-overlay" id="dedQrOverlay" onclick="if(event.target===this)closeQrModal()">
+  <div class="ded-qr-card">
+    <div class="ded-qr-head">
+      <div>
+        <div class="plate" id="dedQrPlate"></div>
+        <div class="org" id="dedQrOrg"></div>
+      </div>
+      <button class="ded-qr-close" onclick="closeQrModal()">✕</button>
+    </div>
+    <div class="ded-qr-body">
+      <div id="dedQrContainer"></div>
+      <div class="ded-qr-hint1">운행 시작 전 QR 스캔 필수</div>
+      <div class="ded-qr-hint2">스캔 시 해당 차량 운행기록 입력 페이지로 자동 이동 (차량 고정)</div>
+      <div class="ded-qr-link-row" id="dedQrLink"></div>
+      <div class="ded-qr-actions">
+        <button onclick="copyDriverLink()">🔗 링크 복사</button>
+        <button onclick="openDriverLink()">↗ 새 탭에서 열기</button>
+      </div>
+      <div class="ded-qr-actions">
+        <button onclick="printQrDedicated()" class="primary">🖨 인쇄</button>
+        <button onclick="downloadQrDedicated()">⬇ 저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // 차량 메타정보(조직/기사/차종/월 대여료)는 계약정보 성격이라 코드에 고정합니다.
 // 실제 운행기록(trips)은 Firebase(dedicated-fleet-data)에서 실시간으로 불러옵니다.
@@ -285,6 +354,8 @@ let currentFilter = 'all';
 // ============================================================
 const FIREBASE_URL = 'https://ksa-vehicle-log-default-rtdb.asia-southeast1.firebasedatabase.app';
 const DEDICATED_STORAGE_KEY = 'dedicated-fleet-data';
+// 기사님 입력 페이지 URL — index.html의 APP_URL과 동일한 GitHub Pages 루트에 나란히 배치된 파일
+const DEDICATED_APP_URL = 'https://newhead84.github.io/ksa-vehicle-log/dedicated-driver-input.html';
 const firebaseConfig = {
   apiKey: "AIzaSyAGS2iP6VVLpsdbxGgaE1V5eIu-IHWNrH8",
   authDomain: "ksa-vehicle-log.firebaseapp.com",
@@ -449,6 +520,7 @@ function renderCards(){
       <div class="stat-row"><span class="l">이번달 주행거리</span><span class="v">${m.km.toLocaleString()}km</span></div>
       <div class="stat-row"><span class="l">운행 건수</span><span class="v">${vTrips.length}건</span></div>
       <div class="stat-row"><span class="l">주유비</span><span class="v">${vFuel.toLocaleString()}원</span></div>
+      <button class="qr-btn" onclick="event.stopPropagation(); openQrModal('${v.key}')">📱 QR / 링크 보기</button>
     </div>
   `;
   }).join('');
@@ -497,6 +569,99 @@ function renderLog(){
       <span class="ua">${l.ua}</span>
     </div>
   `).join('');
+}
+
+// ── QR / 링크 모달 ──
+// 차량 카드의 "QR / 링크 보기" 버튼에서 호출. dedicated-driver-input.html?plate=차량번호 URL로
+// QR을 생성하고, 스캔한 기사님 화면이 해당 차량으로 자동 고정되도록 한다(applyQrLock 참조).
+let _dedQrInstance = null;
+
+function openQrModal(vKey){
+  const v = VEHICLES.find(x=>x.key===vKey);
+  if(!v) return;
+  const url = `${DEDICATED_APP_URL}?plate=${encodeURIComponent(v.plate)}`;
+
+  document.getElementById('dedQrPlate').textContent = `${v.plate} · ${v.model}`;
+  document.getElementById('dedQrOrg').textContent = `${v.role} · ${v.org}`;
+  document.getElementById('dedQrLink').textContent = url;
+
+  const container = document.getElementById('dedQrContainer');
+  container.innerHTML = '';
+  _dedQrInstance = new QRCode(container, {
+    text: url,
+    width: 200,
+    height: 200,
+    colorDark: '#0A0A0A',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  document.getElementById('dedQrOverlay').classList.add('open');
+}
+
+function closeQrModal(){
+  document.getElementById('dedQrOverlay').classList.remove('open');
+  document.getElementById('dedQrContainer').innerHTML = '';
+  _dedQrInstance = null;
+}
+
+async function copyDriverLink(){
+  const url = document.getElementById('dedQrLink').textContent;
+  try{
+    await navigator.clipboard.writeText(url);
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = '✓ 복사됨';
+    setTimeout(()=>btn.textContent = orig, 1600);
+  }catch(e){
+    alert('클립보드 복사에 실패했습니다. 링크를 직접 선택해 복사해주세요:\n' + url);
+  }
+}
+
+function openDriverLink(){
+  const url = document.getElementById('dedQrLink').textContent;
+  window.open(url, '_blank', 'noopener');
+}
+
+function printQrDedicated(){
+  const plate = document.getElementById('dedQrPlate').textContent.split('·')[0].trim();
+  const org = document.getElementById('dedQrOrg').textContent;
+  const canvas = document.getElementById('dedQrContainer').querySelector('canvas');
+  if(!canvas){ alert('QR 이미지가 생성되지 않았습니다.'); return; }
+  const img = canvas.toDataURL('image/png');
+  const win = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>QR - ${plate}</title>
+    <style>
+      body{font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fff;}
+      .card{position:relative;box-sizing:border-box;width:63.25mm;height:90mm;border:0.5mm solid #0A0A0A;border-radius:0;background:#fff;}
+      .logo{position:absolute;top:5.5mm;left:0;right:0;text-align:center;font-weight:700;font-size:9pt;color:#0A0A0A;letter-spacing:.08em;}
+      .plate{position:absolute;top:11.8mm;left:2mm;right:2mm;text-align:center;font-weight:700;font-size:15pt;color:#0A0A0A;}
+      .org{position:absolute;top:19.5mm;left:2mm;right:2mm;text-align:center;font-weight:400;font-size:9pt;color:#6b7280;}
+      img{position:absolute;top:26mm;left:50%;transform:translateX(-50%);width:49.5mm;height:49.5mm;}
+      .hint-required{position:absolute;top:78.3mm;left:2mm;right:2mm;text-align:center;font-weight:700;font-size:9.5pt;color:#E81657;}
+      .hint-action{position:absolute;top:83.6mm;left:2mm;right:2mm;text-align:center;font-weight:700;font-size:8.5pt;color:#5E4630;}
+    </style></head><body>
+    <div class="card">
+      <div class="logo">KSA 전용차량</div>
+      <div class="plate">${plate}</div>
+      <div class="org">${org}</div>
+      <img src="${img}">
+      <div class="hint-required">운행 시작 전 QR 스캔 필수</div>
+      <div class="hint-action">QR 스캔 시 운행기록 입력 페이지 이동</div>
+    </div>
+    <script>window.onload=()=>window.print();<\/script>
+  </body></html>`);
+  win.document.close();
+}
+
+function downloadQrDedicated(){
+  const plate = document.getElementById('dedQrPlate').textContent.split('·')[0].trim();
+  const canvas = document.getElementById('dedQrContainer').querySelector('canvas');
+  if(!canvas) return;
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `QR_전용차량_${plate}.png`;
+  a.click();
 }
 
 document.getElementById('gatePw').addEventListener('keydown', e=>{
