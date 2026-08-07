@@ -4,6 +4,26 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 형식: 각 항목은 `요청내용 요약 | 변경: 함수/영역`
 
+## 2026-08-07 (6)
+
+- 전용차량 수정요청사항 후속 반영(6항에서 보류했던 항목 포함).
+  ① 관리자 대시보드 운행기록 표: 전무이사 차량으로 필터링 시 컬럼 헤더·셀 라벨을 "구간"→"행선지"로 전환하고 화살표(→) 없이 행선지만 표시(회장차·전체보기는 기존 "구간 A → B" 유지). `VEHICLES`에 `chairman` 필드 추가.
+  ② 기사님 입력화면 헤더 레이아웃 재구성: 상단 줄(슬로건+로고 / EXECUTIVE VEHICLE LOG)과 하단 줄(모델명 / "회장"·차량번호 칩)의 2행 구조로 변경.
+  ③ 운행기간 달력 아이콘 미노출 버그 수정 — `color-scheme:dark`로 브라우저가 이미 밝은 기본 아이콘을 그리는데 여기에 `filter:invert()`를 걸어 다시 어두워지던 것이 원인. CSS mask로 아이콘 모양만 가져와 베이지(`--ded-beige`)로 직접 채색하도록 변경.
+  ④ 대리운전 사유 placeholder를 원래 문구("예시: 고객사명, 행사명 / 미팅, 네트워킹 등")로 복원, 라벨 폭 축소 및 해당 입력창 placeholder만 폰트 축소(13px)해 좁은 화면에서 우측이 잘리지 않도록 조정.
+  ⑤ 177호1673(회장차) 차량번호 칩 위 라벨을 "한국표준협회"→"회장"으로 변경(전무이사 차량은 기존 조직명 그대로 유지).
+  | 변경: dedicated-admin-dashboard.html(`VEHICLES` chairman 필드, `renderTrips()` 구간/행선지 분기), dedicated-driver-input.html(CSS 헤더 `.ded-header-top`/`.ded-header-bottom`/`.ded-header-right`, 달력 피커 mask, 대리운전 사유 placeholder, HTML 헤더 구조, JS `switchVehicle()`)
+
+
+- 전용차량 관리자 대시보드/기사님 입력화면 수정요청사항 일괄 반영.
+  ① 관리자 대시보드 로그인 화면: 제네시스 로고 위에 KSA 슬로건 마크 추가.
+  ② 로그인 화면 샘플 계정 안내 박스·문구 삭제, 계정을 담당자 실계정(ikjoomoon84@gmail.com)으로 연동(입력창 기본값·세션 표시·열람이력 예시 데이터 모두 갱신).
+  ③ "EXECUTIVE FLEET" → "EXECUTIVE VEHICLE LOG"로 수정(그 외 "FLEET" 표기 잔존 없음을 확인).
+  ④ 운행기록 목록 날짜 표시 오류 수정 — `(t.dateFrom||'').slice(0,5)`가 "YYYY-MM-DD" 앞 5자만 잘라 "2026-"로 표시되던 버그를 전체 날짜 표시로 수정.
+  ⑤ 전무이사 차량 운행기록의 "구간" 표기를 유지(회장차와 표 컬럼을 공유하는 구조상 이번 변경 범위에서는 보류 — 후속 작업 필요, 9항 미결 이슈에 추가 예정).
+  ⑥ 기사님 입력화면(수행기사 모드): 과거 도입되었던 "QR 1개로 출발/도착 이중 등록" 방식(`checkQrPhase`/`enterDepartPhase`/`enterArrivePhase`, 출발·도착 단계 분리 입력)을 요청에 따라 완전히 제거. 출발지·도착지·시작시각·종료시각을 다른 모드와 동일하게 한 화면에서 함께 입력받아 한 번에 제출하는 기존 방식으로 복원. KSA직원 모드·전무이사 차량 화면은 원래부터 단일 화면 입력 방식이었으므로 변경 없음.
+  | 변경: dedicated-admin-dashboard.html(로그인 게이트 마크업/CSS `.gate-mark`/`.gate-sample*` 삭제, `KSA_SLOGAN_MARK` 상수 신규, `loadTripsFromFirebase()` 날짜 매핑 수정), dedicated-driver-input.html(`checkQrPhase()`/`enterDepartPhase()`/`enterArrivePhase()` 삭제, `refreshHoegjangLayout()`/`submitLog()`/`prefillStartOdoFromHistory()`/`startEditRecord()` 단순화, `qrPhase`/`pendingDepartData`/`qrPhaseCheckSeq` 상태변수 및 관련 배너 마크업·CSS 삭제)
+
 ## 2026-08-07 (4)
 
 - 전용차량 기사님 입력화면 UI 재정비 및 계약정보 오류 수정 일괄 반영.
