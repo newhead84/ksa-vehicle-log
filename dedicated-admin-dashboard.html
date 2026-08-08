@@ -132,18 +132,32 @@
     background:var(--ded-line); border:1px solid var(--ded-line); margin-bottom:48px;
   }
   .ded-card{
-    background:var(--ded-bg); padding:34px 32px; cursor:pointer; transition:background .15s ease;
+    background:var(--ded-bg); padding:32px 30px; cursor:pointer; transition:background .15s ease;
   }
   .ded-card:hover{background:#111111;}
-  .ded-card.active{background:#141210; border-top:2px solid var(--ded-beige); padding-top:32px;}
-  .ded-card .role{font-size:13px; color:var(--ded-muted-2); margin-bottom:8px;}
-  .ded-card .name{font-size:21px; margin-bottom:4px;}
-  .ded-card .plate{font-family:'Outfit',sans-serif; font-size:15px; color:var(--ded-muted); margin-bottom:24px;}
-  .ded-card .stat-row{display:flex; justify-content:space-between; align-items:baseline; margin-top:14px;}
-  .ded-card .stat-row .l{font-size:14px; color:var(--ded-muted);}
-  .ded-card .stat-row .v{font-family:'Outfit',sans-serif; font-size:19px; color:var(--ded-beige);}
+  .ded-card.active{background:#141210; border-top:2px solid var(--ded-beige); padding-top:30px;}
+
+  /* 상단: 좌측 역할/조직, 우측 차량번호 배지 + 모델명 */
+  .ded-card .card-top{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:26px;}
+  .ded-card .role{font-size:22px; color:var(--ded-text); margin-bottom:6px; line-height:1.3;}
+  .ded-card .org{font-size:13px; color:var(--ded-muted-2);}
+  .ded-card .card-plate{text-align:right; flex-shrink:0;}
+  .ded-card .plate-badge{
+    display:inline-block; border:1px solid var(--ded-beige); padding:8px 14px;
+    font-family:'Outfit',sans-serif; font-size:19px; font-weight:500; color:var(--ded-beige); white-space:nowrap;
+  }
+  .ded-card .model-line{font-size:11.5px; color:var(--ded-muted-2); margin-top:7px;}
+
+  /* 세부정보(주행거리/주유비/대여료 등) 2x2 그리드 — 기존 대비 폰트 1.5배 확대 */
+  .ded-card .card-stats{
+    display:grid; grid-template-columns:1fr 1fr; row-gap:24px; column-gap:16px;
+    padding-top:22px; border-top:1px solid var(--ded-line);
+  }
+  .ded-card .stat-cell .l{font-size:21px; color:var(--ded-muted); margin-bottom:8px; line-height:1.3;}
+  .ded-card .stat-cell .v{font-family:'Outfit',sans-serif; font-size:28.5px; color:var(--ded-beige); font-weight:500; line-height:1.2;}
+
   .ded-card .qr-btn{
-    margin-top:24px; width:100%; padding:13px; background:transparent;
+    margin-top:26px; width:100%; padding:13px; background:transparent;
     border:1px solid var(--ded-beige); border-radius:0; color:var(--ded-beige);
     font-family:'Pretendard',sans-serif; font-size:14px; cursor:pointer; transition:background .15s ease,color .15s ease;
   }
@@ -259,21 +273,6 @@
   .ded-dot.warn::before{background:var(--ded-red);}
   .ded-dot.ok::before{background:var(--ded-good);}
 
-  .ded-section-title{
-    display:flex; align-items:baseline; justify-content:space-between;
-    margin:56px 0 16px;
-  }
-  .ded-section-title h3{font-weight:400; font-size:16px; margin:0;}
-
-  /* 열람 이력 */
-  .ded-log-list{border-top:1px solid var(--ded-line);}
-  .ded-log-row{
-    display:flex; justify-content:space-between; padding:12px 4px;
-    border-bottom:1px solid var(--ded-line); font-size:12.5px; color:var(--ded-muted);
-  }
-  .ded-log-row .email{color:var(--ded-text);}
-  .ded-log-row .ua{color:var(--ded-muted-2); font-size:11.5px;}
-
   @media (max-width:760px){
     .ded-stat-strip{grid-template-columns:1fr 1fr;}
     .ded-stat-card{padding:16px;}
@@ -346,8 +345,6 @@
       <tbody id="tripRows"></tbody>
     </table>
 
-    <div class="ded-section-title"><h3>최근 열람 이력</h3></div>
-    <div class="ded-log-list" id="accessLog"></div>
   </div>
 </div>
 
@@ -415,20 +412,13 @@
 // token: QR/기사님 입력 URL에서 차량번호 대신 사용하는 임의 12자리 hex (차량번호 노출 방지)
 // contractStartDate: 계약정보 관리 모달에서 실제 값으로 갱신 가능 (Firebase dedicated-fleet-data/contracts 에 저장)
 const VEHICLES = [
-  {key:'hoegjang', org:'한국표준협회', role:'회장(수행기사)', driver:'이왕희', plate:'177호1673', model:'G90', monthlyFee:2198000, token:'48ac240c17b5', contractStartDate:'2024-11-21', chairman:true},
-  {key:'jeonmu1', org:'경영품질원', role:'전무이사', driver:'이경근', plate:'222호7779', model:'G80', monthlyFee:1350000, token:'98aa695b10cc', contractStartDate:'2024-08-28', chairman:false},
-  {key:'jeonmu2', org:'산업표준원', role:'전무이사', driver:'이동석', plate:'222호7780', model:'G80', monthlyFee:1350000, token:'e7ccd86d4078', contractStartDate:'2024-12-30', chairman:false}
+  {key:'hoegjang', org:'한국표준협회', role:'회장(수행기사)', driver:'이왕희', plate:'177호1673', model:'G90', modelFull:'G90 (G)3.5T 20"다이아몬드', monthlyFee:2198000, token:'48ac240c17b5', contractStartDate:'2024-11-21', chairman:true},
+  {key:'jeonmu1', org:'경영품질원', role:'전무이사', driver:'이경근', plate:'222호7779', model:'G80', modelFull:'G80 (G)2.5T 18"/SDS1 4WD AT', monthlyFee:1350000, token:'98aa695b10cc', contractStartDate:'2024-08-28', chairman:false},
+  {key:'jeonmu2', org:'산업표준원', role:'전무이사', driver:'이동석', plate:'222호7780', model:'G80', modelFull:'G80 (G)2.5T 18"/SDS1 4WD AT', monthlyFee:1350000, token:'e7ccd86d4078', contractStartDate:'2024-12-30', chairman:false}
 ];
 
 // Firebase에서 불러온 실제 운행기록 (평탄화된 배열, 화면표시용 필드로 매핑됨)
 let TRIPS = [];
-
-// ACCESS_LOG는 아직 실사용 접속기록 저장 기능이 없어 데모 데이터로 유지합니다 (범위 밖).
-const ACCESS_LOG = [
-  {ts:'2026-08-07 09:12', email:'ikjoomoon84@gmail.com', ua:'Chrome · Windows'},
-  {ts:'2026-08-06 18:44', email:'ikjoomoon84@gmail.com', ua:'Safari · macOS'},
-  {ts:'2026-08-05 08:30', email:'ikjoomoon84@gmail.com', ua:'Chrome · Windows'}
-];
 
 let currentFilter = 'all';
 
@@ -627,7 +617,6 @@ async function refreshDashboard(){
   renderCards();
   renderTabs();
   renderTrips();
-  renderLog();
   if(refreshBtn){ refreshBtn.disabled = false; refreshBtn.textContent = '⟳ 새로고침'; }
 }
 
@@ -658,17 +647,25 @@ function renderCards(){
     const vTrips = TRIPS.filter(t=>t.v===v.key);
     const vFuel = vTrips.reduce((s,t)=>s+(t.fuel||0),0);
     const m = monthlyStatsFor(v.key);
+    const rentalTotal = v.contractStartDate ? totalRentalFor(v).toLocaleString()+'원' : '미입력';
     return `
     <div class="ded-card ${currentFilter===v.key?'active':''}" onclick="setFilter('${v.key}')" title="클릭하여 이 차량의 운행기록만 보기">
-      <div class="role">${v.role}</div>
-      <div class="name">${v.org} · ${v.model}</div>
-      <div class="plate">${v.plate}</div>
-      <div class="stat-row"><span class="l">이번달 운행일수</span><span class="v">${m.days}일</span></div>
-      <div class="stat-row"><span class="l">이번달 주행거리</span><span class="v">${m.km.toLocaleString()}km</span></div>
-      <div class="stat-row"><span class="l">운행 건수</span><span class="v">${vTrips.length}건</span></div>
-      <div class="stat-row"><span class="l">주유비</span><span class="v">${vFuel.toLocaleString()}원</span></div>
-      <div class="stat-row"><span class="l">월 대여료</span><span class="v">${(v.monthlyFee||0).toLocaleString()}원</span></div>
-      <div class="stat-row"><span class="l">총대여료 누계</span><span class="v">${v.contractStartDate ? totalRentalFor(v).toLocaleString()+'원' : '계약정보 미입력'}</span></div>
+      <div class="card-top">
+        <div>
+          <div class="role">${v.role}</div>
+          <div class="org">${v.org}</div>
+        </div>
+        <div class="card-plate">
+          <div class="plate-badge">${v.plate}</div>
+          <div class="model-line">${v.modelFull || v.model}</div>
+        </div>
+      </div>
+      <div class="card-stats">
+        <div class="stat-cell"><div class="l">이번달 주행거리</div><div class="v">${m.km.toLocaleString()}km</div></div>
+        <div class="stat-cell"><div class="l">주유비 누계</div><div class="v">${vFuel.toLocaleString()}원</div></div>
+        <div class="stat-cell"><div class="l">월 대여료</div><div class="v">${(v.monthlyFee||0).toLocaleString()}원</div></div>
+        <div class="stat-cell"><div class="l">대여료 누계</div><div class="v">${rentalTotal}</div></div>
+      </div>
       <button class="qr-btn" onclick="event.stopPropagation(); openQrModal('${v.key}')">📱 QR / 링크 보기</button>
     </div>
   `;
@@ -724,17 +721,6 @@ function renderTrips(){
     </tr>
   `;
   }).join('');
-}
-
-function renderLog(){
-  const wrap = document.getElementById('accessLog');
-  wrap.innerHTML = ACCESS_LOG.map(l => `
-    <div class="ded-log-row">
-      <span>${l.ts}</span>
-      <span class="email">${l.email}</span>
-      <span class="ua">${l.ua}</span>
-    </div>
-  `).join('');
 }
 
 // ── QR / 링크 모달 ──
