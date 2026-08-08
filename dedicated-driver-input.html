@@ -85,7 +85,8 @@
     display:flex; flex-direction:column; gap:3px; flex:1 1 auto;
     text-align:center; min-width:0; padding:0 6px;
   }
-  .ded-header-eyebrow-block .ded-eyebrow{margin-bottom:0; font-size:18px; letter-spacing:0.12em;}
+  /* EXECUTIVE / VEHICLE LOG: 우측 차량번호 박스(plate-chip) 높이에 맞춰 축소 */
+  .ded-header-eyebrow-block .ded-eyebrow{margin-bottom:0; font-size:13px; letter-spacing:0.1em; line-height:1.3;}
   .ded-header-model-row{
     display:flex; align-items:baseline; justify-content:space-between;
     gap:10px; margin-top:14px;
@@ -93,10 +94,11 @@
   .ded-header-model{
     font-size:13.5px; color:var(--ded-muted-2); min-width:0;
   }
+  /* 회장/산업표준원/경영품질원 등 소속 표기: 1.5배 확대(13.5px→20px) */
   .ded-header-org{
     font-family:'Pretendard',sans-serif;
     font-weight:600;
-    font-size:13.5px;
+    font-size:20px;
     letter-spacing:0;
     color:var(--ded-text);
     text-align:right;
@@ -303,6 +305,14 @@
     word-break:keep-all; overflow-wrap:break-word;
   }
   .ded-readonly-summary b{color:var(--ded-text); font-weight:600;}
+  /* ── 당일 출발·도착 등록 완료 안내 배너(회장차 수행기사 전용) ── */
+  .ded-done-banner{
+    display:none; margin:14px 22px 4px; padding:22px 18px;
+    border:1px solid var(--ded-beige); text-align:center;
+  }
+  .ded-done-banner .ico{font-size:26px; margin-bottom:8px;}
+  .ded-done-banner .msg{font-size:15px; line-height:1.5; color:var(--ded-text); white-space:pre-line;}
+  .ded-done-banner .msg .kw{color:var(--ded-beige);}
 
   /* ── 회장차 이용자 구분 토글 ── */
   .ded-mode-toggle{display:flex; gap:0; border:1px solid var(--ded-line);}
@@ -409,12 +419,18 @@
   .ded-confirm-close:hover{background:var(--ded-beige); color:var(--ded-bg-pure);}
 
   @media (max-width:400px){
-    .ded-header-org{font-size:12px;}
+    .ded-header-org{font-size:17px;}
     .ded-plate-chip{font-size:19px; padding:7px 13px;}
     .ded-slogan-mark, .ded-header-wordmark{width:93px;}
     .ded-header-row{gap:8px;}
-    .ded-header-eyebrow-block .ded-eyebrow{font-size:15px; letter-spacing:.1em;}
+    .ded-header-eyebrow-block .ded-eyebrow{font-size:11px; letter-spacing:.08em;}
   }
+
+  /* ── 주행거리 · 주유금액: 한 줄 좌우 배치(주행거리는 좁게/최대 4자리, 주유금액은 넓게) ── */
+  .ded-df-row{display:flex; align-items:stretch; gap:16px; border-bottom:1px solid var(--ded-line);}
+  .ded-df-row #distanceRow{flex:0 0 34%; min-width:0; padding:14px 0; border-bottom:none;}
+  .ded-df-row #fuelCostRow{flex:1 1 66%; min-width:0; border-bottom:none;}
+  .ded-df-row #fuelCostRow label{flex:0 0 auto;}
 </style>
 </head>
 <body>
@@ -465,19 +481,22 @@
     <div class="ded-phase-btn" id="phaseBtnEnd">🏁 도착 등록</div>
   </div>
 
-  <!-- 운행자 -->
-  <div class="ded-section" id="driverNameRow">
-    <div class="ded-line-field">
+  <!-- 운행 완료 안내(회장차 수행기사: 당일 출발+도착 등록 완료 시) -->
+  <div class="ded-done-banner" id="doneTodayBanner">
+    <div class="ico">✅</div>
+    <div class="msg">오늘 하루도 수고하셨습니다!\n<span class="kw">운행정보 등록이 완료</span>되었습니다.</div>
+  </div>
+
+  <!-- 운행정보: TRIP 구분 아래에 운행자를 포함해 한 섹션으로 표시(라인 절약) -->
+  <div class="ded-section" id="tripSection">
+    <div class="ded-eyebrow">TRIP</div>
+
+    <div class="ded-line-field" id="driverNameRow">
       <label>운행자</label>
       <div class="in-wrap">
         <input type="text" id="driverName" placeholder="운행자명">
       </div>
     </div>
-  </div>
-
-  <!-- 운행정보 -->
-  <div class="ded-section">
-    <div class="ded-eyebrow">TRIP</div>
 
     <div class="ded-line-field" id="dateRangeRow">
       <label>운행기간</label>
@@ -551,22 +570,24 @@
     </div>
     <div class="ded-field-note" id="startOdoNote">시작거리는 이전 운행의 종료거리가 자동으로 반영됩니다.</div>
 
-    <div class="ded-readout" id="distanceRow">
-      <span class="lbl">주행거리</span>
-      <span class="val" id="distanceVal">0<span>km</span></span>
-    </div>
+    <div class="ded-df-row" id="distanceFuelRow">
+      <div class="ded-readout" id="distanceRow">
+        <span class="lbl">주행거리</span>
+        <span class="val" id="distanceVal">0<span>km</span></span>
+      </div>
 
-    <div class="ded-line-field" id="fuelCostRow">
-      <label>주유금액</label>
-      <div class="in-wrap">
-        <input type="text" id="fuelCost" inputmode="numeric" placeholder="0" style="text-align:right" oninput="formatFuelCostInput()">
-        <span class="ded-unit">원</span>
+      <div class="ded-line-field" id="fuelCostRow">
+        <label>주유금액</label>
+        <div class="in-wrap">
+          <input type="text" id="fuelCost" inputmode="numeric" placeholder="0" style="text-align:right" oninput="formatFuelCostInput()">
+          <span class="ded-unit">원</span>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- 대리운전 / 대차 -->
-  <div class="ded-section">
+  <div class="ded-section" id="etcSection">
     <div class="ded-eyebrow">ETC</div>
 
     <div class="ded-toggle-row">
@@ -638,7 +659,16 @@
     </div>
   </div>
 
-  <!-- 운행기록 확인/수정 · 점검요청: 한 줄에 좌우 버튼으로 배치, 제출 직전 맨 아래 -->
+  <!-- 운행기록 제출(출발/도착 등록): 점검요청·확인수정 버튼보다 위에 배치 -->
+  <div class="ded-submit-wrap">
+    <div class="ded-edit-banner" id="editBanner" style="display:none;">
+      <span id="editBannerText">기존 기록을 수정하는 중입니다.</span>
+      <button type="button" class="ded-edit-cancel" onclick="cancelEditMode()">취소</button>
+    </div>
+    <button class="ded-submit" id="submitBtnMain" onclick="submitLog()">운행기록 제출</button>
+  </div>
+
+  <!-- 운행기록 확인/수정 · 점검요청: 한 줄에 좌우 버튼으로 배치 -->
   <div class="ded-section">
     <div class="ded-action-row">
       <button type="button" class="ded-maint-btn ded-maint-btn--beige" id="myRecordsBtn" onclick="toggleMyRecords()">운행기록 확인수정</button>
@@ -657,14 +687,6 @@
       <button type="button" class="ded-add-btn" onclick="sendMaintenanceRequest()">담당자에게 메일 발송</button>
     </div>
     <div class="ded-maint-hotline">사고접수 롯데렌터카 <a href="tel:15881230">1588-1230</a></div>
-  </div>
-
-  <div class="ded-submit-wrap">
-    <div class="ded-edit-banner" id="editBanner" style="display:none;">
-      <span id="editBannerText">기존 기록을 수정하는 중입니다.</span>
-      <button type="button" class="ded-edit-cancel" onclick="cancelEditMode()">취소</button>
-    </div>
-    <button class="ded-submit" id="submitBtnMain" onclick="submitLog()">운행기록 제출</button>
   </div>
 
 </div>
@@ -900,8 +922,9 @@ function setHoegjangMode(mode){
     // KSA직원 모드: 필드는 숨기지 않고, 기존 수행기사 기본값('이왕희')만 지워서 직접 입력하도록 함
     if(driverInput.value === v.driver) driverInput.value = '';
   } else {
-    // 수행기사 모드로 복귀 시 비어있으면 기본 수행기사명을 다시 채워줌
-    if(driverInput.value.trim() === '') driverInput.value = v.driver;
+    // 수행기사 모드로 복귀 시에는 KSA직원 모드에서 입력했던 이름과 무관하게
+    // 항상 기본 수행기사명으로 재설정한다(과거: 값이 비어있을 때만 채워 넣어 재전환 시 이름이 안 바뀌는 버그가 있었음)
+    driverInput.value = v.driver;
   }
   refreshHoegjangLayout();
 }
@@ -916,7 +939,10 @@ async function refreshHoegjangLayout(){
 
   // 운행자명 입력창은 항상 노출한다(숨기지 않음) — KSA직원 모드에서는 기본값만 비워서 직접 입력받는다
   const effChairman = v.chairman && !(isHoegjang && hoegjangMode === 'staff');
-  document.getElementById('driverNameRow').style.display = 'block';
+  document.getElementById('driverNameRow').style.display = 'flex';
+  document.getElementById('etcSection').style.display = 'block';
+  document.getElementById('submitBtnMain').style.display = '';
+  document.getElementById('doneTodayBanner').style.display = 'none';
   document.getElementById('chairmanOnlyBlock').style.display = effChairman ? 'block' : 'none';
   document.getElementById('routeNoteRow').style.display = 'flex';
 
@@ -973,10 +999,16 @@ async function refreshDriverPhase(mySeq){
       ? existing.map((t,i)=>({...t, _idx:i})).filter(t=>t)
       : (existing && typeof existing==='object' ? Object.keys(existing).map(k=>({...existing[k], _idx:Number(k)})) : []);
     const openTrip = trips.find(t => t.vehicleKey==='hoegjang' && t.status==='open' && t.dateFrom===dateVal);
+    // 오늘 날짜로 출발+도착이 모두 완료(status:'complete')된 기록이 이미 있으면 당일 등록을 마감 처리한다.
+    const completeTrip = trips.find(t => t.vehicleKey==='hoegjang' && t.status==='complete' && t.dateFrom===dateVal);
     if(openTrip){
       driverPhase = 'end';
       openTripIndex = openTrip._idx;
       renderDriverPhaseUI(openTrip);
+    } else if(completeTrip){
+      driverPhase = 'done';
+      openTripIndex = null;
+      renderDriverPhaseUI(null);
     } else {
       driverPhase = 'start';
       openTripIndex = null;
@@ -993,6 +1025,32 @@ async function refreshDriverPhase(mySeq){
 
 // driverPhase 값에 따라 출발/도착 관련 필드·안내 배너·제출 버튼 라벨을 갱신
 function renderDriverPhaseUI(openTrip){
+  const isDone = driverPhase === 'done';
+
+  // 당일 출발+도착 등록이 모두 끝난 경우: 안내 배너만 노출하고 입력 영역은 전부 잠근다.
+  // (수정이 필요하면 '운행기록 확인수정' 버튼을 통해서만 가능)
+  document.getElementById('doneTodayBanner').style.display = isDone ? 'block' : 'none';
+  document.getElementById('driverPhaseToggle').style.display = isDone ? 'none' : 'flex';
+  document.getElementById('driverNameRow').style.display = isDone ? 'none' : 'flex';
+  document.getElementById('singleDateRow').style.display = isDone ? 'none' : 'flex';
+  document.getElementById('etcSection').style.display = isDone ? 'none' : 'block';
+  document.getElementById('chairmanOnlyBlock').style.display = isDone ? 'none' : 'block';
+  document.getElementById('submitBtnMain').style.display = isDone ? 'none' : '';
+  if(isDone){
+    document.getElementById('startPhaseSummary').style.display = 'none';
+    document.getElementById('startLocationRow').style.display = 'none';
+    document.getElementById('startTimeRow').style.display = 'none';
+    document.getElementById('startOdoRow').style.display = 'none';
+    document.getElementById('startOdoNote').style.display = 'none';
+    document.getElementById('endLocationRow').style.display = 'none';
+    document.getElementById('endTimeRow').style.display = 'none';
+    document.getElementById('endOdoRow').style.display = 'none';
+    document.getElementById('distanceRow').style.display = 'none';
+    document.getElementById('fuelCostRow').style.display = 'none';
+    document.getElementById('routeNoteRow').style.display = 'none';
+    return;
+  }
+
   document.getElementById('phaseBtnStart').classList.toggle('active', driverPhase==='start');
   document.getElementById('phaseBtnEnd').classList.toggle('active', driverPhase==='end');
 
@@ -1393,10 +1451,13 @@ function startEditRecord(idx){
   const v = VEHICLES[currentVehicleKey];
   document.getElementById('hoegjangModeBar').style.display = 'none';
   document.getElementById('driverPhaseToggle').style.display = 'none';
+  document.getElementById('doneTodayBanner').style.display = 'none';
   document.getElementById('startPhaseSummary').style.display = 'none';
   document.getElementById('dateRangeRow').style.display = 'flex';
   document.getElementById('singleDateRow').style.display = 'none';
-  document.getElementById('driverNameRow').style.display = 'block';
+  document.getElementById('driverNameRow').style.display = 'flex';
+  document.getElementById('etcSection').style.display = 'block';
+  document.getElementById('submitBtnMain').style.display = '';
   document.getElementById('startLocationRow').style.display = v.chairman ? 'flex' : 'none';
   document.getElementById('endLocationRow').style.display = v.chairman ? 'flex' : 'none';
   document.getElementById('startTimeRow').style.display = v.chairman ? 'flex' : 'none';
