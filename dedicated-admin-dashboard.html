@@ -47,7 +47,7 @@
   .ded-wordmark{display:block; height:auto;}
   /* 제네시스 로고 위에 협회 슬로건 로고를 작게 배치 */
   .topbar-logo-block{display:flex; flex-direction:column; align-items:flex-start; gap:5px;}
-  .topbar-slogan-mark{display:block; width:44px; height:auto;}
+  .topbar-slogan-mark{display:block; width:130px; height:auto;}
 
   /* ── 게이트 화면 ── */
   #gate{
@@ -366,7 +366,7 @@
     </div>
     <div class="ded-qr-body">
       <div id="dedQrContainer"></div>
-      <div class="ded-qr-hint1">운행 시작 전 QR 스캔 필수</div>
+      <div class="ded-qr-hint1" id="dedQrHint1">운행 시작 전 QR 스캔 필수</div>
       <div class="ded-qr-hint2">스캔 시 해당 차량 운행기록 입력 페이지로 자동 이동</div>
       <div class="ded-qr-link-row" id="dedQrLink"></div>
       <div class="ded-qr-actions">
@@ -744,15 +744,19 @@ function renderLog(){
 // QR을 생성하고, 스캔한 기사님 화면이 해당 차량으로 자동 고정되도록 한다(applyQrLock 참조).
 // 차량번호를 URL에 그대로 노출하지 않도록 VEHICLES.token(임의 12자리 hex)을 사용한다.
 let _dedQrInstance = null;
+let _dedQrCurrentVehicle = null;
 
 function openQrModal(vKey){
   const v = VEHICLES.find(x=>x.key===vKey);
   if(!v) return;
+  _dedQrCurrentVehicle = v;
   const url = `${DEDICATED_APP_URL}?t=${encodeURIComponent(v.token)}`;
 
   document.getElementById('dedQrPlate').textContent = `${v.plate} · ${v.model}`;
   document.getElementById('dedQrOrg').textContent = `${v.role} · ${v.org}`;
   document.getElementById('dedQrLink').textContent = url;
+  // 회장차만 "운행 시작 전 QR 스캔 필수" 문구 표시. 전무이사 차량은 해당 문구 생략.
+  document.getElementById('dedQrHint1').style.display = v.chairman ? '' : 'none';
 
   const container = document.getElementById('dedQrContainer');
   container.innerHTML = '';
@@ -1066,6 +1070,9 @@ function printQrDedicated(){
   const canvas = document.getElementById('dedQrContainer').querySelector('canvas');
   if(!canvas){ alert('QR 이미지가 생성되지 않았습니다.'); return; }
   const img = canvas.toDataURL('image/png');
+  const isChairman = !!(_dedQrCurrentVehicle && _dedQrCurrentVehicle.chairman);
+  // 회장차만 "운행 시작 전 QR 스캔 필수" 문구 표시. 전무이사 차량은 해당 문구 생략.
+  const hintRequiredHtml = isChairman ? `<div class="hint-required">운행 시작 전 QR 스캔 필수</div>` : '';
   const win = window.open('','_blank');
   // 전용차량 디자인가이드(제네시스 톤: 무광 블랙 + 웜 베이지, 절제된 여백, 각진 카드)를 인쇄 카드에도 적용.
   // 화면에서는 다크 배경을 쓰지만, 인쇄물은 실물 카드처럼 화이트 바탕에 블랙/베이지 포인트로 절제되게 구성한다.
@@ -1106,7 +1113,7 @@ function printQrDedicated(){
       }
       .hint-required::before{content:'● ';color:#CBB295;}
       .hint-action{
-        position:absolute;top:85.3mm;left:4mm;right:4mm;text-align:center;
+        position:absolute;top:${isChairman ? '85.3mm' : '81.5mm'};left:4mm;right:4mm;text-align:center;
         font-weight:400;font-size:7pt;color:rgba(245,243,239,0.55);
       }
       .footer-mark{
@@ -1123,7 +1130,7 @@ function printQrDedicated(){
       <div class="plate">${plate}</div>
       <div class="org">${org}</div>
       <div class="qr-frame"><img src="${img}"></div>
-      <div class="hint-required">운행 시작 전 QR 스캔 필수</div>
+      ${hintRequiredHtml}
       <div class="hint-action">QR 스캔 시 운행기록 입력 페이지 이동</div>
       <div class="footer-mark">KSA · 한국표준협회</div>
     </div>

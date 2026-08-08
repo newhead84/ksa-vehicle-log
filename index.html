@@ -35,6 +35,14 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-08] 공용차량 운행정보 입력화면(사용자 입력 카드) 2건 개선: ① 시작거리·종료거리 입력창이
+  숫자만 입력되고 콤마(천단위 구분기호) 없이 표시되던 문제 수정 — 관리자 수정모드와 동일하게
+  type="number"에서 type="text"(inputmode="numeric")로 전환, formatFuelInput() 재사용으로 타이핑 중
+  실시간 콤마 반영(주행거리는 이미 콤마 표시 중이었음), 값을 읽는 모든 지점(calcRowDist,
+  checkFuelVsDistance, collectRows, 다음 행 자동채움용 이전 종료거리 읽기, 임시저장 복원)에서 콤마 제거
+  후 파싱하도록 보정, ② "차량 상태" 라벨 우측에 "사고접수 : 롯데렌터카 1588-1230" 안내 텍스트 추가
+  | 변경: addTripRow()(시작/종료거리 input, 차량 상태 label), calcRowDist(), checkFuelVsDistance(),
+  collectRows(), restoreDraft()
   [2026-08-07] 가동율 계산 불일치 버그 수정: 차량상세 모달 상단 "가동율" 요약과 지역구분별 가동현황 표의
   가동율이 "최초 운행일~최종 운행일 사이의 업무일수"를 분모로 계산되어, 최근 재배치된 차량처럼 운행기록이
   짧은 기간에 몰려있으면 실제로는 대부분 개인사용/출퇴근이어도 100%에 가깝게 표시되던 문제(예: 181호6040
@@ -5570,7 +5578,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
   if(prefillStart === null && rows.length > 0){
     const lastCard = rows[rows.length-1];
     const lastEnd = lastCard.querySelector('.tr-end');
-    prefillStart = lastEnd && lastEnd.value ? Number(lastEnd.value) : null;
+    prefillStart = lastEnd && lastEnd.value ? Number(lastEnd.value.replace(/,/g,'')) : null;
     const lastDaechaChk = lastCard.querySelector('.tr-daecha-chk');
     prefillWasDaeCha = !!(lastDaechaChk && lastDaechaChk.checked);
   }
@@ -5616,14 +5624,14 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
       <div class="form-row-2">
         <div class="form-field">
           <label>시작거리 (km)</label>
-          <input type="number" class="tr-start${prefillStart!==null?(prefillWasDaeCha?' needs-recheck':' auto-filled'):''}" value="${prefillStart!==null?prefillStart:''}" placeholder="0"
-            oninput="this.classList.remove('auto-filled','needs-recheck');const h=document.getElementById('startHint-${id}');if(h)h.style.display='none';const w=document.getElementById('prevDaechaWarn-${id}');if(w)w.style.display='none';const dn=document.getElementById('daechaNotice-${id}');if(dn)dn.style.display='none';calcRowDist('${id}');checkFuelVsDistance('${id}');scheduleDraft()">
+          <input type="text" inputmode="numeric" class="tr-start${prefillStart!==null?(prefillWasDaeCha?' needs-recheck':' auto-filled'):''}" value="${prefillStart!==null?Number(prefillStart).toLocaleString():''}" placeholder="0"
+            oninput="formatFuelInput(this);this.classList.remove('auto-filled','needs-recheck');const h=document.getElementById('startHint-${id}');if(h)h.style.display='none';const w=document.getElementById('prevDaechaWarn-${id}');if(w)w.style.display='none';const dn=document.getElementById('daechaNotice-${id}');if(dn)dn.style.display='none';calcRowDist('${id}');checkFuelVsDistance('${id}');scheduleDraft()">
           <div id="startHint-${id}" style="display:${prefillStart!==null && !prefillWasDaeCha?'block':'none'};font-size:11px;color:var(--muted);margin-top:5px;">🔒 이전 운행 종료거리 자동반영 · 필요 시 수정 가능</div>
           <div id="prevDaechaWarn-${id}" style="display:${prefillWasDaeCha?'block':'none'};font-size:12px;color:var(--bad);background:var(--bad-soft);border-radius:8px;padding:8px 10px;margin-top:6px;line-height:1.5;">⚠️ 이전 운행은 <b>대차 차량</b> 사용 건입니다. 대차를 반납했다면 시작거리가 실제와 다를 수 있으니 시작거리를 반드시 확인해주세요.</div>
         </div>
         <div class="form-field">
           <label>종료거리 (km)</label>
-          <input type="number" class="tr-end" placeholder="0" oninput="const dn=document.getElementById('daechaNotice-${id}');if(dn)dn.style.display='none';calcRowDist('${id}');autoFillNextRow('${id}');checkFuelVsDistance('${id}');scheduleDraft()">
+          <input type="text" inputmode="numeric" class="tr-end" placeholder="0" oninput="formatFuelInput(this);const dn=document.getElementById('daechaNotice-${id}');if(dn)dn.style.display='none';calcRowDist('${id}');autoFillNextRow('${id}');checkFuelVsDistance('${id}');scheduleDraft()">
         </div>
       </div>
       <div id="daechaNotice-${id}" style="display:none;font-size:12px;color:var(--bad);background:var(--bad-soft);border-radius:8px;padding:8px 10px;margin:8px 0 0;line-height:1.5;">⚠️ 대차 차량은 원 차량과 주행거리가 이어지지 않습니다. 위 <b>시작거리</b>를 반드시 확인해주세요.</div>
@@ -5640,7 +5648,10 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
         <input type="text" class="tr-user" placeholder="운행자 이름" oninput="this.dataset.autoFilled='false';syncSubmitterFromUser(this);scheduleDraft()">
       </div>
       <div class="form-field">
-        <label>차량 상태</label>
+        <label style="display:flex;align-items:center;justify-content:space-between;">
+          <span>차량 상태</span>
+          <span style="font-size:11px;color:var(--muted);font-weight:400;">사고접수 : 롯데렌터카 1588-1230</span>
+        </label>
         <div class="status-toggle">
           <button class="status-btn active-good" onclick="setStatus(this,'정상')" data-val="정상">✓ 정상</button>
           <button class="status-btn" onclick="setStatus(this,'점검요망')" data-val="점검요망">⚠ 점검요망</button>
@@ -5743,8 +5754,8 @@ function renumberRows(){
 function calcRowDist(id){
   const card = document.getElementById(id);
   if(!card) return;
-  const s = Number(card.querySelector('.tr-start').value)||0;
-  const e = Number(card.querySelector('.tr-end').value)||0;
+  const s = Number((card.querySelector('.tr-start').value||'').replace(/,/g,''))||0;
+  const e = Number((card.querySelector('.tr-end').value||'').replace(/,/g,''))||0;
   const el = document.getElementById('dist-'+id);
   if(el){ el.textContent = (e>0 && e>s) ? (e-s).toLocaleString() : '–'; }
 }
@@ -5915,8 +5926,8 @@ function checkFuelVsDistance(id){
   if(!card) return;
   const isPersonal = card.querySelector('.tr-personal-chk')?.checked || false;
   const hasFuel = card.querySelector('.tr-fuel-chk')?.checked || false;
-  const s = Number(card.querySelector('.tr-start')?.value)||0;
-  const e = Number(card.querySelector('.tr-end')?.value)||0;
+  const s = Number((card.querySelector('.tr-start')?.value||'').replace(/,/g,''))||0;
+  const e = Number((card.querySelector('.tr-end')?.value||'').replace(/,/g,''))||0;
   const dist = Math.max(0, e-s);
 
   // 사전 안내 문구: 개인사용 체크 + 주행거리 확정 시, 주유비 입력 여부와 무관하게 즉시 표시
@@ -5951,8 +5962,8 @@ function collectRows(){
   return Array.from(cards).map(card=>{
     const dateFrom = card.querySelector('.tr-date-from')?.value || '';
     const dateTo = card.querySelector('.tr-date-to')?.value || dateFrom;
-    const startOdo = Number(card.querySelector('.tr-start').value)||0;
-    const endOdo = Number(card.querySelector('.tr-end').value)||0;
+    const startOdo = Number((card.querySelector('.tr-start').value||'').replace(/,/g,''))||0;
+    const endOdo = Number((card.querySelector('.tr-end').value||'').replace(/,/g,''))||0;
     const dest = card.querySelector('.tr-dest').value.trim();
     const user = card.querySelector('.tr-user').value.trim();
     const isPersonal = card.querySelector('.tr-personal-chk')?.checked || false;
@@ -6366,8 +6377,8 @@ async function restoreDraft(){
       if(!card) return;
       if(r.dateFrom) card.querySelector('.tr-date-from').value = r.dateFrom;
       if(r.dateTo) card.querySelector('.tr-date-to').value = r.dateTo;
-      card.querySelector('.tr-start').value = r.startOdo||'';
-      card.querySelector('.tr-end').value = r.endOdo||'';
+      card.querySelector('.tr-start').value = r.startOdo?Number(r.startOdo).toLocaleString():'';
+      card.querySelector('.tr-end').value = r.endOdo?Number(r.endOdo).toLocaleString():'';
       card.querySelector('.tr-dest').value = r.dest||'';
       card.querySelector('.tr-user').value = r.user||'';
       if(r.isPersonal){
