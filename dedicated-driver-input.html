@@ -52,8 +52,9 @@
     text-transform:uppercase;
   }
   .ded-shell{max-width:520px;margin:0 auto;}
-  .ded-header-wordmark{display:block; width:78px; height:auto;}
-  .ded-slogan-mark{display:block; width:78px; height:auto; margin-bottom:6px;}
+  /* 로고/슬로건 이미지 1.5배 확대(78px→117px) */
+  .ded-header-wordmark{display:block; width:117px; height:auto;}
+  .ded-slogan-mark{display:block; width:117px; height:auto; margin-bottom:9px;}
   .ded-logo-block{display:flex; flex-direction:column; align-items:flex-start; flex:0 0 auto;}
 
   /* ── 데모 전용 차량 스위처 (실서비스에서는 QR ?plate= 파라미터로 잠금, 이 UI는 제거) ── */
@@ -76,26 +77,32 @@
     border-bottom:1px solid var(--ded-line);
   }
   .ded-header-row{
-    display:flex; align-items:flex-end; justify-content:space-between;
+    /* 로고 / EXECUTIVE VEHICLE LOG / 차량번호 박스, 3개 요소를 세로 중간 맞춤 */
+    display:flex; align-items:center; justify-content:space-between;
     gap:10px; flex-wrap:nowrap;
   }
   .ded-header-eyebrow-block{
-    display:flex; flex-direction:column; gap:2px; flex:1 1 auto;
+    display:flex; flex-direction:column; gap:3px; flex:1 1 auto;
     text-align:center; min-width:0; padding:0 6px;
   }
-  .ded-header-eyebrow-block .ded-eyebrow{margin-bottom:0;}
-  .ded-header-model{
-    font-size:13.5px; color:var(--ded-muted-2); margin-top:14px;
+  .ded-header-eyebrow-block .ded-eyebrow{margin-bottom:0; font-size:18px; letter-spacing:0.12em;}
+  .ded-header-model-row{
+    display:flex; align-items:baseline; justify-content:space-between;
+    gap:10px; margin-top:14px;
   }
-  .ded-header-right{display:flex; flex-direction:column; align-items:flex-end; text-align:right; min-width:0; flex:0 0 auto;}
-  .ded-header h1{
+  .ded-header-model{
+    font-size:13.5px; color:var(--ded-muted-2); min-width:0;
+  }
+  .ded-header-org{
     font-family:'Pretendard',sans-serif;
     font-weight:600;
-    font-size:15px;
-    margin:0 0 8px;
+    font-size:13.5px;
     letter-spacing:0;
-    color:var(--ded-muted);
+    color:var(--ded-text);
+    text-align:right;
+    flex:0 0 auto;
   }
+  .ded-header-right{display:flex; flex-direction:column; align-items:flex-end; text-align:right; min-width:0; flex:0 0 auto;}
   .ded-plate-chip{
     display:inline-flex; align-items:center; gap:6px;
     border:1px solid var(--ded-beige);
@@ -110,6 +117,11 @@
   .ded-odo-split.compact{display:flex; gap:16px; border-bottom:1px solid var(--ded-line);}
   .ded-odo-split.compact .ded-line-field{border-bottom:none; padding:13px 0;}
   .ded-odo-split.compact .ded-line-field label{flex:0 0 62px; font-size:15px;}
+  /* 전무이사·KSA직원 페이지: 입력창 가로폭을 넓히기 위해 우측 km 표기 최소화 */
+  .ded-odo-split.compact .in-wrap{gap:3px;}
+  .ded-odo-split.compact input[type=text],
+  .ded-odo-split.compact input[type=number]{flex:1 1 auto; min-width:0;}
+  .ded-odo-split.compact .ded-unit{flex:0 0 auto; font-size:12px;}
 
   /* ── 섹션 (여백 최소화) ── */
   .ded-section{
@@ -192,6 +204,12 @@
   #substituteDriverReason::placeholder{font-size:13px;}
   .ded-unit{font-size:14px; color:var(--ded-muted); flex:0 0 auto; white-space:nowrap;}
 
+  /* ── 시작거리 자동 반영 안내문구 ── */
+  .ded-field-note{
+    font-size:12px; color:var(--ded-muted-2); padding:0 0 10px;
+    word-break:keep-all; overflow-wrap:break-word;
+  }
+
   .ded-readout{
     display:flex; justify-content:space-between; align-items:baseline;
     padding:14px 0 16px;
@@ -270,19 +288,6 @@
     margin:10px 0 4px; word-break:keep-all; overflow-wrap:break-word;
   }
   .ded-maint-hotline a{color:var(--ded-beige); font-family:'Outfit',sans-serif; font-weight:500; text-decoration:none;}
-
-  /* ── QR 스캔 안내 배너 ── */
-  .ded-qr-banner{
-    display:none;
-    align-items:center; gap:10px;
-    border:1px solid var(--ded-beige);
-    background:rgba(203,178,149,0.08);
-    padding:12px 14px; margin:12px 22px 0;
-    font-size:13.5px; color:var(--ded-text);
-    word-break:keep-all; overflow-wrap:break-word;
-  }
-  .ded-qr-banner.show{display:flex;}
-  .ded-qr-banner .ic{flex:0 0 auto; font-size:17px;}
 
   /* ── 운행 단계(출발/도착) 표시 ── */
   .ded-phase-toggle{display:flex; gap:0; border:1px solid var(--ded-line); margin:0 22px;}
@@ -404,11 +409,11 @@
   .ded-confirm-close:hover{background:var(--ded-beige); color:var(--ded-bg-pure);}
 
   @media (max-width:400px){
-    .ded-header h1{font-size:13px;}
+    .ded-header-org{font-size:12px;}
     .ded-plate-chip{font-size:19px; padding:7px 13px;}
-    .ded-slogan-mark, .ded-header-wordmark{width:62px;}
+    .ded-slogan-mark, .ded-header-wordmark{width:93px;}
     .ded-header-row{gap:8px;}
-    .ded-header-eyebrow-block .ded-eyebrow{font-size:10.5px; letter-spacing:.1em;}
+    .ded-header-eyebrow-block .ded-eyebrow{font-size:15px; letter-spacing:.1em;}
   }
 </style>
 </head>
@@ -436,11 +441,13 @@
         <div class="ded-eyebrow">VEHICLE LOG</div>
       </div>
       <div class="ded-header-right">
-        <h1 id="orgName">회장</h1>
         <div class="ded-plate-chip" id="plateChip">177호1673</div>
       </div>
     </div>
-    <div class="ded-header-model" id="modelName">G90 (G)3.5T 20"다이아몬드</div>
+    <div class="ded-header-model-row">
+      <div class="ded-header-model" id="modelName">G90 (G)3.5T 20"다이아몬드</div>
+      <div class="ded-header-org" id="orgName">회장</div>
+    </div>
   </div>
 
   <!-- 회장차 전용: 수행기사 / KSA직원 구분 -->
@@ -456,14 +463,6 @@
   <div class="ded-phase-toggle" id="driverPhaseToggle" style="display:none;">
     <div class="ded-phase-btn" id="phaseBtnStart">🚗 출발 등록</div>
     <div class="ded-phase-btn" id="phaseBtnEnd">🏁 도착 등록</div>
-  </div>
-  <div class="ded-qr-banner" id="qrBannerStart">
-    <span class="ic">📷</span>
-    <span>운행을 <b>시작하기 전</b>, 차량에 부착된 QR코드를 반드시 스캔해주세요.</span>
-  </div>
-  <div class="ded-qr-banner" id="qrBannerEnd">
-    <span class="ic">📷</span>
-    <span>운행을 <b>종료한 후</b>, 차량에 부착된 QR코드를 반드시 스캔해주세요.</span>
   </div>
 
   <!-- 운행자 -->
@@ -537,7 +536,7 @@
       <div class="ded-line-field" id="startOdoRow">
         <label>시작거리</label>
         <div class="in-wrap">
-          <input type="number" id="startOdo" inputmode="numeric" placeholder="0" style="text-align:right" oninput="calcDistance()">
+          <input type="text" id="startOdo" inputmode="numeric" placeholder="0" style="text-align:right" oninput="formatOdoInput('startOdo')">
           <span class="ded-unit">km</span>
         </div>
       </div>
@@ -545,19 +544,28 @@
       <div class="ded-line-field" id="endOdoRow">
         <label>종료거리</label>
         <div class="in-wrap">
-          <input type="number" id="endOdo" inputmode="numeric" placeholder="0" style="text-align:right" oninput="calcDistance()">
+          <input type="text" id="endOdo" inputmode="numeric" placeholder="0" style="text-align:right" oninput="formatOdoInput('endOdo')">
           <span class="ded-unit">km</span>
         </div>
       </div>
     </div>
+    <div class="ded-field-note" id="startOdoNote">시작거리는 이전 운행의 종료거리가 자동으로 반영됩니다.</div>
 
     <div class="ded-readout" id="distanceRow">
       <span class="lbl">주행거리</span>
       <span class="val" id="distanceVal">0<span>km</span></span>
     </div>
+
+    <div class="ded-line-field" id="fuelCostRow">
+      <label>주유금액</label>
+      <div class="in-wrap">
+        <input type="text" id="fuelCost" inputmode="numeric" placeholder="0" style="text-align:right" oninput="formatFuelCostInput()">
+        <span class="ded-unit">원</span>
+      </div>
+    </div>
   </div>
 
-  <!-- 대리운전 / 대차 / 주유 -->
+  <!-- 대리운전 / 대차 -->
   <div class="ded-section">
     <div class="ded-eyebrow">ETC</div>
 
@@ -585,14 +593,6 @@
         <div class="in-wrap"><input type="text" id="substituteVehicle" placeholder="차종/차량번호 입력"></div>
       </div>
       <div class="err">대차 차량을 사용한 경우 차량 정보 입력은 필수입니다.</div>
-    </div>
-
-    <div class="ded-line-field">
-      <label>주유금액</label>
-      <div class="in-wrap">
-        <input type="text" id="fuelCost" inputmode="numeric" placeholder="0" oninput="formatFuelCostInput()">
-        <span class="ded-unit">원</span>
-      </div>
     </div>
   </div>
 
@@ -880,7 +880,7 @@ async function prefillStartOdoFromHistory(mySeq){
     const sorted = [...trips].sort((a,b)=>(a.submittedAt||'').localeCompare(b.submittedAt||''));
     const last = sorted[sorted.length-1];
     if(last && last.endOdo != null && !startOdoEl.value){
-      startOdoEl.value = last.endOdo;
+      startOdoEl.value = Number(last.endOdo).toLocaleString();
       calcDistance();
     }
   }catch(e){
@@ -936,8 +936,6 @@ async function refreshHoegjangLayout(){
     await refreshDriverPhase(mySeq);
   } else {
     document.getElementById('driverPhaseToggle').style.display = 'none';
-    document.getElementById('qrBannerStart').classList.remove('show');
-    document.getElementById('qrBannerEnd').classList.remove('show');
     document.getElementById('startPhaseSummary').style.display = 'none';
     document.getElementById('startLocationRow').style.display = effChairman ? 'flex' : 'none';
     document.getElementById('endLocationRow').style.display = effChairman ? 'flex' : 'none';
@@ -946,7 +944,9 @@ async function refreshHoegjangLayout(){
     document.getElementById('startOdoRow').style.display = 'flex';
     document.getElementById('endOdoRow').style.display = 'flex';
     document.getElementById('odoSplitRow').classList.add('compact');
+    document.getElementById('startOdoNote').style.display = 'block';
     document.getElementById('distanceRow').style.display = 'flex';
+    document.getElementById('fuelCostRow').style.display = 'flex';
     // 수행기사(회장차) 출발/도착 2단계 전용으로 숨겼던 항목들을 원상 복구(KSA직원·전무이사 차량·기존 기록 수정은 한 화면에 모두 노출)
     document.getElementById('workEndRow').style.display = 'flex';
     document.getElementById('workTotalRow').style.display = 'flex';
@@ -996,18 +996,18 @@ function renderDriverPhaseUI(openTrip){
   document.getElementById('phaseBtnStart').classList.toggle('active', driverPhase==='start');
   document.getElementById('phaseBtnEnd').classList.toggle('active', driverPhase==='end');
 
-  document.getElementById('qrBannerStart').classList.toggle('show', driverPhase==='start');
-  document.getElementById('qrBannerEnd').classList.toggle('show', driverPhase==='end');
-
   document.getElementById('startLocationRow').style.display = driverPhase==='start' ? 'flex' : 'none';
   document.getElementById('startTimeRow').style.display = driverPhase==='start' ? 'flex' : 'none';
   document.getElementById('startOdoRow').style.display = driverPhase==='start' ? 'flex' : 'none';
+  document.getElementById('startOdoNote').style.display = driverPhase==='start' ? 'block' : 'none';
   document.getElementById('odoSplitRow').classList.remove('compact'); // 회장차 수행기사 페이지는 시작/종료거리 1줄 배치 대상이 아님(기존 레이아웃 유지)
 
   document.getElementById('endLocationRow').style.display = driverPhase==='end' ? 'flex' : 'none';
   document.getElementById('endTimeRow').style.display = driverPhase==='end' ? 'flex' : 'none';
   document.getElementById('endOdoRow').style.display = driverPhase==='end' ? 'flex' : 'none';
   document.getElementById('distanceRow').style.display = driverPhase==='end' ? 'flex' : 'none';
+  // 출발 등록은 단순 출발 기록이므로 주유금액 입력이 필요 없음 — 도착 등록 단계에서만 노출
+  document.getElementById('fuelCostRow').style.display = driverPhase==='end' ? 'flex' : 'none';
 
   // 출발 등록 단계에서는 입력할 수 없는 항목(행선지·근로종료·대기시간·휴게시간·오버타임)은
   // 도착 등록 단계에서만 노출한다. 근로시작은 출발 등록 시 입력한 값을 읽기전용으로 이어받아 표시.
@@ -1030,7 +1030,7 @@ function renderDriverPhaseUI(openTrip){
   if(driverPhase==='end' && openTrip){
     summary.style.display = 'block';
     summary.innerHTML = `출발지 <b>${openTrip.startLocation||'-'}</b> · 시작 시각 <b>${openTrip.startTime||'-'}</b> · 시작거리 <b>${(openTrip.startOdo||0).toLocaleString()}km</b>`;
-    if(!document.getElementById('startOdo').value) document.getElementById('startOdo').value = openTrip.startOdo || '';
+    if(!document.getElementById('startOdo').value) document.getElementById('startOdo').value = openTrip.startOdo ? Number(openTrip.startOdo).toLocaleString() : '';
     if(!document.getElementById('routeNote').value) document.getElementById('routeNote').value = openTrip.routeNote || '';
     calcDistance();
   } else {
@@ -1070,9 +1070,22 @@ function formatFuelCostInput(){
   el.value = digits ? Number(digits).toLocaleString() : '';
 }
 
+// 시작거리/종료거리 입력 시 천 단위 콤마 표시 (저장 시에는 콤마 제거 후 숫자로 파싱)
+function formatOdoInput(id){
+  const el = document.getElementById(id);
+  const digits = el.value.replace(/[^0-9]/g,'');
+  el.value = digits ? Number(digits).toLocaleString() : '';
+  calcDistance();
+}
+
+// 콤마가 포함된 시작거리/종료거리 입력값을 숫자로 파싱
+function odoValue(id){
+  return parseFloat((document.getElementById(id).value || '').replace(/,/g,'')) || 0;
+}
+
 function calcDistance(){
-  const s = parseFloat(document.getElementById('startOdo').value) || 0;
-  const e = parseFloat(document.getElementById('endOdo').value) || 0;
+  const s = odoValue('startOdo');
+  const e = odoValue('endOdo');
   const d = Math.max(0, e - s);
   document.getElementById('distanceVal').innerHTML = d.toLocaleString() + '<span>km</span>';
 }
@@ -1179,7 +1192,7 @@ async function submitLog(){
       const dateVal = document.getElementById('singleDate').value;
       const startLocation = document.getElementById('startLocation').value.trim();
       const startTime = document.getElementById('startTime').value;
-      const startOdo = parseFloat(document.getElementById('startOdo').value) || 0;
+      const startOdo = odoValue('startOdo');
       if(!dateVal){ showToast('운행일자를 입력해주세요.', true); submitBtn.disabled=false; submitBtn.textContent='출발 등록'; return; }
       if(!startLocation){ showToast('출발지를 입력해주세요.', true); submitBtn.disabled=false; submitBtn.textContent='출발 등록'; return; }
 
@@ -1213,7 +1226,7 @@ async function submitLog(){
       const base = trips[openTripIndex];
       const endLocation = document.getElementById('endLocation').value.trim();
       const endTime = document.getElementById('endTime').value;
-      const endOdo = parseFloat(document.getElementById('endOdo').value) || 0;
+      const endOdo = odoValue('endOdo');
       if(!endLocation){ showToast('도착지를 입력해주세요.', true); submitBtn.disabled=false; submitBtn.textContent='도착 등록'; return; }
       if(endOdo < (base.startOdo||0)){ showToast('종료거리 값이 시작거리보다 작습니다. 확인해주세요.', true); submitBtn.disabled=false; submitBtn.textContent='도착 등록'; return; }
 
@@ -1242,8 +1255,8 @@ async function submitLog(){
       // ── KSA직원 모드 · 전무이사 차량 · 기존 기록 수정: 한 화면에서 한 번에 제출(기존 방식) ──
       const startDate = document.getElementById('startDate').value;
       const endDate = document.getElementById('endDate').value;
-      const startOdo = parseFloat(document.getElementById('startOdo').value) || 0;
-      const endOdo = parseFloat(document.getElementById('endOdo').value) || 0;
+      const startOdo = odoValue('startOdo');
+      const endOdo = odoValue('endOdo');
 
       if(!startDate || !endDate){
         showToast('운행기간을 입력해주세요.', true);
@@ -1316,7 +1329,7 @@ function resetFormAfterSubmit(carryStartOdo){
   });
   // 이전에 입력한 종료거리를 다음 운행의 시작거리로 자동 반영
   if(carryStartOdo !== undefined && carryStartOdo !== null){
-    document.getElementById('startOdo').value = carryStartOdo;
+    document.getElementById('startOdo').value = Number(carryStartOdo).toLocaleString();
   }
   document.getElementById('distanceVal').innerHTML = '0<span>km</span>';
   document.getElementById('workTotalVal').textContent = '–';
@@ -1380,8 +1393,6 @@ function startEditRecord(idx){
   const v = VEHICLES[currentVehicleKey];
   document.getElementById('hoegjangModeBar').style.display = 'none';
   document.getElementById('driverPhaseToggle').style.display = 'none';
-  document.getElementById('qrBannerStart').classList.remove('show');
-  document.getElementById('qrBannerEnd').classList.remove('show');
   document.getElementById('startPhaseSummary').style.display = 'none';
   document.getElementById('dateRangeRow').style.display = 'flex';
   document.getElementById('singleDateRow').style.display = 'none';
@@ -1393,7 +1404,9 @@ function startEditRecord(idx){
   document.getElementById('startOdoRow').style.display = 'flex';
   document.getElementById('endOdoRow').style.display = 'flex';
   document.getElementById('odoSplitRow').classList.add('compact');
+  document.getElementById('startOdoNote').style.display = 'block';
   document.getElementById('distanceRow').style.display = 'flex';
+  document.getElementById('fuelCostRow').style.display = 'flex';
   document.getElementById('chairmanOnlyBlock').style.display = v.chairman ? 'block' : 'none';
   document.getElementById('routeNoteRow').style.display = 'flex';
   document.getElementById('workEndRow').style.display = 'flex';
@@ -1411,8 +1424,8 @@ function startEditRecord(idx){
   document.getElementById('endLocation').value = t.endLocation || '';
   document.getElementById('startTime').value = t.startTime || '';
   document.getElementById('endTime').value = t.endTime || '';
-  document.getElementById('startOdo').value = t.startOdo || '';
-  document.getElementById('endOdo').value = t.endOdo || '';
+  document.getElementById('startOdo').value = t.startOdo ? Number(t.startOdo).toLocaleString() : '';
+  document.getElementById('endOdo').value = t.endOdo ? Number(t.endOdo).toLocaleString() : '';
   document.getElementById('routeNote').value = t.routeNote || '';
   document.getElementById('fuelCost').value = t.fuelCost ? Number(t.fuelCost).toLocaleString() : '';
   calcDistance();
