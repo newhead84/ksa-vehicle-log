@@ -200,6 +200,8 @@
   /* ── 시작거리/종료거리: 기본은 기존과 동일(세로 2줄), compact 모드(전무이사 차량·KSA직원 모드 등)에서만 좌우 1줄 배치 ── */
   .ded-odo-split{display:flex;}
   .ded-odo-split .ded-line-field{flex:1 1 0; min-width:0;}
+  /* 종료거리 라벨에 필수(*) 표시가 붙어도 100px 라벨 폭 안에서 줄바꿈되지 않도록 고정 */
+  .ded-odo-split .ded-line-field label{white-space:nowrap;}
   .ded-odo-split.compact{display:flex; gap:16px; border-bottom:1px solid var(--ded-line);}
   .ded-odo-split.compact .ded-line-field{border-bottom:none; padding:13px 0;}
   .ded-odo-split.compact .ded-line-field label{flex:0 0 50px; font-size:14.5px;}
@@ -230,6 +232,14 @@
     font-weight:500;
   }
   .ded-line-field label .req{color:var(--ded-red); margin-left:2px;}
+  /* 시작시각/종료시각 라벨: "24h" 배지가 붙어 길어지므로 해당 라벨만 폭을 넓히고 줄바꿈 방지 */
+  #startTimeRow label, #endTimeRow label{white-space:nowrap; flex:0 0 118px;}
+  .ded-24h-badge{
+    display:inline-block; margin-left:5px; padding:1px 5px;
+    font-family:'Outfit',sans-serif; font-size:10px; font-weight:400; letter-spacing:.02em;
+    color:var(--ded-muted-2); border:1px solid var(--ded-line); border-radius:3px;
+    vertical-align:middle;
+  }
   .ded-line-field .in-wrap{
     flex:1; display:flex; align-items:center; gap:8px; min-width:0;
   }
@@ -269,7 +279,7 @@
   .ded-date-range .date-fmt{
     position:absolute; left:0; right:24px; top:0; bottom:0;
     display:flex; align-items:center; justify-content:center;
-    font-family:'Outfit',sans-serif; font-size:16px; color:var(--ded-text);
+    font-family:'Outfit',sans-serif; font-size:17px; color:var(--ded-text);
     white-space:nowrap; overflow:hidden;
     pointer-events:none;
   }
@@ -356,7 +366,7 @@
   /* 24시간 텍스트 시간 입력창 — 네이티브 시계바늘 피커 대신 사용 (숫자는 Outfit) */
   input.ded-time-input{
     font-family:'Outfit',sans-serif; letter-spacing:.02em;
-    width:64px; flex:0 0 auto;
+    width:64px; flex:0 0 auto; text-align:center;
   }
   .ded-subhead{font-size:14px; color:var(--ded-muted); margin:6px 0 0; font-family:'Pretendard',sans-serif;}
   .ded-subhead .req{color:var(--ded-red); margin-left:2px;}
@@ -613,7 +623,7 @@
     <div class="ded-line-field" id="driverNameRow">
       <label>운행자</label>
       <div class="in-wrap">
-        <input type="text" id="driverName" placeholder="운행자명">
+        <input type="text" id="driverName" placeholder="운행자명" style="text-align:center">
       </div>
     </div>
 
@@ -650,33 +660,33 @@
 
     <div class="ded-line-field" id="startLocationRow">
       <label>출발지<span class="req">*</span></label>
-      <div class="in-wrap"><input type="text" id="startLocation"></div>
+      <div class="in-wrap"><input type="text" id="startLocation" style="text-align:center"></div>
     </div>
     <div class="ded-inline-err" id="startLocationErr">출발지를 입력해 주세요.</div>
 
     <div class="ded-line-field" id="routeNoteRow">
       <label>행선지<span class="req">*</span></label>
-      <div class="in-wrap"><input type="text" id="routeNote" placeholder="예시: 지역명, 업체명 등"></div>
+      <div class="in-wrap"><input type="text" id="routeNote" placeholder="예시: 지역명, 업체명 등" style="text-align:center"></div>
     </div>
     <div class="ded-inline-err" id="routeNoteErr">행선지를 입력해 주세요.</div>
 
     <div class="ded-line-field" id="endLocationRow">
       <label>도착지<span class="req">*</span></label>
-      <div class="in-wrap"><input type="text" id="endLocation"></div>
+      <div class="in-wrap"><input type="text" id="endLocation" style="text-align:center"></div>
     </div>
     <div class="ded-inline-err" id="endLocationErr">도착지를 입력해 주세요.</div>
 
     <div class="ded-line-field" id="startTimeRow">
-      <label>시작 시각<span class="req">*</span></label>
+      <label>시작시각<span class="req">*</span><span class="ded-24h-badge">24h</span></label>
       <div class="in-wrap"><input type="text" inputmode="numeric" maxlength="5" class="ded-time-input" id="startTime" placeholder="HH:MM" oninput="onTimeInput(this, function(){syncWorkTime('start');})" onblur="onTimeBlur(this, function(){syncWorkTime('start');})"></div>
     </div>
-    <div class="ded-inline-err" id="startTimeErr">시작 시각을 입력해 주세요.</div>
+    <div class="ded-inline-err" id="startTimeErr">시작시각을 입력해 주세요.</div>
 
     <div class="ded-line-field" id="endTimeRow">
-      <label>종료 시각<span class="req">*</span></label>
+      <label>종료시각<span class="req">*</span><span class="ded-24h-badge">24h</span></label>
       <div class="in-wrap"><input type="text" inputmode="numeric" maxlength="5" class="ded-time-input" id="endTime" placeholder="HH:MM" oninput="onTimeInput(this, function(){syncWorkTime('end');})" onblur="onTimeBlur(this, function(){syncWorkTime('end');})"></div>
     </div>
-    <div class="ded-inline-err" id="endTimeErr">종료 시각을 입력해 주세요.</div>
+    <div class="ded-inline-err" id="endTimeErr">종료시각을 입력해 주세요.</div>
 
     <div class="ded-odo-split" id="odoSplitRow">
       <div class="ded-line-field" id="startOdoRow">
@@ -760,7 +770,7 @@
           <div class="in-wrap"><input type="text" inputmode="numeric" maxlength="5" class="ded-time-input ded-readonly-input" id="workEnd" placeholder="HH:MM" readonly oninput="onTimeInput(this, calcWorkTotal)" onblur="onTimeBlur(this, calcWorkTotal)"></div>
         </div>
       </div>
-      <div class="ded-field-note" id="workTimeSyncNote">🔒 근로 시작/종료는 시작·종료 시각과 항상 동일하게 자동 반영됩니다</div>
+      <div class="ded-field-note" id="workTimeSyncNote">🔒 근로 시작/종료는 시작시각·종료시각과 항상 동일하게 자동 반영됩니다</div>
       <div class="ded-total-line" id="workTotalRow">
         <span>총 근로시간 <span style="opacity:.6;font-size:12px;">(휴게시간 제외)</span></span>
         <span class="val" id="workTotalVal">–</span>
@@ -1195,12 +1205,22 @@ function renderDriverPhaseUI(openTrip){
   document.getElementById('startLocationRow').style.display = driverPhase==='start' ? 'flex' : 'none';
   document.getElementById('startTimeRow').style.display = driverPhase==='start' ? 'flex' : 'none';
   document.getElementById('startOdoRow').style.display = driverPhase==='start' ? 'flex' : 'none';
+  // 출발 등록 단계 진입 시, 시작시각이 비어있으면 앱 접속(실행) 시각을 기본값으로 표시(수정 가능)
+  if(driverPhase==='start'){
+    const stInput = document.getElementById('startTime');
+    if(stInput && !stInput.value){ stInput.value = nowHHMM(); syncWorkTime('start'); }
+  }
   document.getElementById('startOdoNote').style.display = driverPhase==='start' ? 'block' : 'none';
   document.getElementById('odoSplitRow').classList.remove('compact'); // 회장차 수행기사 페이지는 시작/종료거리 1줄 배치 대상이 아님(기존 레이아웃 유지)
 
   document.getElementById('endLocationRow').style.display = driverPhase==='end' ? 'flex' : 'none';
   document.getElementById('endTimeRow').style.display = driverPhase==='end' ? 'flex' : 'none';
   document.getElementById('endOdoRow').style.display = driverPhase==='end' ? 'flex' : 'none';
+  // 도착 등록 단계 진입 시, 종료시각이 비어있으면 앱 접속(실행) 시각을 기본값으로 표시(수정 가능)
+  if(driverPhase==='end'){
+    const etInput = document.getElementById('endTime');
+    if(etInput && !etInput.value){ etInput.value = nowHHMM(); syncWorkTime('end'); }
+  }
   document.getElementById('distanceRow').style.display = driverPhase==='end' ? 'flex' : 'none';
   // 출발 등록은 단순 출발 기록이므로 주유금액 입력이 필요 없음 — 도착 등록 단계에서만 노출
   document.getElementById('fuelCostRow').style.display = driverPhase==='end' ? 'flex' : 'none';
@@ -1222,7 +1242,7 @@ function renderDriverPhaseUI(openTrip){
   const summary = document.getElementById('startPhaseSummary');
   if(driverPhase==='end' && openTrip){
     summary.style.display = 'block';
-    summary.innerHTML = `출발지 <b>${openTrip.startLocation||'-'}</b> · 시작 시각 <b>${openTrip.startTime||'-'}</b> · 시작거리 <b>${(openTrip.startOdo||0).toLocaleString()}km</b>`;
+    summary.innerHTML = `출발지 <b>${openTrip.startLocation||'-'}</b> · 시작시각 <b>${openTrip.startTime||'-'}</b> · 시작거리 <b>${(openTrip.startOdo||0).toLocaleString()}km</b>`;
     if(!document.getElementById('startOdo').value) document.getElementById('startOdo').value = openTrip.startOdo ? Number(openTrip.startOdo).toLocaleString() : '';
     if(!document.getElementById('routeNote').value) document.getElementById('routeNote').value = openTrip.routeNote || '';
     calcDistance();
@@ -1334,6 +1354,20 @@ function calcWorkTotal(){
   mins = Math.max(0, mins - restMins);
   const h = Math.floor(mins/60), m = mins%60;
   out.textContent = `${h}시간 ${m}분`;
+  clearPeriodErrorsIfValid();
+}
+
+// 대기시간/휴게시간 필수값 에러 안내문구는 제출 시도 후에만 표시되는데,
+// 사용자가 이후 값을 다시 채워 유효해지면 다음 제출 전이라도 즉시 사라지도록 처리
+function clearPeriodErrorsIfValid(){
+  const waitErr = document.getElementById('waitPeriodErr');
+  const restErr = document.getElementById('restPeriodErr');
+  if(waitErr && waitErr.classList.contains('show') && validatePeriodList('waitPeriodsList') === 'ok'){
+    waitErr.classList.remove('show');
+  }
+  if(restErr && restErr.classList.contains('show') && validatePeriodList('restPeriodsList') === 'ok'){
+    restErr.classList.remove('show');
+  }
 }
 
 function addPeriod(listId, defaultStart, defaultEnd){

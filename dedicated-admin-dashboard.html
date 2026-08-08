@@ -559,8 +559,9 @@ async function loadTripsFromFirebase(){
         date: t.dateFrom || t.isoDateFrom || '',
         isoDate: t.isoDateFrom || '',
         driver: t.driver || v.driver,
-        from: t.startLocation || (v.chairman?'–':'–'),
-        to: t.routeNote || t.endLocation || '–',
+        from: t.startLocation || '–',
+        via: t.routeNote || '',
+        to: t.endLocation || '–',
         km: t.distance || 0,
         sub: !!(t.isSubstituteDriver || t.isSubstituteVehicle),
         note: t.substituteDriverReason || (t.isSubstituteVehicle ? `대차: ${t.substituteVehicle}` : ''),
@@ -714,7 +715,11 @@ function renderTrips(){
   tbody.innerHTML = rows.map(t => {
     const rowVehicle = VEHICLES.find(v => v.key === t.v);
     const isChairmanTrip = !!(rowVehicle && rowVehicle.chairman);
-    const routeCell = isChairmanTrip ? `${t.from} → ${t.to}` : t.to;
+    // 회장차: 출발지 → 행선지 → 도착지 3단계 표시(행선지 미입력 시 2단계로 표시)
+    // 전무이사 차량: "구간" 개념이 없으므로 행선지만 표시
+    const routeCell = isChairmanTrip
+      ? (t.via ? `${t.from} → ${t.via} → ${t.to}` : `${t.from} → ${t.to}`)
+      : (t.via || t.to);
     return `
     <tr>
       <td data-label="날짜">${t.date}</td>
@@ -1024,7 +1029,7 @@ function exportTripsExcel(){
     const v = VEHICLES.find(x=>x.key===t.v);
     return {
       '사업장': v?v.org:t.v, '차종': v?v.model:'', '차량번호': v?v.plate:'',
-      '날짜': t.date, '운행자': t.driver, '출발/구간': t.from, '도착/행선지': t.to,
+      '날짜': t.date, '운행자': t.driver, '출발지': t.from, '행선지': t.via||(v&&!v.chairman?t.to:''), '도착지': t.to,
       '거리(km)': t.km, '대리운전': t.sub?'사용':'미사용', '비고': t.note||'', '주유비(원)': t.fuel||0
     };
   });
