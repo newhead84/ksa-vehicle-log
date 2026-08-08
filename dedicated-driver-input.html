@@ -104,6 +104,13 @@
     color:var(--ded-beige);
   }
 
+  /* ── 시작거리/종료거리: 기본은 기존과 동일(세로 2줄), compact 모드(전무이사 차량·KSA직원 모드 등)에서만 좌우 1줄 배치 ── */
+  .ded-odo-split{display:flex;}
+  .ded-odo-split .ded-line-field{flex:1 1 0; min-width:0;}
+  .ded-odo-split.compact{display:flex; gap:16px; border-bottom:1px solid var(--ded-line);}
+  .ded-odo-split.compact .ded-line-field{border-bottom:none; padding:13px 0;}
+  .ded-odo-split.compact .ded-line-field label{flex:0 0 62px; font-size:15px;}
+
   /* ── 섹션 (여백 최소화) ── */
   .ded-section{
     padding:14px 22px 6px;
@@ -246,15 +253,18 @@
   }
   .ded-add-btn:hover{border-color:var(--ded-beige); color:var(--ded-beige);}
 
-  /* ── 점검요청 ── */
+  /* ── 점검요청 / 운행기록 확인수정 (한 줄 좌우 버튼) ── */
+  .ded-action-row{display:flex; gap:12px; margin:10px 0 4px;}
   .ded-maint-btn{
     display:flex; align-items:center; gap:8px; justify-content:center;
     background:none; border:1px solid var(--ded-red); color:var(--ded-red);
-    width:100%; padding:13px; font-size:15px; font-weight:500; cursor:pointer;
-    font-family:'Pretendard',sans-serif; margin:10px 0 4px;
+    flex:1 1 0; min-width:0; padding:13px 8px; font-size:14.5px; font-weight:500; cursor:pointer;
+    font-family:'Pretendard',sans-serif;
   }
   .ded-maint-btn:hover{background:var(--ded-red); color:var(--ded-text);}
   .ded-maint-btn.active{background:var(--ded-red); color:var(--ded-text);}
+  .ded-maint-btn--beige{border-color:var(--ded-beige); color:var(--ded-beige);}
+  .ded-maint-btn--beige:hover, .ded-maint-btn--beige.active{background:var(--ded-beige); color:var(--ded-bg-pure);}
   .ded-maint-hotline{
     font-size:13px; color:var(--ded-muted); text-align:center;
     margin:10px 0 4px; word-break:keep-all; overflow-wrap:break-word;
@@ -523,31 +533,27 @@
       <div class="in-wrap"><input type="time" id="endTime" oninput="syncWorkTime('end')"></div>
     </div>
 
-    <div class="ded-line-field" id="startOdoRow">
-      <label>시작거리</label>
-      <div class="in-wrap">
-        <input type="number" id="startOdo" inputmode="numeric" placeholder="0" style="text-align:right" oninput="calcDistance()">
-        <span class="ded-unit">km</span>
+    <div class="ded-odo-split" id="odoSplitRow">
+      <div class="ded-line-field" id="startOdoRow">
+        <label>시작거리</label>
+        <div class="in-wrap">
+          <input type="number" id="startOdo" inputmode="numeric" placeholder="0" style="text-align:right" oninput="calcDistance()">
+          <span class="ded-unit">km</span>
+        </div>
       </div>
-    </div>
 
-    <div class="ded-line-field" id="endOdoRow">
-      <label>종료거리</label>
-      <div class="in-wrap">
-        <input type="number" id="endOdo" inputmode="numeric" placeholder="0" style="text-align:right" oninput="calcDistance()">
-        <span class="ded-unit">km</span>
+      <div class="ded-line-field" id="endOdoRow">
+        <label>종료거리</label>
+        <div class="in-wrap">
+          <input type="number" id="endOdo" inputmode="numeric" placeholder="0" style="text-align:right" oninput="calcDistance()">
+          <span class="ded-unit">km</span>
+        </div>
       </div>
     </div>
 
     <div class="ded-readout" id="distanceRow">
       <span class="lbl">주행거리</span>
       <span class="val" id="distanceVal">0<span>km</span></span>
-    </div>
-
-    <!-- 전무이사 차량 전용: 시작/종료 단계 구분 없이 한 번에 제출하므로, 제출(=운행 종료) 시 QR 스캔 안내만 노출 -->
-    <div class="ded-qr-banner" id="qrBannerJeonmu">
-      <span class="ic">📷</span>
-      <span>운행을 <b>종료할 때</b>, 차량에 부착된 QR코드를 스캔해주세요.</span>
     </div>
   </div>
 
@@ -632,20 +638,16 @@
     </div>
   </div>
 
-  <!-- 내 운행기록 확인/수정 -->
+  <!-- 운행기록 확인/수정 · 점검요청: 한 줄에 좌우 버튼으로 배치, 제출 직전 맨 아래 -->
   <div class="ded-section">
-    <div class="ded-eyebrow">MY RECORDS</div>
-    <button type="button" class="ded-maint-btn" id="myRecordsBtn" onclick="toggleMyRecords()">📋 내 운행기록 확인/수정</button>
+    <div class="ded-action-row">
+      <button type="button" class="ded-maint-btn ded-maint-btn--beige" id="myRecordsBtn" onclick="toggleMyRecords()">운행기록 확인수정</button>
+      <button type="button" class="ded-maint-btn" id="maintBtn" onclick="toggleMaintPanel()">⚠ 점검요청</button>
+    </div>
     <div class="ded-conditional" id="myRecordsPanel">
       <div class="ded-myrecords-desc">이 차량에 최근 등록된 운행기록입니다. 항목을 눌러 수정할 수 있습니다.</div>
       <div id="myRecordsList" class="ded-myrecords-list"><div class="ded-myrecords-empty">불러오는 중…</div></div>
     </div>
-  </div>
-
-  <!-- 점검요청: 제출 직전 맨 아래로 배치 -->
-  <div class="ded-section">
-    <div class="ded-eyebrow">VEHICLE STATUS</div>
-    <button type="button" class="ded-maint-btn" id="maintBtn" onclick="toggleMaintPanel()">⚠ 점검요청</button>
     <div class="ded-conditional" id="maintPanel">
       <div class="ded-line-field">
         <label>사유<span class="req">*</span></label>
@@ -654,7 +656,7 @@
       <div class="err" id="maintErr">점검 사유를 입력해 주세요.</div>
       <button type="button" class="ded-add-btn" onclick="sendMaintenanceRequest()">담당자에게 메일 발송</button>
     </div>
-    <div class="ded-maint-hotline">급한 정비/사고 등은 롯데렌터카 대표번호 <a href="tel:15881230">1588-1230</a>으로 직접 접수하실 수도 있습니다.</div>
+    <div class="ded-maint-hotline">사고접수 롯데렌터카 <a href="tel:15881230">1588-1230</a></div>
   </div>
 
   <div class="ded-submit-wrap">
@@ -797,6 +799,9 @@ let editingIndex = null;      // 내 운행기록 수정 중인 trips[] 인덱�
 let myRecordsCache = [];      // 내 운행기록 패널에 표시 중인 목록 캐시
 let driverPhase = 'start';    // 회장차 수행기사 모드 전용: 'start'(출발 등록) | 'end'(도착 등록)
 let openTripIndex = null;     // driverPhase==='end'일 때, 이어서 도착 정보를 채워넣을 trips[] 인덱스
+// 차량/모드를 빠르게 전환할 때, 이전 전환에서 발생한 Firebase 비동기 응답이 뒤늦게 도착해
+// 화면 상태를 덮어쓰는 것을 막기 위한 요청 순번(레이스 컨디션 방지)
+let layoutRequestSeq = 0;
 
 function todayIso(){
   const d = new Date();
@@ -862,13 +867,14 @@ function switchVehicle(key){
 }
 
 // 해당 차량의 가장 최근 운행기록 종료거리를 시작거리 입력창에 자동 반영
-async function prefillStartOdoFromHistory(){
+async function prefillStartOdoFromHistory(mySeq){
   if(editingIndex !== null) return;
   const v = VEHICLES[currentVehicleKey];
   const startOdoEl = document.getElementById('startOdo');
   if(!startOdoEl || startOdoEl.value) return;
   try{
     const existing = await fbGet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`);
+    if(mySeq !== layoutRequestSeq) return; // 조회 도중 차량/모드가 바뀌었으면 낡은 응답은 버린다
     const trips = Array.isArray(existing) ? existing.filter(t=>t) : (existing && typeof existing==='object' ? Object.values(existing) : []);
     if(!trips.length) return;
     const sorted = [...trips].sort((a,b)=>(a.submittedAt||'').localeCompare(b.submittedAt||''));
@@ -902,6 +908,7 @@ function setHoegjangMode(mode){
 
 // 차량 + 이용자 구분(수행기사/KSA직원) 조합에 따라 화면 레이아웃을 갱신
 async function refreshHoegjangLayout(){
+  const mySeq = ++layoutRequestSeq; // 이번 호출의 고유 순번 — 진행 중 더 최신 호출이 생기면 이 호출의 비동기 결과는 폐기
   const v = VEHICLES[currentVehicleKey];
   const isHoegjang = currentVehicleKey === 'hoegjang';
   const chauffeur = isChauffeurMode();
@@ -922,12 +929,11 @@ async function refreshHoegjangLayout(){
     syncSingleDateDisplay();
   }
 
-  // 전무이사 차량(회장차가 아닌 경우)은 시작/종료 구분 없이 한 번에 제출하므로,
-  // 제출(=운행 종료) 시 QR 스캔 안내만 노출한다 — 화면 구성 자체는 변경하지 않음
-  document.getElementById('qrBannerJeonmu').classList.toggle('show', !isHoegjang);
+  // 전무이사 차량(회장차가 아닌 경우)은 시작/종료 구분 없이 한 번에 제출한다 — 화면 구성 자체는 변경하지 않음
+  // (기존에 있던 "운행 종료 시 QR 스캔" 안내 배너는 요청에 따라 제거)
 
   if(chauffeur){
-    await refreshDriverPhase();
+    await refreshDriverPhase(mySeq);
   } else {
     document.getElementById('driverPhaseToggle').style.display = 'none';
     document.getElementById('qrBannerStart').classList.remove('show');
@@ -939,6 +945,7 @@ async function refreshHoegjangLayout(){
     document.getElementById('endTimeRow').style.display = effChairman ? 'flex' : 'none';
     document.getElementById('startOdoRow').style.display = 'flex';
     document.getElementById('endOdoRow').style.display = 'flex';
+    document.getElementById('odoSplitRow').classList.add('compact');
     document.getElementById('distanceRow').style.display = 'flex';
     // 수행기사(회장차) 출발/도착 2단계 전용으로 숨겼던 항목들을 원상 복구(KSA직원·전무이사 차량·기존 기록 수정은 한 화면에 모두 노출)
     document.getElementById('workEndRow').style.display = 'flex';
@@ -950,17 +957,18 @@ async function refreshHoegjangLayout(){
     workStartInput.classList.remove('ded-readonly-input');
     document.getElementById('submitBtnMain').textContent = editingIndex!==null ? '수정 저장' : '운행기록 제출';
   }
-  prefillStartOdoFromHistory();
+  prefillStartOdoFromHistory(mySeq);
 }
 
 // 회장차 · 수행기사 모드 전용: 오늘 날짜에 "출발만 등록되고 도착이 비어있는" 기록이 있는지 확인해
 // 출발 등록 단계인지 도착 등록 단계인지를 판단한다.
-async function refreshDriverPhase(){
+async function refreshDriverPhase(mySeq){
   const v = VEHICLES[currentVehicleKey];
   document.getElementById('driverPhaseToggle').style.display = 'flex';
   const dateVal = document.getElementById('singleDate').value || todayIso();
   try{
     const existing = await fbGet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`);
+    if(mySeq !== layoutRequestSeq) return; // 조회 도중 다른 차량/모드로 전환되었으면 이 결과는 화면에 반영하지 않는다
     const trips = Array.isArray(existing)
       ? existing.map((t,i)=>({...t, _idx:i})).filter(t=>t)
       : (existing && typeof existing==='object' ? Object.keys(existing).map(k=>({...existing[k], _idx:Number(k)})) : []);
@@ -976,6 +984,7 @@ async function refreshDriverPhase(){
     }
   }catch(e){
     console.error('[전용차량] 운행 단계 확인 실패:', e);
+    if(mySeq !== layoutRequestSeq) return;
     driverPhase = 'start';
     openTripIndex = null;
     renderDriverPhaseUI(null);
@@ -993,6 +1002,7 @@ function renderDriverPhaseUI(openTrip){
   document.getElementById('startLocationRow').style.display = driverPhase==='start' ? 'flex' : 'none';
   document.getElementById('startTimeRow').style.display = driverPhase==='start' ? 'flex' : 'none';
   document.getElementById('startOdoRow').style.display = driverPhase==='start' ? 'flex' : 'none';
+  document.getElementById('odoSplitRow').classList.remove('compact'); // 회장차 수행기사 페이지는 시작/종료거리 1줄 배치 대상이 아님(기존 레이아웃 유지)
 
   document.getElementById('endLocationRow').style.display = driverPhase==='end' ? 'flex' : 'none';
   document.getElementById('endTimeRow').style.display = driverPhase==='end' ? 'flex' : 'none';
@@ -1382,6 +1392,7 @@ function startEditRecord(idx){
   document.getElementById('endTimeRow').style.display = v.chairman ? 'flex' : 'none';
   document.getElementById('startOdoRow').style.display = 'flex';
   document.getElementById('endOdoRow').style.display = 'flex';
+  document.getElementById('odoSplitRow').classList.add('compact');
   document.getElementById('distanceRow').style.display = 'flex';
   document.getElementById('chairmanOnlyBlock').style.display = v.chairman ? 'block' : 'none';
   document.getElementById('routeNoteRow').style.display = 'flex';
