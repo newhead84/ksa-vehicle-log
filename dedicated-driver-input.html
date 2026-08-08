@@ -171,27 +171,16 @@
   .ded-date-range input{min-width:0; width:100%; text-align:center;}
   .ded-date-range .sep{color:var(--ded-muted-2); font-family:'Outfit',sans-serif; font-size:14px; flex:0 0 auto;}
   /* 네이티브 날짜 입력의 텍스트(YYYY. MM. DD. 등 브라우저 로케일 포맷)는 숨기고,
-     동일 위치에 YY-MM-DD 형식의 커스텀 표시를 오버레이한다. 달력 아이콘/피커는 그대로 네이티브 동작 유지. */
+     동일 위치에 YY-MM-DD 형식의 커스텀 표시를 오버레이한다. 달력 피커는 그대로 네이티브 동작 유지. */
   .ded-date-range input[type="date"]{color:transparent; -webkit-text-fill-color:transparent; padding-right:22px; padding-left:2px;}
-  /* color-scheme:dark 상태에서 브라우저가 자동으로 밝은 색 아이콘을 그리는데, 여기에 filter:invert()를 걸면
-     아이콘이 다시 어두워져 어두운 배경 위에서 보이지 않게 된다(과거 버그). 대신 아이콘 모양을 CSS mask로
-     가져와 색상을 베이지(--ded-beige)로 직접 지정해 배경색과 무관하게 항상 보이도록 한다. */
+  /* 네이티브 인디케이터(브라우저마다 색상·렌더링이 제각각이라 appearance 트릭으로는 다크 배경에서
+     안정적으로 보이지 않았음, 2026-08-08 재확인)는 완전히 투명화해 "클릭 히트영역"으로만 남기고,
+     실제로 보이는 베이지색 달력 아이콘은 아래 .date-icon(별도 요소)으로 항상 동일하게 그린다. */
   .ded-date-range input[type="date"]::-webkit-calendar-picker-indicator{
-    /* -webkit-appearance:none이 부모 input에 걸려 있으면 일부 Android Chrome/WebView에서
-       인디케이터 자체가 렌더링되지 않는 경우가 있어(2026-08-07 확인), 여기서 명시적으로
-       appearance:auto를 다시 지정해 아이콘이 항상 그려지도록 강제한다. */
-    -webkit-appearance:auto;
-    appearance:auto;
-    opacity:1;
+    opacity:0;
     cursor:pointer;
-    width:18px; height:18px;
+    width:22px; height:22px;
     padding:0;
-    background-color:var(--ded-beige);
-    -webkit-mask-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'><path d='M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm12 8H5v10h14V10zM5 8h14V6H5v2z'/></svg>");
-    mask-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'><path d='M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm12 8H5v10h14V10zM5 8h14V6H5v2z'/></svg>");
-    -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
-    -webkit-mask-size:contain; mask-size:contain;
-    -webkit-mask-position:center; mask-position:center;
   }
   .ded-date-range .date-fmt{
     position:absolute; left:0; right:24px; top:0; bottom:0;
@@ -199,6 +188,18 @@
     font-family:'Outfit',sans-serif; font-size:16px; color:var(--ded-text);
     white-space:nowrap; overflow:hidden;
     pointer-events:none;
+  }
+  /* 항상 보이는 커스텀 달력 아이콘(베이지) — 네이티브 인디케이터 위에 겹쳐 그리고,
+     클릭은 pointer-events:none으로 통과시켜 아래의 투명 네이티브 인디케이터가 그대로 받는다. */
+  .ded-date-range .date-icon{
+    position:absolute; right:2px; top:50%; transform:translateY(-50%);
+    width:16px; height:16px; pointer-events:none;
+    background-color:var(--ded-beige);
+    -webkit-mask-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'><path d='M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm12 8H5v10h14V10zM5 8h14V6H5v2z'/></svg>");
+    mask-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'><path d='M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm12 8H5v10h14V10zM5 8h14V6H5v2z'/></svg>");
+    -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+    -webkit-mask-size:contain; mask-size:contain;
+    -webkit-mask-position:center; mask-position:center;
   }
   .ded-line-field input:focus{border-bottom-color:var(--ded-beige);}
   .ded-line-field input::placeholder{color:var(--ded-muted-2); font-size:15px;}
@@ -441,11 +442,12 @@
     .ded-header-eyebrow-block .ded-eyebrow{font-size:11px; letter-spacing:.08em;}
   }
 
-  /* ── 주행거리 · 주유금액: 한 줄 좌우 배치(주행거리는 좁게/최대 4자리, 주유금액은 넓지 않게 축소) ── */
+  /* ── 주행거리 · 주유금액: 한 줄 좌우 배치(두 항목이 눌리지 않도록 균등 배분 + 최소폭 확보) ── */
   .ded-df-row{display:flex; align-items:stretch; gap:16px; border-bottom:1px solid var(--ded-line);}
-  .ded-df-row #distanceRow{flex:0 0 34%; min-width:0; padding:14px 0; border-bottom:none;}
-  .ded-df-row #fuelCostRow{flex:0 1 46%; min-width:0; border-bottom:none;}
+  .ded-df-row #distanceRow{flex:1 1 0; min-width:108px; padding:14px 0; border-bottom:none;}
+  .ded-df-row #fuelCostRow{flex:1 1 0; min-width:120px; border-bottom:none;}
   .ded-df-row #fuelCostRow label{flex:0 0 auto;}
+  .ded-df-row #fuelCostRow input{text-align:right;}
 </style>
 </head>
 <body>
@@ -519,11 +521,13 @@
         <div class="date-field">
           <input type="date" id="startDate" oninput="syncDateDisplays()" onchange="syncDateDisplays()">
           <span class="date-fmt" id="startDateFmt"></span>
+          <span class="date-icon" aria-hidden="true"></span>
         </div>
         <span class="sep">~</span>
         <div class="date-field">
           <input type="date" id="endDate" oninput="syncDateDisplays()" onchange="syncDateDisplays()">
           <span class="date-fmt" id="endDateFmt"></span>
+          <span class="date-icon" aria-hidden="true"></span>
         </div>
       </div>
     </div>
@@ -535,6 +539,7 @@
         <div class="date-field">
           <input type="date" id="singleDate" oninput="syncSingleDateDisplay()" onchange="syncSingleDateDisplay()">
           <span class="date-fmt" id="singleDateFmt"></span>
+          <span class="date-icon" aria-hidden="true"></span>
         </div>
       </div>
     </div>
@@ -584,7 +589,7 @@
         </div>
       </div>
     </div>
-    <div class="ded-field-note" id="startOdoNote">🔒 시작거리는 이전 운행의 종료거리가 자동으로 반영됩니다 · 필요 시 수정 가능</div>
+    <div class="ded-field-note" id="startOdoNote">🔒 시작거리는 이전 운행 종료거리 자동반영 · 필요시 수정가능</div>
 
     <div class="ded-df-row" id="distanceFuelRow">
       <div class="ded-readout" id="distanceRow">
@@ -663,15 +668,9 @@
     </div>
 
     <div class="ded-section" id="overtimeSection">
-      <div class="ded-eyebrow">OVERTIME (심야, 해당 시만)</div>
-      <div class="ded-line-field">
-        <label>시작</label>
-        <div class="in-wrap"><input type="time" id="overtimeStart"></div>
-      </div>
-      <div class="ded-line-field">
-        <label>종료</label>
-        <div class="in-wrap"><input type="time" id="overtimeEnd"></div>
-      </div>
+      <div class="ded-eyebrow">OVERTIME (심야, 해당하는 경우 작성)</div>
+      <div class="ded-period-list" id="overtimePeriodsList"></div>
+      <button type="button" class="ded-add-btn" onclick="addPeriod('overtimePeriodsList')">+ 심야시간 구간 추가(해당하는경우)</button>
     </div>
   </div>
 
@@ -1295,7 +1294,8 @@ async function submitLog(){
         fuelCost,
         workStart: document.getElementById('workStart').value,
         workEnd:'', waitPeriods: collectPeriods('waitPeriodsList'), restPeriods: collectPeriods('restPeriodsList'),
-        overtimeStart: document.getElementById('overtimeStart').value, overtimeEnd:'',
+        overtimePeriods: collectPeriods('overtimePeriodsList'),
+        overtimeStart:'', overtimeEnd:'', // (구버전 호환용 — 출발 단계에서는 항상 비어있음, 도착 등록 시 첫 구간으로 채움)
         plate: v.plate, vehicleKey: currentVehicleKey, status:'open',
         submittedAt: new Date().toISOString()
       };
@@ -1330,10 +1330,12 @@ async function submitLog(){
         workEnd: document.getElementById('workEnd').value,
         waitPeriods: collectPeriods('waitPeriodsList'),
         restPeriods: collectPeriods('restPeriodsList'),
-        overtimeStart: document.getElementById('overtimeStart').value || base.overtimeStart,
-        overtimeEnd: document.getElementById('overtimeEnd').value,
+        overtimePeriods: collectPeriods('overtimePeriodsList'),
         status:'complete', editedAt: new Date().toISOString()
       };
+      // 구버전 호환용: 첫 심야시간 구간을 overtimeStart/overtimeEnd에도 동일하게 기록
+      const opFirst0 = trip.overtimePeriods[0] || {start:'', end:''};
+      trip.overtimeStart = opFirst0.start; trip.overtimeEnd = opFirst0.end;
       trips[openTripIndex] = trip;
       await fbSet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`, trips);
 
@@ -1382,8 +1384,10 @@ async function submitLog(){
         trip.workEnd = document.getElementById('workEnd').value;
         trip.waitPeriods = collectPeriods('waitPeriodsList');
         trip.restPeriods = collectPeriods('restPeriodsList');
-        trip.overtimeStart = document.getElementById('overtimeStart').value;
-        trip.overtimeEnd = document.getElementById('overtimeEnd').value;
+        trip.overtimePeriods = collectPeriods('overtimePeriodsList');
+        // 구버전 호환용: 첫 심야시간 구간을 overtimeStart/overtimeEnd에도 동일하게 기록
+        const opFirst1 = trip.overtimePeriods[0] || {start:'', end:''};
+        trip.overtimeStart = opFirst1.start; trip.overtimeEnd = opFirst1.end;
       }
 
       const wasEditing = editingIndex !== null;
@@ -1413,7 +1417,7 @@ async function submitLog(){
 }
 
 function resetFormAfterSubmit(carryStartOdo){
-  ['startOdo','endOdo','routeNote','substituteVehicle','substituteDriverReason','fuelCost','startLocation','endLocation','startTime','endTime','workStart','workEnd','overtimeStart','overtimeEnd'].forEach(id=>{
+  ['startOdo','endOdo','routeNote','substituteVehicle','substituteDriverReason','fuelCost','startLocation','endLocation','startTime','endTime','workStart','workEnd'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.value = '';
   });
@@ -1428,6 +1432,7 @@ function resetFormAfterSubmit(carryStartOdo){
   document.getElementById('workTotalVal').textContent = '–';
   document.getElementById('waitPeriodsList').innerHTML = '';
   document.getElementById('restPeriodsList').innerHTML = '';
+  document.getElementById('overtimePeriodsList').innerHTML = '';
   ['substituteSwitch','substituteVehicleSwitch'].forEach(id=>{
     const sw = document.getElementById(id);
     if(sw && sw.classList.contains('on')) sw.click();
@@ -1539,8 +1544,16 @@ function startEditRecord(idx){
     document.getElementById('workStart').value = t.workStart || '';
     document.getElementById('workEnd').value = t.workEnd || '';
     calcWorkTotal();
-    document.getElementById('overtimeStart').value = t.overtimeStart || '';
-    document.getElementById('overtimeEnd').value = t.overtimeEnd || '';
+    const otList = document.getElementById('overtimePeriodsList'); otList.innerHTML = '';
+    // overtimePeriods(신규 배열)가 있으면 그대로, 없으면 구버전 단일값(overtimeStart/overtimeEnd)을
+    // 구간 1개로 변환해 불러온다(과거 기록 호환)
+    const otPeriods = (t.overtimePeriods && t.overtimePeriods.length) ? t.overtimePeriods
+      : ((t.overtimeStart || t.overtimeEnd) ? [{start: t.overtimeStart||'', end: t.overtimeEnd||''}] : []);
+    otPeriods.forEach(p=>{
+      addPeriod('overtimePeriodsList');
+      const ins = otList.lastElementChild.querySelectorAll('input');
+      ins[0].value = p.start||''; ins[1].value = p.end||'';
+    });
     const waitList = document.getElementById('waitPeriodsList'); waitList.innerHTML = '';
     (t.waitPeriods||[]).forEach(p=>{
       addPeriod('waitPeriodsList');

@@ -35,6 +35,8 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-08] 공용차량 운행정보 입력화면(사용자 입력 카드): 시작거리·종료거리 입력창(.tr-start/.tr-end)
+  숫자 가운데 정렬 적용 | 변경: CSS(.form-field input.tr-start, .form-field input.tr-end)
   [2026-08-08] 공용차량 운행정보 입력화면(사용자 입력 카드) 2건 개선: ① 시작거리·종료거리 입력창이
   숫자만 입력되고 콤마(천단위 구분기호) 없이 표시되던 문제 수정 — 관리자 수정모드와 동일하게
   type="number"에서 type="text"(inputmode="numeric")로 전환, formatFuelInput() 재사용으로 타이핑 중
@@ -93,10 +95,6 @@
   신규 추가 — isoDate~dateTo 기준으로 재계산 후 어긋난 건수만 점검·확인(confirm)받아 저장, 복구
   완료 후에는 버튼/함수 제거 가능 | 변경: iso()(localDateKey 기반으로 교체), computeCorrectUsageDates()/
   auditUsageDatesDrift()/repairUsageDatesDrift()(모두 신규), HTML(#repairUsageDatesBtn 신규)
-  [2026-08-05] 위 1회성 복구 도구(🛠 usageDates 복구(1회성)) 사용 완료(69건 복구 확인) 후 제거: 관리자
-  툴바 버튼(#repairUsageDatesBtn) 및 computeCorrectUsageDates()/auditUsageDatesDrift()/
-  repairUsageDatesDrift() 함수 삭제. iso() 자체의 수정(localDateKey 기반)은 재발 방지를 위해 계속 유지 |
-  변경: HTML(#repairUsageDatesBtn 삭제), 위 3개 함수 삭제
   [2026-08-05] "사업장별 차량 가동율 운행거리 비교차트"에서 사업장 막대를 눌러 펼친 소속 차량 상세 목록 개선:
   ① 차량번호 우측에 차종명(그랜저/소나타/아반떼) 병기, ② 기존에는 가동율·운행거리 값 기준으로 정렬되어
   차종이 뒤섞여 보이던 것을 차종 정렬원칙(그랜저>소나타>아반떼, 동일 차종은 차량번호순)으로 통일 —
@@ -877,6 +875,8 @@
   }
   .form-field input.auto-filled{border-color:#CBD5E1;background:#F1F5F9;color:#64748B;}
   .form-field input.tr-start.needs-recheck{border-color:var(--bad)!important;background:#fff!important;color:var(--ink)!important;box-shadow:0 0 0 3px rgba(232,22,87,.12);}
+  /* 시작거리·종료거리 입력창: 숫자 가운데 정렬 */
+  .form-field input.tr-start,.form-field input.tr-end{text-align:center;}
   .form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 
   .dist-badge{
