@@ -150,11 +150,12 @@
 
   /* 세부정보(주행거리/주유비/대여료 등) 2x2 그리드 — 기존 대비 폰트 1.5배 확대 */
   .ded-card .card-stats{
-    display:grid; grid-template-columns:1fr 1fr; row-gap:24px; column-gap:16px;
+    display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); row-gap:24px; column-gap:16px;
     padding-top:22px; border-top:1px solid var(--ded-line);
   }
+  .ded-card .stat-cell{min-width:0;}
   .ded-card .stat-cell .l{font-size:21px; color:var(--ded-muted); margin-bottom:8px; line-height:1.3;}
-  .ded-card .stat-cell .v{font-family:'Outfit',sans-serif; font-size:28.5px; color:var(--ded-beige); font-weight:500; line-height:1.2;}
+  .ded-card .stat-cell .v{font-family:'Outfit',sans-serif; font-size:28.5px; color:var(--ded-beige); font-weight:500; line-height:1.2; text-align:right;}
 
   .ded-card .qr-btn{
     margin-top:26px; width:100%; padding:13px; background:transparent;
@@ -255,21 +256,21 @@
   }
   .ded-tab.active{color:var(--ded-beige); border-bottom-color:var(--ded-beige);}
 
-  /* 테이블 */
+  /* 테이블 — 사용내역 상세, 기존 대비 폰트 1.5배 확대 */
   table.ded-table{width:100%; border-collapse:collapse; margin-top:0;}
   .ded-table thead th{
-    text-align:left; font-size:11px; letter-spacing:.06em; color:var(--ded-muted);
-    font-weight:400; padding:14px 12px; border-bottom:1px solid var(--ded-beige);
+    text-align:left; font-size:16.5px; letter-spacing:.06em; color:var(--ded-muted);
+    font-weight:400; padding:16px 14px; border-bottom:1px solid var(--ded-beige);
     font-family:'Outfit',sans-serif; text-transform:uppercase;
   }
   .ded-table tbody td{
-    padding:14px 12px; font-size:13.5px; border-bottom:1px solid var(--ded-line);
+    padding:18px 14px; font-size:20.25px; border-bottom:1px solid var(--ded-line);
     vertical-align:top;
   }
   .ded-table tbody tr:hover{background:#111111;}
   .ded-table .num{font-family:'Outfit',sans-serif; color:var(--ded-beige);}
-  .ded-dot{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ded-muted);}
-  .ded-dot::before{content:''; width:6px; height:6px; border-radius:50%; background:var(--ded-muted-2);}
+  .ded-dot{display:inline-flex; align-items:center; gap:7px; font-size:18.75px; color:var(--ded-muted);}
+  .ded-dot::before{content:''; width:9px; height:9px; border-radius:50%; background:var(--ded-muted-2);}
   .ded-dot.warn::before{background:var(--ded-red);}
   .ded-dot.ok::before{background:var(--ded-good);}
 
@@ -277,13 +278,18 @@
     .ded-stat-strip{grid-template-columns:1fr 1fr;}
     .ded-stat-card{padding:16px;}
     .ded-cards{grid-template-columns:1fr;}
+    .ded-card{padding:26px 20px;}
+    .ded-card .card-stats{grid-template-columns:1fr; row-gap:18px; column-gap:0;}
+    .ded-card .stat-cell .l{font-size:16px;}
+    .ded-card .stat-cell .v{font-size:23px;}
     .ded-main{padding:28px 16px 60px;}
     .ded-topbar{padding:16px;}
-    table.ded-table{font-size:12px;}
+    table.ded-table{font-size:18px;}
     .ded-table thead{display:none;}
     .ded-table tbody tr{display:block; border-bottom:1px solid var(--ded-line); padding:12px 0;}
-    .ded-table tbody td{display:flex; justify-content:space-between; border:none; padding:4px 4px;}
-    .ded-table tbody td::before{content:attr(data-label); color:var(--ded-muted-2); margin-right:12px;}
+    .ded-table tbody td{display:flex; justify-content:space-between; align-items:baseline; gap:12px; border:none; padding:6px 4px;}
+    .ded-table tbody td::before{content:attr(data-label); color:var(--ded-muted-2); margin-right:12px; flex-shrink:0;}
+    .ded-table tbody td{text-align:right;}
   }
 </style>
 </head>
