@@ -218,7 +218,8 @@
           <input type="text" id="locInput" placeholder="주소 또는 위치 설명 입력">
           <button type="button" class="btn-gps" onclick="getLoc()">📍 현재위치</button>
         </div>
-        <div class="gps-status" id="locStatus">버튼을 누르면 GPS로 자동 입력됩니다</div>
+        <div class="gps-status" id="locStatus">버튼을 누르면 GPS 위치를 주소로 자동 변환해 입력합니다</div>
+        <div class="helper">GPS 사용이 어렵거나 위치가 정확하지 않으면, 위 입력창에 주소나 장소명을 직접 입력해 주세요.</div>
       </div>
       <div class="field">
         <label>사고 내용 (육하원칙에 따라 구체적으로)</label>
@@ -232,7 +233,8 @@
 
     <!-- 사진 첨부 -->
     <div class="section">
-      <div class="section-title">현장 사진 <span style="color:var(--muted);font-weight:500;font-size:11.5px;" id="photoCountLabel">(선택, 최대 6장)</span></div>
+      <div class="section-title">사고현장 및 파손부위 사진 <span class="req">필수</span></div>
+      <div style="color:var(--muted);font-weight:500;font-size:11.5px;margin:-6px 0 12px;" id="photoCountLabel"></div>
       <div class="photo-tags">
         <div class="photo-tag on" data-tag="현장">현장</div>
         <div class="photo-tag" data-tag="파손부위">파손부위</div>
@@ -325,7 +327,8 @@ const ctx = {
   plate: qs.get('plate') || '',
   model: qs.get('model') || '',
   branch: qs.get('branch') || '',
-  submitter: qs.get('submitter') || ''
+  submitter: qs.get('submitter') || '',
+  reqId: qs.get('reqId') || ''
 };
 (function initHeader(){
   if(ctx.plate){
@@ -350,21 +353,73 @@ function localDateKey(d){
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 }
 
+// ============================================================
+// GPS → 대한민국 주소 변환(역지오코딩) — OpenStreetMap Nominatim(무료, 키 불필요) 사용.
+// 실패/시간초과/권한거부 등 GPS를 사용할 수 없는 경우에는 좌표만 표시하거나 안내문구만 남기고,
+// locInput은 항상 직접 수정 가능한 일반 텍스트 입력창이므로 그대로 대안 입력(직접 주소/장소 입력)으로 쓸 수 있다.
+// ============================================================
+async function reverseGeocode(lat, lng){
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=ko`;
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), 6000);
+  try{
+    const res = await fetch(url, { signal: controller.signal, headers: { 'Accept':'application/json' } });
+    clearTimeout(timer);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const j = await res.json();
+    return buildKoreanAddress(j.address||{}, j.display_name||'');
+  }catch(e){
+    clearTimeout(timer);
+    console.error('[사고신고] 역지오코딩 실패:', e);
+    return null;
+  }
+}
+function buildKoreanAddress(a, displayName){
+  const parts = [a.state, a.city || a.county, a.city_district, a.borough, a.suburb || a.quarter || a.neighbourhood, a.road, a.house_number].filter(Boolean);
+  const uniq = [...new Set(parts)];
+  const built = uniq.join(' ').trim();
+  return built || displayName || '';
+}
+
 let lastGeo = null;
+let lastGeoAddress = '';
 function getLoc(){
   const status = document.getElementById('locStatus');
   const input = document.getElementById('locInput');
-  if(!navigator.geolocation){ status.textContent='이 기기에서는 GPS를 지원하지 않습니다'; return; }
-  status.textContent='위치 확인 중...';
+  if(!navigator.geolocation){
+    status.textContent = '이 기기에서는 GPS를 지원하지 않습니다 — 위 입력창에 주소나 장소를 직접 입력해주세요.';
+    status.classList.remove('ok');
+    input.focus();
+    return;
+  }
+  status.textContent = '위치 확인 중...';
+  status.classList.remove('ok');
   navigator.geolocation.getCurrentPosition(
-    pos=>{
+    async pos=>{
       const {latitude, longitude} = pos.coords;
       lastGeo = {lat:latitude, lng:longitude};
-      input.value = `위도 ${latitude.toFixed(5)}, 경도 ${longitude.toFixed(5)}`;
-      status.textContent = '현재 위치가 입력되었습니다';
-      status.classList.add('ok');
+      status.textContent = '주소 변환 중...';
+      const addr = await reverseGeocode(latitude, longitude);
+      if(addr){
+        lastGeoAddress = addr;
+        input.value = addr;
+        status.textContent = '현재 위치가 주소로 자동 입력되었습니다 — 정확하지 않으면 직접 수정해주세요.';
+        status.classList.add('ok');
+      }else{
+        input.value = `위도 ${latitude.toFixed(5)}, 경도 ${longitude.toFixed(5)}`;
+        status.textContent = '주소 변환에 실패했습니다(좌표만 입력됨) — 정확한 주소를 직접 입력해주세요.';
+        status.classList.remove('ok');
+      }
     },
-    err=>{ status.textContent='위치 권한이 거부되었습니다 — 직접 입력해주세요'; }
+    err=>{
+      let msg = '위치를 확인할 수 없습니다 — 위 입력창에 주소나 장소를 직접 입력해주세요.';
+      if(err.code === err.PERMISSION_DENIED) msg = '위치 권한이 거부되었습니다 — 위 입력창에 주소나 장소를 직접 입력해주세요.';
+      else if(err.code === err.TIMEOUT) msg = 'GPS 응답이 지연되고 있습니다(시간초과) — 위 입력창에 주소나 장소를 직접 입력해주세요.';
+      status.textContent = msg;
+      status.classList.remove('ok');
+      input.focus();
+    },
+    { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
   );
 }
 
@@ -392,10 +447,11 @@ function updatePhotoCountUI(){
   const n = Object.keys(photoStore).length;
   const label = document.getElementById('photoCountLabel');
   const addLabel = document.getElementById('photoAddLabel');
-  label.textContent = `(선택, ${n}/${MAX_PHOTOS}장)`;
-  label.style.color = n>=MAX_PHOTOS ? 'var(--bad)' : 'var(--muted)';
+  label.textContent = `최소 1장, 최대 ${MAX_PHOTOS}장 첨부 (${n}/${MAX_PHOTOS}장)`;
+  label.style.color = n===0 ? 'var(--bad)' : (n>=MAX_PHOTOS ? 'var(--bad)' : 'var(--muted)');
   addLabel.style.display = n>=MAX_PHOTOS ? 'none' : 'flex';
 }
+updatePhotoCountUI();
 
 function compressImage(file){
   return new Promise((resolve)=>{
@@ -507,6 +563,12 @@ async function submitAccidentReport(){
     errBox.style.display = 'block';
     return;
   }
+  if(Object.keys(photoStore).length === 0){
+    errBox.textContent = '사고현장 및 파손부위 사진을 최소 1장 첨부해주세요.';
+    errBox.style.display = 'block';
+    document.getElementById('photoGrid')?.scrollIntoView({behavior:'smooth', block:'center'});
+    return;
+  }
 
   submitting = true;
   const btn = document.getElementById('submitBtn');
@@ -530,7 +592,7 @@ async function submitAccidentReport(){
       reportedBy: { name: ctx.submitter || '', org: ctx.branch || '' },
       ourVehicle: { plate: ctx.plate || '', model: ctx.model || '', org: ctx.branch || '' },
       occurredAt: occurredAtVal,
-      location: { lat: lastGeo?lastGeo.lat:null, lng: lastGeo?lastGeo.lng:null, address: '', manualNote: location },
+      location: { lat: lastGeo?lastGeo.lat:null, lng: lastGeo?lastGeo.lng:null, address: lastGeoAddress || '', manualNote: location },
       description,
       companion: document.getElementById('companion').value.trim(),
       otherParties,
@@ -559,6 +621,19 @@ async function submitAccidentReport(){
         console.error('[사고접수 알림] 이메일 발송 실패:', e);
       }
     }
+
+    try{
+      if(window.opener && !window.opener.closed){
+        window.opener.postMessage({
+          type: 'ksaAccidentReportSubmitted',
+          reqId: ctx.reqId,
+          accidentId,
+          plate: ctx.plate,
+          submitter: ctx.submitter,
+          occurredAt: occurredAtVal
+        }, window.location.origin);
+      }
+    }catch(e){ console.error('[사고신고] opener 알림 실패:', e); }
 
     showDone(accidentId);
   }catch(e){
