@@ -622,22 +622,9 @@ async function submitAccidentReport(){
 
     await fbSet(`fleet-data/accidents/${accidentId}`, record);
 
-    // 관리자 알림 이메일 (실패해도 접수 자체는 이미 완료된 것으로 처리)
-    if(window.emailjs && EMAILJS_PUBLIC_KEY){
-      try{
-        await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-          to_email: ADMIN_EMAIL,
-          plate: ctx.plate || '(미확인)',
-          branch: ctx.branch || '',
-          submitter: ctx.submitter || '(미확인)',
-          status: '🚨 사고접수',
-          detail: `사고일시: ${occurredAtVal}\n장소: ${location}\n내용: ${description}\n상대차량: ${otherParties.length}건\n사진: ${photos.length}장`,
-          submitted_at: now.toLocaleString('ko-KR')
-        });
-      }catch(e){
-        console.error('[사고접수 알림] 이메일 발송 실패:', e);
-      }
-    }
+    // ※ 관리자 알림 이메일은 여기(사고보고서 접수 완료 시점)에서 보내지 않는다.
+    // 사고접수가 첨부된 운행정보가 index.html에서 "제출하기"로 최종 제출되는 시점에
+    // notifyAccidentSubmitted()(index.html)가 발송한다 — doSubmit() 참조.
 
     try{
       if(window.opener && !window.opener.closed){

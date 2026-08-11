@@ -35,6 +35,12 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-11] 사고접수 관리자 알림 이메일 발송 시점 변경. 기존에는 accident-report.html에서
+  사고보고서 접수가 완료되는 즉시 이메일이 발송되었으나, 사고접수가 첨부된 해당 운행정보가
+  index.html에서 "제출하기"로 최종 제출되는 시점으로 변경(운행정보 자체가 아직 제출되지 않은
+  상태에서 미리 알림이 가는 것을 방지) | 변경: accident-report.html(submitAccidentReport() 내
+  emailjs.send 블록 제거), index.html(notifyAccidentSubmitted() 신규, doSubmit()에서 rows 중
+  accidentReported 건이 있으면 호출)
   [2026-08-11] 사고접수 플로우 UI 버그 4건 + 기능 1건 개선. ① 사고보고서 작성 완료 후에도 원래
   창의 "사고접수 안내" 팝업이 계속 떠 있던 문제 수정 — postMessage 수신 시 열려 있는 모달을
   자동으로 닫도록 처리. ② 사고보고서 미완료 안내문구로 인해 하단 제출바의 "임시저장"/"제출하기"
@@ -90,26 +96,6 @@
   리스너 신규, collectRows()/submitDirectInput()/removeTripRow() 반영, renderAccidentHistory()/
   accidentListSorted()/accidentStatusBadge() 신규 + adminSections 신규 섹션, openVehicle() 차량별
   사고이력 블록 추가)
-  [2026-08-11] 사고신고 입력폼 3건 수정. ① 현장사진 첨부를 최대 6장으로 제한(초과분은 안내 후
-  앞쪽 6장까지만 반영, 개수 표시를 사진 섹션 라벨에 실시간 반영, 6장 도달 시 "사진 추가" 버튼 자동
-  숨김). ② 과실률 필드 전면 삭제 — 협회 렌터카 계약이 자기부담금 정액(5만원, 과실과 무관)이라
-  실무상 필수 정보가 아니라고 판단, 상대차량 카드에서 과실률 입력란과 관련 안내 문구 삭제,
-  collectOtherParties()의 faultRatio 필드 제거, 완료 팝업 문구도 과실률 언급 없이 수정,
-  ACCIDENT_REPORT_DESIGN.md 데이터 모델·미결정사항에도 반영. ③ index.html 사고접수 팝업의
-  "📝 차량사고보고서 작성하기" 버튼 하단에 "운행종료 후 운행정보 입력을 모두 마친 상태에서
-  작성해주세요" 안내문구 추가 | 변경: accident-report.html(사진 섹션/MAX_PHOTOS/
-  updatePhotoCountUI() 신규, addPhotos() 제한 로직, otherPartyCardHtml()/collectOtherParties()
-  과실률 제거), index.html(openAccidentPopup() 안내문구 추가), ACCIDENT_REPORT_DESIGN.md(갱신)
-  [2026-08-11] 운행기록 입력화면 "차량 상태" 영역에 사고접수 버튼 추가. 기존 "정상"/"점검요망" 라벨
-  옆에 있던 "사고접수 : 롯데렌터카 1588-1230" 안내 텍스트를 삭제하고, 대신 "✓ 정상 / ⚠ 점검요망 /
-  🚨 사고접수" 3개 버튼을 한 줄에 배치(.status-toggle-3 신규, 컴팩트 패딩·폰트 적용). "정상"이 기존과
-  동일하게 기본 선택값 유지. 사고접수 버튼은 차량상태 값을 변경하지 않고 클릭 시 기존 모달 컴포넌트
-  (#modalOverlay/#modalBody)를 이용해 롯데렌터카 대표번호(1588-1230) 안내 팝업을 표시(tel: 링크로
-  바로 전화 연결), 팝업 하단에 "📝 차량사고보고서 작성하기" 버튼을 추가해 신규 페이지 accident-report.html을
-  새 창으로 엶(현재 차량번호·차종·사업장·제출자 이름을 URL 쿼리로 전달). setStatus()의 버튼 초기화
-  대상 선택자를 .status-btn[data-val]로 제한해 사고접수 버튼(data-val 없음)이 정상/점검요망 토글 시
-  함께 초기화되지 않도록 수정 | 변경: CSS(.status-toggle-3, .status-btn.accident-btn), HTML(차량 상태
-  필드), setStatus()(선택자), openAccidentPopup(btn)(신규, 차량정보 쿼리스트링 전달)
 -->
 
 <head>
@@ -6354,6 +6340,38 @@ async function notifyMaintenanceNeeded(plate, branch, submitter, rows){
   }
 }
 
+// 사고접수가 첨부된 운행기록이 있으면 관리자에게 이메일 알림 발송 (EmailJS)
+// - 사고보고서 접수 완료 시점(accident-report.html)이 아니라, 그 사고접수가 딸린 운행정보가
+//   여기 doSubmit()에서 "제출하기"로 최종 제출되는 시점에 보낸다.
+// - 정상 제출 흐름을 막지 않도록 실패해도 조용히 콘솔에만 기록합니다.
+async function notifyAccidentSubmitted(plate, branch, submitter, rows){
+  const accRows = (rows||[]).filter(r=>r.accidentReported && r.accidentId);
+  if(!accRows.length) return;
+  if(!window.emailjs || !EMAILJS_PUBLIC_KEY || EMAILJS_PUBLIC_KEY.startsWith('YOUR_')){
+    console.warn('[사고접수 알림] EmailJS 설정이 완료되지 않아 이메일을 발송하지 않았습니다. (index.html 상단 EMAILJS_* 값을 설정하세요)');
+    return;
+  }
+  const detail = accRows.map(r=>{
+    const a = (data.accidents||{})[r.accidentId] || {};
+    const loc = a.location?.manualNote || a.location?.address || '';
+    const occurred = a.occurredAt ? a.occurredAt.replace('T',' ') : '';
+    return `- ${r.dateFrom||''}${r.dateTo&&r.dateTo!==r.dateFrom?'~'+r.dateTo:''} / 행선지: ${r.dest||'-'} / 접수번호: ${r.accidentId}${occurred?' / 사고일시: '+occurred:''}${loc?' / 장소: '+loc:''}`;
+  }).join('\n');
+  try{
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: ADMIN_EMAIL,
+      plate,
+      branch: branch||'',
+      submitter,
+      status: '🚨 사고접수(운행기록 최종제출)',
+      detail,
+      submitted_at: new Date().toLocaleString('ko-KR')
+    });
+  }catch(e){
+    console.error('[사고접수 알림] 이메일 발송 실패:', e);
+  }
+}
+
 async function doSubmit(submitter, plate, rows){
   // isoDate 계산 + trip 포맷 변환
   await refreshDataFromStorage();
@@ -6410,6 +6428,8 @@ async function doSubmit(submitter, plate, rows){
   notifyMaintenanceNeeded(plate, branchAtTime, submitter, rows);
   // 늦은입력으로 다른 기록이 자동 보정되었거나(또는 수동확인이 필요하면) 관리자에게 별도 이메일 알림
   notifyLateEntryAdjustment(plate, branchAtTime, submitter, lateAdjustments, lateConflicts);
+  // 사고접수가 첨부된 운행기록이 최종 제출되었으면 관리자에게 별도 이메일 알림
+  notifyAccidentSubmitted(plate, branchAtTime, submitter, rows);
 
   document.getElementById('tripRows').innerHTML='';
   document.getElementById('userPlateSelect').value='';
