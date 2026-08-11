@@ -35,6 +35,27 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-11] 개인사용(주말·공휴일) 주유영수증 OCR 검증 기능 신규 구현
+  (RECEIPT_OCR_DESIGN.md 기반). ① 개인사용 체크 시 운행입력 카드에 영수증 첨부 UI([📷 지금 첨부]/
+  [⏳ 나중에 첨부]) 노출, 파일 선택 즉시 Google Cloud Vision OCR로 금액·일자를 함께 인식해 입력
+  주유비 및 운행일과 대조(배지로 즉시 안내, 불일치/부적격/인식실패여도 입력·제출 자체는 차단하지
+  않음). ② 일자 검증 신규: 영수증 승인일자/발행일이 운행일 기준 ±10일(RECEIPT_DATE_TOLERANCE_DAYS)을
+  벗어나면 "증빙 부적격"으로 별도 판정(금액 판정과 완전히 독립적으로 저장). ③ 제출(doSubmit) 시점에
+  캔버스 리사이즈(가로 1200px)+JPEG 75% 압축 후 Firebase Storage REST API로 업로드, trip에
+  receiptPath/receiptOcrAmount/receiptOcrMatched/receiptOcrDate/receiptDateValid/receiptUploadedAt
+  필드 신규 저장(업로드 실패 시에도 receiptPath=null로 폴백해 제출은 정상 진행). ④ 관리자
+  "주말·공휴일 개인사용 현황" 표에 증빙상태 컬럼 추가(금액일치/금액상이/금액확인필요 +
+  일자적격/일자부적격/일자확인필요 배지, 대기중(D-N)/기한초과 상태 포함) 및 원본 이미지 열람 버튼
+  추가 | 변경: firebaseConfig 하단 GOOGLE_VISION_API_KEY/FIREBASE_STORAGE_BUCKET/
+  RECEIPT_DATE_TOLERANCE_DAYS 신규 상수, fbSet() 뒤 fileToBase64()/callVisionOcr()/
+  parseReceiptAmount()/parseReceiptDate()/matchReceiptAmount()/validateReceiptDate()/
+  compressReceiptImage()/buildReceiptFileName()/uploadReceiptToStorage()/fetchReceiptImageUrl()
+  신규, addTripRow() 영수증 첨부 UI 마크업 추가, togglePersonalUse()/resetReceiptState()/
+  onReceiptAttachNow()/onReceiptAttachLater()/onReceiptFileSelected() 신규 연동,
+  collectRows()/doSubmit() 영수증 필드 수집·업로드·저장 로직 반영(doSubmit forEach→for..of 전환),
+  renderPersonalUseList()/receiptStatusBadgeHtml()/viewReceiptImage() 신규(관리자 증빙상태 노출).
+  ※ "내 제출 기록 수정" 화면에서의 사후 첨부(설계 1-B)와 openWeekendModal() 문구 갱신은 이번
+  범위에서 아직 미구현 — 후속 작업 필요
   [2026-08-11] 사고접수/점검요망 관련 3건 개선. ① 사고보고서 접수완료 안내문구 수정: "관리부서에
   알림이 전송되었습니다" → "운행 기록을 최종 제출하면 관리부서로 자동 통보됩니다"(실제 발송 시점은
   index.html 최종 제출 시이므로 문구 오해 소지 제거). ② "내 제출 기록 수정" 위(이전종료거리 안내
@@ -91,24 +112,6 @@
   openAccidentEditModal()/saveAccidentEdit()/deleteAccidentRecord() 신규, renderAccidentHistory()
   (사진 썸네일·수정/삭제 버튼 추가), openAccidentPopup()(안내문구 축약), collectRows()/restoreDraft()
   (사고접수 진행상태 보존·복원)
-  [2026-08-11] 사고신고 입력폼·플로우 3건 개선. ① 사고 장소: GPS 버튼 클릭 시 위도/경도 대신
-  OpenStreetMap Nominatim으로 역지오코딩한 실제 주소를 자동 입력(주소 변환 실패 시 좌표로 대체
-  표시), GPS 사용 불가/오작동 시를 대비해 입력창 아래 "직접 입력" 안내문구 상시 노출(입력창은
-  기존과 동일하게 자유 텍스트라 언제든 수동 수정 가능). ② 현장사진을 "사고현장 및 파손부위 사진"으로
-  라벨 변경 후 필수 입력으로 전환(최소 1장 미첨부 시 제출 차단, 섹션에 "필수" 배지 표시).
-  ③ 운행정보 입력 화면에서 "🚨 사고접수" 버튼을 누르면(=사고접수를 선택하면) 해당 운행기록 카드가
-  즉시 "사고접수 진행중" 상태로 전환되어 "정상" 버튼이 비활성화되고, accident-report.html에서
-  사고보고서 제출을 완료(postMessage로 부모창에 통지)해야만 "제출하기" 버튼 잠금이 풀리는 플로우로
-  변경(취소 링크로 되돌리기 가능, collectRows()에 accidentReported/accidentId 필드 추가로 제출
-  데이터에도 반영). 관리자 대시보드에 신규 "사고 이력" 섹션(전체목록·검색) 및 차량상세 모달 내
-  차량별 사고이력 표시 추가(둘 다 fleet-data/accidents 조회 전용, 상태변경은 이번 범위 제외) |
-  변경: accident-report.html(reverseGeocode()/buildKoreanAddress() 신규, getLoc() 재작성, 사진
-  섹션 필수화, submitAccidentReport() postMessage 추가), index.html(CSS 신규 클래스,
-  openAccidentPopup() 재작성, markAccidentPending()/markAccidentCompleted()/
-  cancelAccidentReport()/renderAccidentNotice()/updateSubmitGateForAccidents() 신규, message
-  리스너 신규, collectRows()/submitDirectInput()/removeTripRow() 반영, renderAccidentHistory()/
-  accidentListSorted()/accidentStatusBadge() 신규 + adminSections 신규 섹션, openVehicle() 차량별
-  사고이력 블록 추가)
 -->
 
 <head>
@@ -1569,6 +1572,24 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 
+// ============================================================
+// ★ 개인사용 주유영수증 OCR 검증 (RECEIPT_OCR_DESIGN.md) ★
+// ------------------------------------------------------------
+// GOOGLE_VISION_API_KEY   : Google Cloud Console > API 및 서비스 > 사용자 인증 정보에서
+//                           발급받은 Cloud Vision API 키로 교체하세요.
+//                           반드시 "키 제한사항 > HTTP 리퍼러" 에 https://newhead84.github.io/*
+//                           를 등록해 도메인 제한을 걸어야 합니다 (다른 EmailJS 키와 동일한 방어패턴).
+// FIREBASE_STORAGE_BUCKET : Firebase 콘솔 > Storage > 시작하기 후 표시되는 버킷명으로 교체하세요.
+//                           보통 "{프로젝트ID}.firebasestorage.app" 또는 "{프로젝트ID}.appspot.com" 형식입니다.
+//                           (Storage를 아직 활성화하지 않았다면 콘솔에서 먼저 활성화 필요)
+// 두 값 모두 다른 Firebase/EmailJS 설정값과 마찬가지로 클라이언트(브라우저)에 노출되는 정적
+// 사이트 특성상 코드에 직접 넣습니다. 실질적인 보호는 "키 제한사항(HTTP 리퍼러)"과
+// Storage 보안 규칙(auth != null)이 담당하며, 이 값 자체를 숨기는 것은 큰 의미가 없습니다.
+// ============================================================
+const GOOGLE_VISION_API_KEY   = "여기에_발급받은_Vision_API_키를_붙여넣으세요";
+const FIREBASE_STORAGE_BUCKET = "ksa-vehicle-log.firebasestorage.app"; // 콘솔에서 실제 버킷명 확인 후 교체
+const RECEIPT_DATE_TOLERANCE_DAYS = 10; // 영수증 일자와 운행일 허용 오차(±일)
+
 let _authReadyResolve;
 const authReadyPromise = new Promise(res=>{ _authReadyResolve = res; });
 // 로그인 성공/실패와 무관하게 상태가 확정되면 대기를 풀어줌 (익명 로그인이 아직
@@ -1619,6 +1640,174 @@ async function fbSet(path, value){
   });
   if(!r.ok) throw new Error(`Firebase 쓰기 실패 (${r.status})`);
   return r.json();
+}
+
+// ============================================================
+// ★ 개인사용 주유영수증 OCR 검증 유틸 (RECEIPT_OCR_DESIGN.md 3, 4항) ★
+// ============================================================
+
+// 파일(File)을 base64 문자열로 변환 (Vision API 전송용, data:...;base64, 접두어 제거)
+function fileToBase64(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=> resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = ()=> reject(new Error('이미지 읽기 실패'));
+    reader.readAsDataURL(file);
+  });
+}
+
+// Google Cloud Vision TEXT_DETECTION 호출 → 인식된 전체 텍스트 반환 (실패 시 null)
+async function callVisionOcr(file){
+  if(!GOOGLE_VISION_API_KEY || GOOGLE_VISION_API_KEY.includes('여기에')){
+    console.warn('[영수증 OCR] GOOGLE_VISION_API_KEY가 설정되지 않았습니다.');
+    return null;
+  }
+  try{
+    const base64 = await fileToBase64(file);
+    const res = await fbFetchWithTimeout(
+      `https://vision.googleapis.com/v1/images:annotate?key=${GOOGLE_VISION_API_KEY}`,
+      {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ requests:[{ image:{content:base64}, features:[{type:'TEXT_DETECTION'}] }] })
+      },
+      20000
+    );
+    if(!res.ok) throw new Error(`Vision API 오류 (${res.status})`);
+    const json = await res.json();
+    return json?.responses?.[0]?.fullTextAnnotation?.text || null;
+  }catch(e){
+    console.error('[영수증 OCR] 인식 실패', e);
+    return null;
+  }
+}
+
+// OCR 텍스트에서 금액 후보 추출 (설계 3-2)
+function parseReceiptAmount(text){
+  if(!text) return [];
+  const lines = text.split('\n');
+  const keywordRe = /(합계|결제금액|승인금액|총액|받을금액)/;
+  const numRe = /\d{1,3}(,\d{3})*/g;
+  const toNum = s => Number(s.replace(/,/g,''));
+
+  // 1순위: 키워드 포함 줄 + 인접 줄
+  const candidates1 = [];
+  lines.forEach((line, i)=>{
+    if(keywordRe.test(line)){
+      [line, lines[i+1]||''].forEach(l=>{
+        const nums = l.match(numRe) || [];
+        nums.forEach(n=>{
+          const v = toNum(n);
+          if(v >= 100 && v <= 1000000) candidates1.push(v);
+        });
+      });
+    }
+  });
+  if(candidates1.length) return candidates1;
+
+  // 2순위: 전체 텍스트에서 원 단위로 타당한 범위(1,000~200,000)의 숫자 중 최댓값
+  const all = (text.match(numRe) || []).map(toNum).filter(v=> v>=1000 && v<=200000);
+  if(!all.length) return [];
+  return [Math.max(...all)];
+}
+
+// OCR 텍스트에서 날짜 후보 추출 (승인일자/발행일/거래일시 등 키워드 우선)
+// 반환: 'YYYY-MM-DD' 형식 문자열 또는 null
+function parseReceiptDate(text){
+  if(!text) return null;
+  const lines = text.split('\n');
+  const keywordRe = /(승인일자|승인일시|발행일|거래일시|결제일시|일시)/;
+  // YYYY-MM-DD, YYYY.MM.DD, YYYY/MM/DD, YY-MM-DD 등 다양한 구분자 지원
+  const dateRe = /(20\d{2}|\d{2})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/;
+
+  function normalize(m){
+    let y = m[1], mo = m[2].padStart(2,'0'), d = m[3].padStart(2,'0');
+    if(y.length===2) y = '20'+y;
+    return `${y}-${mo}-${d}`;
+  }
+
+  // 1순위: 키워드가 있는 줄
+  for(const line of lines){
+    if(keywordRe.test(line)){
+      const m = line.match(dateRe);
+      if(m) return normalize(m);
+    }
+  }
+  // 2순위: 전체 텍스트에서 첫 날짜 패턴
+  const m = text.match(dateRe);
+  if(m) return normalize(m);
+  return null;
+}
+
+// 대조 로직: 오차 허용 없음 — 정확히 일치해야 true (설계 3-3, 정책 확정사항)
+function matchReceiptAmount(userFuelInput, ocrCandidates){
+  if(!ocrCandidates || ocrCandidates.length===0) return null; // 인식 실패
+  return ocrCandidates.includes(Number(userFuelInput)) ? true : false; // 오차 허용 없음
+}
+
+// 영수증 일자와 운행일을 비교해 ±RECEIPT_DATE_TOLERANCE_DAYS(기본 10일) 이내인지 판정
+// 반환: {valid: true/false/null, diffDays: number|null}
+function validateReceiptDate(ocrDateStr, tripDateStr){
+  if(!ocrDateStr) return {valid:null, diffDays:null}; // 인식 실패
+  const ocrD = new Date(ocrDateStr + 'T00:00:00');
+  const tripD = new Date((tripDateStr||todayLocalISO()) + 'T00:00:00');
+  if(isNaN(ocrD.getTime()) || isNaN(tripD.getTime())) return {valid:null, diffDays:null};
+  const diffDays = Math.round((ocrD.getTime() - tripD.getTime()) / 86400000);
+  return {valid: Math.abs(diffDays) <= RECEIPT_DATE_TOLERANCE_DAYS, diffDays};
+}
+
+// 캔버스로 리사이즈(가로 1200px 내외) + JPEG 75% 압축 (설계 4-1)
+function compressReceiptImage(file){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = ()=>{
+      const maxW = 1200;
+      const scale = img.width > maxW ? maxW / img.width : 1;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob=>{
+        URL.revokeObjectURL(url);
+        if(blob) resolve(blob); else reject(new Error('이미지 압축 실패'));
+      }, 'image/jpeg', 0.75);
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('이미지 로드 실패')); };
+    img.src = url;
+  });
+}
+
+// {YYYYMMDD}_{이름}_{금액}-{랜덤4자리}.jpg 파일명 생성 (설계 4-3)
+function buildReceiptFileName(userName, isoDateStr, fuelAmount){
+  const ymd = (isoDateStr || todayLocalISO()).replace(/-/g,'');
+  const safeName = (userName||'미상').replace(/[^\w가-힣]/g,'');
+  const rand = Math.random().toString(36).slice(2,6);
+  return `${ymd}_${safeName}_${fuelAmount||0}-${rand}.jpg`;
+}
+
+// Firebase Storage REST 업로드 (설계 4-2) — 성공 시 저장 경로 문자열("receipts/xxx.jpg") 반환
+async function uploadReceiptToStorage(blob, fileName){
+  const token = await getAuthToken();
+  const path = `receipts/${fileName}`;
+  const url = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o?name=${encodeURIComponent(path)}`;
+  const res = await fbFetchWithTimeout(url, {
+    method:'POST',
+    headers:{ 'Content-Type':'image/jpeg', ...(token?{'Authorization':`Firebase ${token}`}:{}) },
+    body: blob
+  }, 20000);
+  if(!res.ok) throw new Error(`영수증 업로드 실패 (${res.status})`);
+  return path;
+}
+
+// 관리자 화면에서 Storage에 저장된 영수증 원본을 열람할 때 사용 (인증 헤더 필요 — auth != null 규칙)
+async function fetchReceiptImageUrl(path){
+  const token = await getAuthToken();
+  const url = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/${encodeURIComponent(path)}?alt=media`;
+  const res = await fbFetchWithTimeout(url, { headers: token?{'Authorization':`Firebase ${token}`}:{} }, 20000);
+  if(!res.ok) throw new Error(`영수증 조회 실패 (${res.status})`);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }
 
 // 오피넷 자동 갱신 휘발유 단가 (기본값은 FUEL_PRICE_PER_L 폴백)
@@ -3508,6 +3697,37 @@ function personalUseTrips(){
   return list;
 }
 
+// 개인사용 영수증 증빙 상태 배지 (RECEIPT_OCR_DESIGN.md 5항)
+// 금액/일자 판정은 서로 독립적으로 저장되므로 두 배지를 함께 반환한다.
+function receiptStatusBadgeHtml(t){
+  if(!t.receiptPath){
+    const submitted = t.submittedAt ? new Date(t.submittedAt) : null;
+    const daysLeft = submitted ? USER_EDIT_WINDOW_DAYS - Math.floor((Date.now()-submitted.getTime())/86400000) : null;
+    if(daysLeft===null) return `<span style="color:var(--muted);font-size:11px;">-</span>`;
+    if(daysLeft >= 0) return `<span style="background:#EEE;color:#666;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;">⏳ 대기중 (D-${daysLeft})</span>`;
+    return `<span style="background:var(--bad-soft);color:var(--bad);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;">🚫 기한초과</span>`;
+  }
+  const badges=[];
+  if(t.receiptOcrMatched===true) badges.push(`<span style="background:var(--good-soft);color:var(--good);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">✅ 금액일치</span>`);
+  else if(t.receiptOcrMatched===false) badges.push(`<span style="background:var(--bad-soft);color:var(--bad);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">⚠️ 금액상이</span>`);
+  else badges.push(`<span style="background:#FEF3C7;color:#B45309;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">🔍 금액확인필요</span>`);
+  if(t.receiptDateValid===true) badges.push(`<span style="background:var(--good-soft);color:var(--good);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">✅ 일자적격</span>`);
+  else if(t.receiptDateValid===false) badges.push(`<span style="background:var(--bad-soft);color:var(--bad);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">⚠️ 일자부적격</span>`);
+  else badges.push(`<span style="background:#FEF3C7;color:#B45309;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">🔍 일자확인필요</span>`);
+  return `<div style="display:flex;flex-direction:column;gap:3px;">${badges.join('')}
+    <button class="btn-ghost" style="padding:2px 6px;font-size:10.5px;width:fit-content;" onclick="viewReceiptImage('${t.receiptPath.replace(/'/g,"\\'")}')">🧾 원본</button></div>`;
+}
+
+// 관리자 화면에서 Storage의 영수증 원본 이미지를 새 창으로 열람
+async function viewReceiptImage(path){
+  try{
+    const url = await fetchReceiptImageUrl(path);
+    window.open(url, '_blank');
+  }catch(e){
+    alert('영수증 이미지를 불러오지 못했습니다: ' + (e.message||e));
+  }
+}
+
 function renderPersonalUseList(){
   const q=(document.getElementById('personalSearchBox')?.value||'').trim();
   if(!q){
@@ -3527,9 +3747,10 @@ function renderPersonalUseList(){
     <td class="mono">${(Number(t.fuel)||0).toLocaleString()}원</td>
     <td>${escapeHtml(t.dest||'')}</td>
     <td style="color:var(--muted);">${escapeHtml(t.submitter||'')}</td>
+    <td>${receiptStatusBadgeHtml(t)}</td>
   </tr>`).join('');
   document.getElementById('personalUseSummaryBar').innerHTML=list.length?`총 <b>${list.length}건</b> · 주행거리 <b>${totalDist.toLocaleString()}km</b> · 총주유비 <b>${totalFuel.toLocaleString()}원</b>`:'';
-  document.getElementById('personalUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>주행거리</th><th>주유비</th><th>행선지</th><th>제출자</th></tr></thead><tbody>${rows||`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted);">검색 결과가 없습니다</td></tr>`}</tbody></table></div>`;
+  document.getElementById('personalUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>주행거리</th><th>주유비</th><th>행선지</th><th>제출자</th><th>증빙상태</th></tr></thead><tbody>${rows||`<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">검색 결과가 없습니다</td></tr>`}</tbody></table></div>`;
 }
 
 // 전체 차량의 운행기록 중 출퇴근사용(isCommute, 단신부임자 급여공제) 건만 모아서 반환
@@ -5051,6 +5272,8 @@ async function applyTripRecordImport(rows,resultEl){
       imgKey:null, isPersonal:p.isPersonal, isDaeCha:false, daeChaPate:'',
       isCommute:p.isCommute, commuteDir:p.commuteDir,
       submittedAt:new Date().toISOString(),
+      receiptPath:null, receiptOcrAmount:null, receiptOcrMatched:null,
+      receiptOcrDate:null, receiptDateValid:null, receiptUploadedAt:null,
       importedFromExcel:true
     });
   });
@@ -5643,6 +5866,21 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
           📌 주말·공휴일 운행 시 운행거리에 해당하는 주유비는 <b>본인이 직접 부담</b>해야 합니다.
           <div id="fuelrefprice-${id}" style="margin-top:6px;font-size:11px;color:#1D4ED8;line-height:1.6;"></div>
           <div id="fuelminguide-${id}" style="display:none;margin-top:6px;font-size:11.5px;font-weight:700;color:#1D4ED8;line-height:1.6;"></div>
+          <div id="receiptBox-${id}" style="margin-top:10px;padding-top:10px;border-top:1px dashed #93C5FD;">
+            <div style="font-size:11.5px;font-weight:700;color:#1D4ED8;margin-bottom:6px;">🧾 주유영수증 첨부</div>
+            <div id="receiptButtons-${id}" style="display:flex;gap:8px;">
+              <button type="button" onclick="onReceiptAttachNow('${id}')" style="flex:1;padding:9px 8px;border-radius:8px;border:none;background:#1D4ED8;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">📷 지금 첨부</button>
+              <button type="button" onclick="onReceiptAttachLater('${id}')" style="flex:1;padding:9px 8px;border-radius:8px;border:1px solid #93C5FD;background:#fff;color:#1D4ED8;font-size:12.5px;font-weight:700;cursor:pointer;">⏳ 나중에 첨부</button>
+            </div>
+            <input type="file" id="receiptFile-${id}" accept="image/*" capture="environment" style="display:none;" onchange="onReceiptFileSelected(this,'${id}')">
+            <div id="receiptThumbWrap-${id}" style="display:none;margin-top:8px;gap:8px;align-items:flex-start;">
+              <img id="receiptThumb-${id}" src="" alt="영수증 미리보기" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #93C5FD;flex-shrink:0;">
+              <div id="receiptOcrStatus-${id}" style="font-size:11.5px;flex:1;"></div>
+            </div>
+            <div id="receiptDeferredNote-${id}" style="display:none;margin-top:8px;font-size:11.5px;color:#B91C1C;background:#FEE2E2;border-radius:8px;padding:8px 10px;line-height:1.5;word-break:keep-all;overflow-wrap:break-word;">
+              ⏳ 영수증 미첨부 — 제출일로부터 <b>10일 이내</b> "내 제출 기록 수정"에서 반드시 추가 제출해주세요. (기한 초과 시 비용 환수 대상)
+            </div>
+          </div>
         </div>
       </div>
       <div class="check-field">
@@ -5980,6 +6218,104 @@ function togglePersonalUse(chk, id){
   }
   checkFuelVsDistance(id);
   onDateRangeChange(id); // 운행기간 안내문구를 "가동율 미반영" 상태로 즉시 갱신 (scheduleDraft 포함)
+  // 개인사용 해제 시 영수증 첨부 상태도 함께 초기화 (다시 체크하면 처음부터 다시 진행)
+  if(!chk.checked) resetReceiptState(id);
+}
+
+// ============================================================
+// ★ 개인사용 영수증 첨부 UI 핸들러 (RECEIPT_OCR_DESIGN.md 1-A) ★
+// ------------------------------------------------------------
+// 선택한 File 객체는 JSON 직렬화 대상이 아니므로 window._receiptFileMap[id]에 별도 보관하고,
+// OCR/일자 판정 결과(직렬화 가능한 값)만 card.dataset에 저장해 collectRows()가 읽어갑니다.
+// ============================================================
+window._receiptFileMap = window._receiptFileMap || {};
+
+function resetReceiptState(id){
+  delete window._receiptFileMap[id];
+  const card = document.getElementById(id);
+  if(card){
+    delete card.dataset.receiptDeferred;
+    delete card.dataset.receiptOcrAmount;
+    delete card.dataset.receiptOcrMatched;
+    delete card.dataset.receiptOcrDate;
+    delete card.dataset.receiptDateValid;
+  }
+  const thumbWrap = document.getElementById('receiptThumbWrap-'+id);
+  if(thumbWrap) thumbWrap.style.display = 'none';
+  const deferredNote = document.getElementById('receiptDeferredNote-'+id);
+  if(deferredNote) deferredNote.style.display = 'none';
+  const btnRow = document.getElementById('receiptButtons-'+id);
+  if(btnRow) btnRow.style.display = 'flex';
+}
+
+function onReceiptAttachNow(id){
+  const fileInp = document.getElementById('receiptFile-'+id);
+  if(fileInp) fileInp.click();
+}
+
+function onReceiptAttachLater(id){
+  const ok = confirm('영수증을 준비 못하셨습니다. 제출일로부터 10일 이내에 "내 제출 기록 수정"에서 반드시 추가 제출해주세요.\n(기한 초과 시 비용 환수 대상이 될 수 있습니다)\n\n확인 시 "나중에 첨부"로 진행됩니다.');
+  if(!ok) return;
+  const card = document.getElementById(id);
+  if(card) card.dataset.receiptDeferred = '1';
+  delete window._receiptFileMap[id];
+  const thumbWrap = document.getElementById('receiptThumbWrap-'+id);
+  if(thumbWrap) thumbWrap.style.display = 'none';
+  const deferredNote = document.getElementById('receiptDeferredNote-'+id);
+  if(deferredNote) deferredNote.style.display = 'block';
+}
+
+async function onReceiptFileSelected(inputEl, id){
+  const file = inputEl.files && inputEl.files[0];
+  if(!file) return;
+  const card = document.getElementById(id);
+  if(card) delete card.dataset.receiptDeferred;
+  const deferredNote = document.getElementById('receiptDeferredNote-'+id);
+  if(deferredNote) deferredNote.style.display = 'none';
+
+  window._receiptFileMap[id] = file;
+
+  const thumbWrap = document.getElementById('receiptThumbWrap-'+id);
+  const thumbImg = document.getElementById('receiptThumb-'+id);
+  const statusEl = document.getElementById('receiptOcrStatus-'+id);
+  if(thumbImg) thumbImg.src = URL.createObjectURL(file);
+  if(thumbWrap) thumbWrap.style.display = 'flex';
+  if(statusEl) statusEl.innerHTML = '🔄 영수증 인식 중...';
+
+  const fuelInp = card?.querySelector('.tr-fuel');
+  const userFuel = fuelInp ? Number((fuelInp.value||'').replace(/,/g,'')) : 0;
+  const tripDateInp = card?.querySelector('.tr-date-from');
+  const tripDateStr = tripDateInp ? tripDateInp.value : todayLocalISO();
+
+  const text = await callVisionOcr(file);
+  const amountCandidates = parseReceiptAmount(text);
+  const ocrAmount = amountCandidates.length ? amountCandidates[0] : null;
+  const matched = matchReceiptAmount(userFuel, amountCandidates);
+  const ocrDate = parseReceiptDate(text);
+  const { valid: dateValid, diffDays } = validateReceiptDate(ocrDate, tripDateStr);
+
+  if(card){
+    card.dataset.receiptOcrAmount = ocrAmount===null ? '' : String(ocrAmount);
+    card.dataset.receiptOcrMatched = matched===null ? '' : String(matched);
+    card.dataset.receiptOcrDate = ocrDate || '';
+    card.dataset.receiptDateValid = dateValid===null ? '' : String(dateValid);
+  }
+
+  let amountBadge, dateBadge;
+  if(matched===true) amountBadge = `<span style="color:#059669;font-weight:700;">✅ 영수증 금액과 일치</span>`;
+  else if(matched===false) amountBadge = `<span style="color:#DC2626;font-weight:700;">⚠️ 인식 금액(${ocrAmount.toLocaleString()}원)과 입력 금액(${userFuel.toLocaleString()}원)이 다릅니다</span>`;
+  else amountBadge = `<span style="color:#B45309;font-weight:700;">🔍 금액 자동 인식 실패 - 관리자가 육안 확인합니다</span>`;
+
+  if(dateValid===true) dateBadge = `<span style="color:#059669;font-weight:700;">✅ 증빙 일자 적격 (운행일 ±10일 이내)</span>`;
+  else if(dateValid===false) dateBadge = `<span style="color:#DC2626;font-weight:700;">⚠️ 증빙 부적격 — 영수증 일자(${ocrDate})가 운행일보다 ${Math.abs(diffDays)}일 ${diffDays<0?'이전':'초과'}입니다</span>`;
+  else dateBadge = `<span style="color:#B45309;font-weight:700;">🔍 일자 자동 인식 실패 - 관리자가 육안 확인합니다</span>`;
+
+  if(statusEl){
+    statusEl.innerHTML =
+      (ocrAmount!==null ? `인식 금액: <b>${ocrAmount.toLocaleString()}원</b><br>` : '') + amountBadge +
+      `<br>` + (ocrDate ? `인식 일자: <b>${ocrDate}</b><br>` : '') + dateBadge;
+  }
+  // 금액/일자 부적격·인식실패여도 입력 진행은 막지 않음 — 경고만 표시 (관리자 사후 모니터링)
 }
 
 // 출퇴근사용(단신부임자 급여공제) 출근/퇴근 구분 선택 — 다시 누르면 선택 해제
@@ -6103,7 +6439,13 @@ function collectRows(){
     // 완료 전 "접수 진행중" 상태도 함께 보존(임시저장 복원 시 최초 안내 팝업이 다시 뜨지 않도록)
     const accidentPending = !accidentReported && card.dataset.accidentPending === '1';
     const accidentReqId = card.dataset.accidentReqId || '';
-    return {dateFrom, dateTo, startOdo, endOdo, distance: Math.max(0, endOdo-startOdo), dest, user, fuel, status, note, isDaeCha, daeChaPate, isPersonal, isCommute, commuteDir, accidentReported, accidentId, accidentPending, accidentReqId};
+    // 개인사용 영수증 첨부 상태(File 객체 자체는 window._receiptFileMap[card.id]에 별도 보관)
+    const receiptDeferred = card.dataset.receiptDeferred === '1';
+    const receiptOcrAmount = card.dataset.receiptOcrAmount ? Number(card.dataset.receiptOcrAmount) : null;
+    const receiptOcrMatched = card.dataset.receiptOcrMatched==='' || card.dataset.receiptOcrMatched===undefined ? null : (card.dataset.receiptOcrMatched==='true');
+    const receiptOcrDate = card.dataset.receiptOcrDate || null;
+    const receiptDateValid = card.dataset.receiptDateValid==='' || card.dataset.receiptDateValid===undefined ? null : (card.dataset.receiptDateValid==='true');
+    return {id:card.id, dateFrom, dateTo, startOdo, endOdo, distance: Math.max(0, endOdo-startOdo), dest, user, fuel, status, note, isDaeCha, daeChaPate, isPersonal, isCommute, commuteDir, accidentReported, accidentId, accidentPending, accidentReqId, receiptDeferred, receiptOcrAmount, receiptOcrMatched, receiptOcrDate, receiptDateValid};
   });
 }
 
@@ -6414,7 +6756,7 @@ async function doSubmit(submitter, plate, rows){
   const lateAdjustments=[]; // 늦은입력으로 인해 다른 기록이 자동 보정된 건 (관리자 이메일 알림용)
   const lateConflicts=[];   // 겹침은 있으나 자동 보정 불가(수동확인 필요)한 건
 
-  rows.forEach(r=>{
+  for(const r of rows){
     const isoDate = r.dateFrom;
     const dateTo = r.dateTo || r.dateFrom;
     // 날짜 범위 내 모든 날짜 생성
@@ -6424,11 +6766,31 @@ async function doSubmit(submitter, plate, rows){
     while(d <= endD){ allDates.push(iso(d)); d = new Date(d.getTime()+86400000); }
     const dateDisplay = formatTripDateDisplay(r.dateFrom, dateTo);
     const key = `${isoDate}|${r.startOdo}|${r.endOdo}`;
-    if(existingKeys.has(key)){ skipped++; return; }
+    if(existingKeys.has(key)){ skipped++; continue; }
     existingKeys.add(key);
     // 이 기록의 시작거리가 이미 저장된 다른 기록의 시작거리와 겹치는지 확인(늦은입력 케이스).
     // 겹치면 대상 기록을 이 함수 내부에서 직접 보정하고(startOdo/distance 갱신), 결과를 반환한다.
     const resolution = resolveLateEntryInsert(plate, r);
+
+    // 개인사용 영수증: 지금 첨부를 선택한 건은 여기서 압축+업로드를 수행.
+    // OCR(금액/일자) 판정 결과는 이미 첨부 시점에 계산되어 r에 담겨 있음(collectRows() 참고).
+    // 업로드 실패 시에도 전체 제출은 막지 않고 "나중에 첨부"와 동일하게 receiptPath=null로 저장.
+    let receiptPath = null, receiptUploadedAt = null;
+    if(r.isPersonal && !r.receiptDeferred){
+      const file = window._receiptFileMap && window._receiptFileMap[r.id];
+      if(file){
+        try{
+          const fileName = buildReceiptFileName(r.user, isoDate, r.fuel);
+          const compressed = await compressReceiptImage(file);
+          receiptPath = await uploadReceiptToStorage(compressed, fileName);
+          receiptUploadedAt = new Date().toISOString();
+        }catch(e){
+          console.error('[영수증 업로드 실패]', e);
+          receiptPath = null; // 업로드 실패해도 운행정보 제출 자체는 정상 진행
+        }
+      }
+    }
+
     const newTrip = {
       date: dateDisplay, isoDate, dateTo, usageDates: allDates,
       startOdo:r.startOdo, endOdo:r.endOdo, distance:r.distance,
@@ -6437,7 +6799,14 @@ async function doSubmit(submitter, plate, rows){
       isDaeCha:r.isDaeCha||false, daeChaPate:r.daeChaPate||'',
       isCommute:r.isCommute||false, commuteDir:r.commuteDir||'',
       submittedAt: new Date().toISOString(),
-      editToken: getDeviceEditToken() // 이 트립을 제출한 기기 식별용(본인수정화면 접근 제어에 사용)
+      editToken: getDeviceEditToken(), // 이 트립을 제출한 기기 식별용(본인수정화면 접근 제어에 사용)
+      // 개인사용 주유영수증 OCR 검증 필드 (RECEIPT_OCR_DESIGN.md 2항) — 개인사용이 아니면 전부 null
+      receiptPath,
+      receiptOcrAmount: r.isPersonal ? (r.receiptOcrAmount ?? null) : null,
+      receiptOcrMatched: r.isPersonal ? (r.receiptOcrMatched ?? null) : null,
+      receiptOcrDate: r.isPersonal ? (r.receiptOcrDate ?? null) : null,
+      receiptDateValid: r.isPersonal ? (r.receiptDateValid ?? null) : null,
+      receiptUploadedAt
     };
     if(resolution && resolution.conflict) newTrip.lateEntryConflict = true;
     data.vehicles[plate].trips.push(newTrip);
@@ -6445,7 +6814,9 @@ async function doSubmit(submitter, plate, rows){
     else if(resolution && resolution.conflict) lateConflicts.push({row:r, target:resolution.targetTrip});
     addedDates.push(isoDate);
     added++;
-  });
+  }
+  // 제출이 끝났으니 이 화면에서 보관하던 첨부파일 참조를 정리 (메모리 누수 방지)
+  rows.forEach(r=>{ if(window._receiptFileMap) delete window._receiptFileMap[r.id]; });
 
   const saved = await saveData();
   if(!saved){
