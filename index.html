@@ -35,6 +35,16 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-11] 개인사용 영수증 OCR 금액 자동입력 기능 신규 구현. 기존에는 영수증 첨부(위) →
+  주유비 직접 입력(아래) 순서라 OCR 인식 금액과 사용자 입력 금액이 달라 "금액상이" 오탐이
+  잦았음 → OCR로 금액이 인식되면 주유비 입력란에 자동으로 채워지도록 변경, "일치 여부 비교"
+  대신 "자동입력 후 사용자가 임의로 고쳤는지" 감지하는 방식으로 전환. 인식 실패 시에는 기존처럼
+  직접 입력 | 변경: onReceiptFileSelected()(OCR 금액 인식 성공 시 .tr-fuel에 즉시 반영+
+  formatFuelInput() 호출, matched 판정 로직을 자동입력 성공 여부 기준으로 단순화, 안내 배지
+  문구 수정), checkReceiptAmountMismatch() 신규(주유비 입력란 oninput에서 호출, 자동입력값과
+  달라지면 #fuelOcrWarn-${id}에 경고 표시 + receiptOcrMatched 재계산), addTripRow() 주유비
+  입력란 oninput에 호출 추가 + #fuelOcrWarn-${id} 안내 영역 신규, resetReceiptState()/
+  onReceiptAttachLater() 상태 초기화 시 경고 숨김·OCR 필드 초기화 반영
   [2026-08-11] 개인사용 영수증 OCR 검증 2건 개선. ① 금액/일자 자동 인식 실패 안내 문구를
   "관리자가 육안 확인합니다" → "관리자 확인 예정"으로 통일(사용자 화면 배지 2곳). ② 첨부된
   영수증이 주유영수증이 아닌 것으로 판단되면(식당/마트 등 무관한 영수증 오첨부 방지) 경고 배지
@@ -89,12 +99,6 @@
   setUserEditSearchType() 제거, addTripRow()/openAccidentPopup()/submitDirectInput()/doSubmit()/
   saveDraft()/restoreDraft()/loadUserEditable() 제출자→운행자 기준 정리, CSS .branch-edit 모바일
   규칙 신규)
-  [2026-08-11] 사고접수 관리자 알림 이메일 발송 시점 변경. 기존에는 accident-report.html에서
-  사고보고서 접수가 완료되는 즉시 이메일이 발송되었으나, 사고접수가 첨부된 해당 운행정보가
-  index.html에서 "제출하기"로 최종 제출되는 시점으로 변경(운행정보 자체가 아직 제출되지 않은
-  상태에서 미리 알림이 가는 것을 방지) | 변경: accident-report.html(submitAccidentReport() 내
-  emailjs.send 블록 제거), index.html(notifyAccidentSubmitted() 신규, doSubmit()에서 rows 중
-  accidentReported 건이 있으면 호출)
 -->
 
 <head>
@@ -5913,8 +5917,9 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
           <span class="tr-fuel-required" style="display:none;color:var(--bad);font-size:12px;margin-left:4px;">* 필수</span>
         </label>
         <div class="fuel-amt" id="fuel-${id}">
-          <input type="text" inputmode="numeric" class="tr-fuel check-sub-input" placeholder="주유금액 입력 (원)" oninput="formatFuelInput(this);checkFuelVsDistance('${id}');scheduleDraft()">
+          <input type="text" inputmode="numeric" class="tr-fuel check-sub-input" placeholder="주유금액 입력 (원)" oninput="formatFuelInput(this);checkFuelVsDistance('${id}');checkReceiptAmountMismatch('${id}');scheduleDraft()">
           <div id="fuelwarn-${id}" style="display:none;margin-top:6px;font-size:12px;color:var(--bad);background:var(--bad-soft);border-radius:8px;padding:8px 10px;line-height:1.5;"></div>
+          <div id="fuelOcrWarn-${id}" style="display:none;margin-top:6px;font-size:12px;color:#DC2626;background:#FEE2E2;border-radius:8px;padding:8px 10px;line-height:1.5;word-break:keep-all;overflow-wrap:break-word;"></div>
         </div>
       </div>
       <div class="check-field">
@@ -6256,6 +6261,8 @@ function resetReceiptState(id){
   if(deferredNote) deferredNote.style.display = 'none';
   const btnRow = document.getElementById('receiptButtons-'+id);
   if(btnRow) btnRow.style.display = 'flex';
+  const ocrWarnEl = document.getElementById('fuelOcrWarn-'+id);
+  if(ocrWarnEl) ocrWarnEl.style.display = 'none';
   updateReceiptButtonStates(id);
 }
 
@@ -6302,11 +6309,17 @@ function onReceiptAttachLater(id){
     updateReceiptButtonStates(id);
     return;
   }
-  if(card){ card.dataset.receiptDeferred = '1'; card.dataset.receiptActiveOption = 'later'; }
+  if(card){
+    card.dataset.receiptDeferred = '1'; card.dataset.receiptActiveOption = 'later';
+    delete card.dataset.receiptOcrAmount; delete card.dataset.receiptOcrMatched;
+    delete card.dataset.receiptOcrDate; delete card.dataset.receiptDateValid; delete card.dataset.receiptTypeValid;
+  }
   delete window._receiptFileMap[id];
   const thumbWrap = document.getElementById('receiptThumbWrap-'+id);
   if(thumbWrap) thumbWrap.style.display = 'none';
   if(deferredNote) deferredNote.style.display = 'block';
+  const ocrWarnEl = document.getElementById('fuelOcrWarn-'+id);
+  if(ocrWarnEl) ocrWarnEl.style.display = 'none';
   updateReceiptButtonStates(id);
 }
 
@@ -6332,17 +6345,31 @@ async function onReceiptFileSelected(inputEl, id, source){
   if(statusEl) statusEl.innerHTML = '🔄 영수증 인식 중...';
 
   const fuelInp = card?.querySelector('.tr-fuel');
-  const userFuel = fuelInp ? Number((fuelInp.value||'').replace(/,/g,'')) : 0;
   const tripDateInp = card?.querySelector('.tr-date-from');
   const tripDateStr = tripDateInp ? tripDateInp.value : todayLocalISO();
 
   const { text, debug } = await callVisionOcr(file);
   const amountCandidates = parseReceiptAmount(text);
   const ocrAmount = amountCandidates.length ? amountCandidates[0] : null;
-  const matched = matchReceiptAmount(userFuel, amountCandidates);
   const ocrDate = parseReceiptDate(text);
   const { valid: dateValid, diffDays } = validateReceiptDate(ocrDate, tripDateStr);
   const typeValid = isFuelReceiptText(text);
+
+  // 금액이 인식되면 주유비 입력란(아래쪽)에 자동으로 채워준다 — 증빙 첨부 후 금액을 직접
+  // 타이핑할 필요가 없도록 순서를 바꿈. 이후 사용자가 이 값을 임의로 고치면
+  // checkReceiptAmountMismatch()가 감지해 별도 안내 문구를 띄운다(fuelOcrWarn-${id}).
+  let matched;
+  if(ocrAmount!==null && fuelInp){
+    fuelInp.value = String(ocrAmount);
+    formatFuelInput(fuelInp);
+    matched = true;
+    const ocrWarnEl = document.getElementById('fuelOcrWarn-'+id);
+    if(ocrWarnEl) ocrWarnEl.style.display = 'none';
+    checkFuelVsDistance(id);
+    scheduleDraft();
+  } else {
+    matched = null; // 금액 인식 실패 — 기존 입력값 유지, 관리자 확인 대상
+  }
 
   if(card){
     card.dataset.receiptOcrAmount = ocrAmount===null ? '' : String(ocrAmount);
@@ -6353,9 +6380,8 @@ async function onReceiptFileSelected(inputEl, id, source){
   }
 
   let amountBadge, dateBadge;
-  if(matched===true) amountBadge = `<span style="color:#059669;font-weight:700;">✅ 영수증 금액과 일치</span>`;
-  else if(matched===false) amountBadge = `<span style="color:#DC2626;font-weight:700;">⚠️ 인식 금액(${ocrAmount.toLocaleString()}원)과 입력 금액(${userFuel.toLocaleString()}원)이 다릅니다</span>`;
-  else amountBadge = `<span style="color:#B45309;font-weight:700;">🔍 금액 자동 인식 실패 - 관리자 확인 예정</span>`;
+  if(matched===true) amountBadge = `<span style="color:#059669;font-weight:700;">✅ 인식된 금액이 주유비 입력란에 자동으로 입력되었습니다 (임의 수정 시 안내 표시)</span>`;
+  else amountBadge = `<span style="color:#B45309;font-weight:700;">🔍 금액 자동 인식 실패 - 주유비를 직접 입력해주세요 (관리자 확인 예정)</span>`;
 
   if(dateValid===true) dateBadge = `<span style="color:#059669;font-weight:700;">✅ 증빙 일자 적격 (운행일 ±10일 이내)</span>`;
   else if(dateValid===false) dateBadge = `<span style="color:#DC2626;font-weight:700;">⚠️ 증빙 부적격 — 영수증 일자(${ocrDate})가 운행일보다 ${Math.abs(diffDays)}일 ${diffDays<0?'이전':'초과'}입니다</span>`;
@@ -6374,6 +6400,26 @@ async function onReceiptFileSelected(inputEl, id, source){
       (debug ? `<br><span style="color:#9CA3AF;font-size:10.5px;">🛠 진단정보(임시): ${String(debug).replace(/</g,'&lt;')}</span>` : '');
   }
   // 금액/일자/유형 부적격·인식실패여도 입력 진행은 막지 않음 — 경고만 표시 (관리자 사후 모니터링)
+}
+
+// 영수증 OCR로 자동 입력된 주유비를 사용자가 임의로 수정했는지 실시간 감지 (주유비 입력란 oninput에서 호출).
+// 인식된 금액(card.dataset.receiptOcrAmount)이 없으면(첨부 전/인식 실패) 아무 동작도 하지 않는다.
+function checkReceiptAmountMismatch(id){
+  const card = document.getElementById(id);
+  const warnEl = document.getElementById('fuelOcrWarn-'+id);
+  if(!card || !warnEl) return;
+  const linked = card.dataset.receiptOcrAmount;
+  if(linked===undefined || linked===''){ warnEl.style.display='none'; return; }
+  const fuelInp = card.querySelector('.tr-fuel');
+  const current = fuelInp ? Number((fuelInp.value||'').replace(/,/g,'')) : 0;
+  const matched = matchReceiptAmount(current, [Number(linked)]);
+  card.dataset.receiptOcrMatched = matched===null ? '' : String(matched);
+  if(matched===false){
+    warnEl.innerHTML = `⚠️ 영수증에서 자동 인식된 금액(<b>${Number(linked).toLocaleString()}원</b>)과 다르게 수정되었습니다. 임의 수정 시 관리자 확인 대상이 됩니다.`;
+    warnEl.style.display = 'block';
+  } else {
+    warnEl.style.display = 'none';
+  }
 }
 
 // 출퇴근사용(단신부임자 급여공제) 출근/퇴근 구분 선택 — 다시 누르면 선택 해제
