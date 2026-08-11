@@ -35,16 +35,6 @@
 <!--
 =================================================================
   CHANGELOG
-  [2026-08-11] 개인사용 영수증 OCR 금액 자동입력 기능 신규 구현. 기존에는 영수증 첨부(위) →
-  주유비 직접 입력(아래) 순서라 OCR 인식 금액과 사용자 입력 금액이 달라 "금액상이" 오탐이
-  잦았음 → OCR로 금액이 인식되면 주유비 입력란에 자동으로 채워지도록 변경, "일치 여부 비교"
-  대신 "자동입력 후 사용자가 임의로 고쳤는지" 감지하는 방식으로 전환. 인식 실패 시에는 기존처럼
-  직접 입력 | 변경: onReceiptFileSelected()(OCR 금액 인식 성공 시 .tr-fuel에 즉시 반영+
-  formatFuelInput() 호출, matched 판정 로직을 자동입력 성공 여부 기준으로 단순화, 안내 배지
-  문구 수정), checkReceiptAmountMismatch() 신규(주유비 입력란 oninput에서 호출, 자동입력값과
-  달라지면 #fuelOcrWarn-${id}에 경고 표시 + receiptOcrMatched 재계산), addTripRow() 주유비
-  입력란 oninput에 호출 추가 + #fuelOcrWarn-${id} 안내 영역 신규, resetReceiptState()/
-  onReceiptAttachLater() 상태 초기화 시 경고 숨김·OCR 필드 초기화 반영
   [2026-08-11] 개인사용 영수증 OCR 검증 2건 개선. ① 금액/일자 자동 인식 실패 안내 문구를
   "관리자가 육안 확인합니다" → "관리자 확인 예정"으로 통일(사용자 화면 배지 2곳). ② 첨부된
   영수증이 주유영수증이 아닌 것으로 판단되면(식당/마트 등 무관한 영수증 오첨부 방지) 경고 배지
@@ -99,6 +89,15 @@
   setUserEditSearchType() 제거, addTripRow()/openAccidentPopup()/submitDirectInput()/doSubmit()/
   saveDraft()/restoreDraft()/loadUserEditable() 제출자→운행자 기준 정리, CSS .branch-edit 모바일
   규칙 신규)
+  [2026-08-11] 공용차량 입력페이지 UI 3건 개선. ① 시작거리 아래 "이전 운행 종료거리 자동반영"
+  안내문구가 폭 좁은 절반칸(form-row-2)에 있어 2줄로 줄바꿈되던 문제 수정 — 시작/종료거리 행
+  전체 너비로 이동해 1줄로 표시(white-space:nowrap+ellipsis 안전장치 포함). ② "주유비 입력"
+  항목을 "출퇴근 사용" 항목보다 위로 이동(개인 사용 → 주유비 입력 → 출퇴근 사용 순). ③
+  "⚠ 점검요망" 버튼 클릭 시 곧바로 상태만 바뀌던 것을, 사고접수 팝업과 동일한 톤의 안내
+  팝업(롯데렌터카 정비 직접 접수 안내 + 전화연결 버튼 + 점검요청 내용 입력창)이 뜨도록 변경,
+  "확인" 시 입력한 점검요청 내용이 해당 운행기록의 비고란(.tr-note)에 자동 기재됨 | 변경:
+  addTripRow()(startHint-${id} DOM 위치 이동, 주유비/출퇴근 블록 순서 교체), openMaintenancePopup()
+  신규(점검요망 버튼 onclick 교체, 내부에서 setStatus() 재사용), confirmMaintenanceNote() 신규
 -->
 
 <head>
@@ -5836,7 +5835,6 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
           <label>시작거리 (km)</label>
           <input type="text" inputmode="numeric" class="tr-start${prefillStart!==null?(prefillWasDaeCha?' needs-recheck':' auto-filled'):''}" value="${prefillStart!==null?Number(prefillStart).toLocaleString():''}" placeholder="0"
             oninput="formatFuelInput(this);this.classList.remove('auto-filled','needs-recheck');const h=document.getElementById('startHint-${id}');if(h)h.style.display='none';const w=document.getElementById('prevDaechaWarn-${id}');if(w)w.style.display='none';const dn=document.getElementById('daechaNotice-${id}');if(dn)dn.style.display='none';calcRowDist('${id}');checkFuelVsDistance('${id}');scheduleDraft()">
-          <div id="startHint-${id}" style="display:${prefillStart!==null && !prefillWasDaeCha?'block':'none'};font-size:11px;color:var(--muted);margin-top:5px;">🔒 이전 운행 종료거리 자동반영 · 필요 시 수정 가능</div>
           <div id="prevDaechaWarn-${id}" style="display:${prefillWasDaeCha?'block':'none'};font-size:12px;color:var(--bad);background:var(--bad-soft);border-radius:8px;padding:8px 10px;margin-top:6px;line-height:1.5;">⚠️ 이전 운행은 <b>대차 차량</b> 사용 건입니다. 대차를 반납했다면 시작거리가 실제와 다를 수 있으니 시작거리를 반드시 확인해주세요.</div>
         </div>
         <div class="form-field">
@@ -5844,6 +5842,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
           <input type="text" inputmode="numeric" class="tr-end" placeholder="0" oninput="formatFuelInput(this);const dn=document.getElementById('daechaNotice-${id}');if(dn)dn.style.display='none';calcRowDist('${id}');autoFillNextRow('${id}');checkFuelVsDistance('${id}');scheduleDraft()">
         </div>
       </div>
+      <div id="startHint-${id}" style="display:${prefillStart!==null && !prefillWasDaeCha?'block':'none'};font-size:11px;color:var(--muted);margin-top:-8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🔒 이전 운행 종료거리 자동반영 · 필요 시 수정 가능</div>
       <div id="daechaNotice-${id}" style="display:none;font-size:12px;color:var(--bad);background:var(--bad-soft);border-radius:8px;padding:8px 10px;margin:8px 0 0;line-height:1.5;">⚠️ 대차 차량은 원 차량과 주행거리가 이어지지 않습니다. 위 <b>시작거리</b>를 반드시 확인해주세요.</div>
       <div class="dist-badge"><span class="dist-label">주행거리</span><span id="dist-${id}">–</span><span class="dist-unit">km</span></div>
       <div class="form-field">
@@ -5861,7 +5860,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
         <label>차량 상태</label>
         <div class="status-toggle status-toggle-3">
           <button class="status-btn active-good" onclick="setStatus(this,'정상')" data-val="정상">✓ 정상</button>
-          <button class="status-btn" onclick="setStatus(this,'점검요망')" data-val="점검요망">⚠ 점검요망</button>
+          <button class="status-btn" onclick="openMaintenancePopup(this)" data-val="점검요망">⚠ 점검요망</button>
           <button type="button" class="status-btn accident-btn" onclick="openAccidentPopup(this)">🚨 사고접수</button>
         </div>
         <div class="accident-flow-notice" id="accidentNotice-${id}"></div>
@@ -5896,6 +5895,19 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
         </div>
       </div>
       <div class="check-field">
+        <label class="check-label">
+          <input type="checkbox" class="tr-fuel-chk native-chk" onchange="toggleFuelField(this,'${id}')">
+          <span class="check-icon"></span>
+          <span class="check-text tr-fuel-label">주유비 입력</span>
+          <span class="tr-fuel-required" style="display:none;color:var(--bad);font-size:12px;margin-left:4px;">* 필수</span>
+        </label>
+        <div class="fuel-amt" id="fuel-${id}">
+          <input type="text" inputmode="numeric" class="tr-fuel check-sub-input" placeholder="주유금액 입력 (원)" oninput="formatFuelInput(this);checkFuelVsDistance('${id}');checkReceiptAmountMismatch('${id}');scheduleDraft()">
+          <div id="fuelwarn-${id}" style="display:none;margin-top:6px;font-size:12px;color:var(--bad);background:var(--bad-soft);border-radius:8px;padding:8px 10px;line-height:1.5;"></div>
+          <div id="fuelOcrWarn-${id}" style="display:none;margin-top:6px;font-size:12px;color:#DC2626;background:#FEE2E2;border-radius:8px;padding:8px 10px;line-height:1.5;word-break:keep-all;overflow-wrap:break-word;"></div>
+        </div>
+      </div>
+      <div class="check-field">
         <label class="check-label" style="cursor:default;">
           <span class="check-icon" style="visibility:hidden;"></span>
           <span class="check-text">출퇴근 사용 <span style="font-size:12px;color:var(--muted);font-weight:400;">(단신부임자 급여공제 승인자)</span></span>
@@ -5907,19 +5919,6 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
         <div class="commute-notice" id="commute-${id}" style="display:none;background:#F5F3FF;border:1px solid #8B5CF6;border-radius:10px;padding:10px 12px;margin-top:8px;font-size:12.5px;color:#7C3AED;line-height:1.6;">
           📌 위 시작·종료거리로 계산된 주행거리가 <b>출퇴근 거리</b>로 기록되며, 가동율에는 반영되지 않습니다.<br>
           ⚠️ 규정상 출퇴근 <b>왕복 거리는 60km</b>를 초과할 수 없습니다. (동일자 출근+퇴근 합산 기준으로 모니터링됩니다)
-        </div>
-      </div>
-      <div class="check-field">
-        <label class="check-label">
-          <input type="checkbox" class="tr-fuel-chk native-chk" onchange="toggleFuelField(this,'${id}')">
-          <span class="check-icon"></span>
-          <span class="check-text tr-fuel-label">주유비 입력</span>
-          <span class="tr-fuel-required" style="display:none;color:var(--bad);font-size:12px;margin-left:4px;">* 필수</span>
-        </label>
-        <div class="fuel-amt" id="fuel-${id}">
-          <input type="text" inputmode="numeric" class="tr-fuel check-sub-input" placeholder="주유금액 입력 (원)" oninput="formatFuelInput(this);checkFuelVsDistance('${id}');checkReceiptAmountMismatch('${id}');scheduleDraft()">
-          <div id="fuelwarn-${id}" style="display:none;margin-top:6px;font-size:12px;color:var(--bad);background:var(--bad-soft);border-radius:8px;padding:8px 10px;line-height:1.5;"></div>
-          <div id="fuelOcrWarn-${id}" style="display:none;margin-top:6px;font-size:12px;color:#DC2626;background:#FEE2E2;border-radius:8px;padding:8px 10px;line-height:1.5;word-break:keep-all;overflow-wrap:break-word;"></div>
         </div>
       </div>
       <div class="check-field">
@@ -6023,6 +6022,45 @@ function setStatus(btn, val){
     if(noteInp) noteInp.placeholder = isBad ? '점검요망 사유를 입력해 주세요' : '특이사항';
   }
   scheduleDraft();
+}
+
+// "⚠ 점검요망" 버튼 — 차량상태를 점검요망으로 표시(setStatus 재사용)하고, 정비·점검은 롯데렌터카에
+// 직접 접수하도록 안내하는 팝업(사고접수 팝업과 동일한 톤)을 띄운다. 팝업 내 입력창에 점검요청 내용을
+// 적고 "확인"을 누르면 해당 내용이 운행기록의 비고란(.tr-note)에 그대로 기재된다(비고는 setStatus에
+// 의해 이미 필수 표시됨). 비고란은 팝업 종료 후에도 자유롭게 추가 수정 가능.
+function openMaintenancePopup(btn){
+  setStatus(btn, '점검요망');
+  const card = btn.closest('.trip-card');
+  const id = card?.id || '';
+  const noteInp = card?.querySelector('.tr-note');
+  const existing = noteInp?.value || '';
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-head">
+      <div><div class="plate-big" style="font-size:18px;">⚠ 점검요망 안내</div><div class="muted" style="font-size:12px;word-break:keep-all;overflow-wrap:break-word;">차량 점검·정비는 아래 번호로 롯데렌터카에 직접 접수해 주세요.</div></div>
+      <button class="close-x" onclick="closeModal()">✕</button>
+    </div>
+    <a href="tel:1588-1230" style="display:block;text-align:center;background:var(--bad);color:#fff;text-decoration:none;border-radius:12px;padding:16px;font-size:19px;font-weight:700;margin-top:14px;">
+      1588-1230 전화 걸기
+      <div style="font-size:11.5px;font-weight:500;opacity:.85;margin-top:2px;">롯데렌터카 대표번호</div>
+    </a>
+    <div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-top:16px;margin-bottom:6px;">점검요청 내용 <span style="color:var(--bad);">*필수</span></div>
+    <textarea id="maintNoteInput" placeholder="예: 타이어 마모, 엔진 경고등 점등 등" style="width:100%;min-height:70px;border:1.5px solid var(--line);border-radius:12px;padding:12px;font-size:14px;font-family:'Paperlogy',sans-serif;box-sizing:border-box;resize:vertical;">${escapeHtml(existing)}</textarea>
+    <button type="button" onclick="confirmMaintenanceNote('${id}')" style="display:block;width:100%;text-align:center;background:var(--navy);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;margin-top:12px;cursor:pointer;">
+      확인 (비고에 기재)
+    </button>
+    <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:8px;line-height:1.5;">확인을 누르면 위 내용이 운행기록 비고란에 자동 기재됩니다.</div>
+  `;
+  document.getElementById('modalOverlay').classList.add('show');
+  lockBodyScroll();
+}
+
+// 점검요망 팝업의 입력 내용을 실제 운행기록 카드의 비고(.tr-note)란에 반영하고 팝업을 닫는다.
+function confirmMaintenanceNote(id){
+  const card = document.getElementById(id);
+  const val = document.getElementById('maintNoteInput')?.value.trim() || '';
+  const noteInp = card?.querySelector('.tr-note');
+  if(noteInp){ noteInp.value = val; scheduleDraft(); }
+  closeModal();
 }
 
 // "🚨 사고접수" 버튼 — 차량상태를 변경하지 않고 롯데렌터카 사고접수 안내 + 사고보고서 작성 진입점 표시.
