@@ -407,6 +407,63 @@
   }
   .ded-maint-hotline a{color:var(--ded-beige); font-family:'Outfit',sans-serif; font-weight:500; text-decoration:none;}
 
+  /* ── 사고접수 (공용차량 시스템과 동일한 흐름: 접수 시 사고보고서 작성 완료 전까지 최종 제출 잠금) ── */
+  .ded-accident-btn{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    width:100%; background:none; border:1px solid var(--ded-red); color:var(--ded-red);
+    padding:14px 8px; font-size:15px; font-weight:600; cursor:pointer;
+    font-family:'Pretendard',sans-serif;
+  }
+  .ded-accident-btn:hover{background:var(--ded-red); color:var(--ded-text);}
+  .ded-accident-btn.ded-accident-pending{background:rgba(232,22,87,0.12);}
+  .ded-accident-btn.ded-accident-done{border-color:var(--ded-beige); color:var(--ded-beige);}
+  .ded-accident-btn.ded-accident-done:hover{background:var(--ded-beige); color:var(--ded-bg-pure);}
+  .ded-accident-notice{
+    display:none; font-size:12.5px; padding:10px 12px; margin-top:8px;
+    line-height:1.6; word-break:keep-all; overflow-wrap:break-word; border:1px solid var(--ded-line);
+  }
+  .ded-accident-notice.pending{display:block; border-color:var(--ded-red); color:var(--ded-red); background:rgba(232,22,87,0.06);}
+  .ded-accident-notice.done{display:block; border-color:var(--ded-beige); color:var(--ded-beige); background:rgba(203,178,149,0.06);}
+  .ded-accident-notice .cancel-link{display:inline-block; margin-top:4px; color:var(--ded-muted-2); text-decoration:underline; cursor:pointer; font-weight:600;}
+  .ded-accident-gate-hint{
+    display:none; font-size:12.5px; color:var(--ded-red); text-align:center; margin-top:10px;
+    line-height:1.6; word-break:keep-all; overflow-wrap:break-word;
+  }
+
+  /* ── 사고접수 안내 팝업 ── */
+  .ded-accident-overlay{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:410;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .ded-accident-overlay.open{display:flex;}
+  .ded-accident-card{
+    background:#111111; border:1px solid var(--ded-line); max-width:380px; width:100%;
+    padding:22px 24px 24px;
+  }
+  .ded-accident-head{display:flex; align-items:flex-start; justify-content:space-between; gap:10px;}
+  .ded-accident-title{font-size:17px; font-weight:600; color:var(--ded-text);}
+  .ded-accident-sub{font-size:12.5px; color:var(--ded-muted); margin-top:6px; line-height:1.5; word-break:keep-all; overflow-wrap:break-word;}
+  .ded-accident-close-x{background:none; border:none; color:var(--ded-muted); font-size:18px; cursor:pointer; line-height:1; padding:2px 4px; flex-shrink:0;}
+  .ded-accident-call{
+    display:block; text-align:center; background:var(--ded-red); color:var(--ded-text); text-decoration:none;
+    padding:16px; font-size:18px; font-weight:700; margin-top:16px;
+  }
+  .ded-accident-call .sub{display:block; font-size:11.5px; font-weight:500; opacity:.85; margin-top:2px;}
+  .ded-accident-write{
+    display:block; width:100%; text-align:center; background:transparent; color:var(--ded-red);
+    border:1px solid var(--ded-red); padding:14px; font-size:14.5px; font-weight:700; margin-top:10px; cursor:pointer;
+    font-family:'Pretendard',sans-serif;
+  }
+  .ded-accident-write:hover{background:var(--ded-red); color:var(--ded-text);}
+  .ded-accident-write--done{color:var(--ded-beige); border-color:var(--ded-beige);}
+  .ded-accident-write--done:hover{background:var(--ded-beige); color:var(--ded-bg-pure);}
+  .ded-accident-hint{font-size:11.5px; color:var(--ded-muted-2); text-align:center; margin-top:8px; line-height:1.5;}
+  .ded-accident-warn{
+    font-size:11.5px; color:var(--ded-red); text-align:center; margin-top:10px; line-height:1.6;
+    border:1px solid var(--ded-red); background:rgba(232,22,87,0.06); padding:8px 10px;
+    word-break:keep-all; overflow-wrap:break-word;
+  }
+
   /* ── 운행 단계(출발/도착) 표시 ── */
   .ded-phase-toggle{display:flex; gap:0; border:1px solid var(--ded-line); margin:0 22px;}
   .ded-phase-btn{
@@ -806,6 +863,13 @@
       </div>
     </div>
     <button class="ded-submit" id="submitBtnMain" onclick="submitLog()">운행기록 제출</button>
+    <div class="ded-accident-gate-hint" id="accidentGateHint"></div>
+  </div>
+
+  <!-- 사고접수: 공용차량 시스템과 동일하게, 접수 시 사고보고서 작성이 완료될 때까지 최종 제출을 잠근다 -->
+  <div class="ded-section">
+    <button type="button" class="ded-accident-btn" id="accidentBtn" onclick="openAccidentPopup()">🚨 사고접수</button>
+    <div class="ded-accident-notice" id="accidentNotice"></div>
   </div>
 
   <!-- 운행기록 확인/수정 · 점검요청: 한 줄에 좌우 버튼으로 배치 -->
@@ -846,6 +910,11 @@
       <button type="button" class="ded-confirm-close" onclick="closeSubmitConfirm()">확인</button>
     </div>
   </div>
+</div>
+
+<!-- 사고접수 안내 팝업: 롯데렌터카 사고접수 안내 + 차량사고보고서 작성 진입점(accident-report.html, 공용차량과 동일) -->
+<div class="ded-accident-overlay" id="accidentOverlay" onclick="if(event.target===this)closeAccidentPopup()">
+  <div class="ded-accident-card" id="accidentModalBody"></div>
 </div>
 
 <script>
@@ -961,6 +1030,12 @@ let editingIndex = null;      // 내 운행기록 수정 중인 trips[] 인덱�
 let myRecordsCache = [];      // 내 운행기록 패널에 표시 중인 목록 캐시
 let driverPhase = 'start';    // 회장차 수행기사 모드 전용: 'start'(출발 등록) | 'end'(도착 등록)
 let openTripIndex = null;     // driverPhase==='end'일 때, 이어서 도착 정보를 채워넣을 trips[] 인덱스
+// 사고접수 상태(공용차량 시스템의 카드별 accidentPending/accidentCompleted와 동일한 흐름을
+// 전용차량의 "현재 작성 중인 운행기록 1건" 단위로 적용한다)
+let accidentPending = false;
+let accidentCompleted = false;
+let accidentId = '';
+let accidentReqId = '';
 // 차량/모드를 빠르게 전환할 때, 이전 전환에서 발생한 Firebase 비동기 응답이 뒤늦게 도착해
 // 화면 상태를 덮어쓰는 것을 막기 위한 요청 순번(레이스 컨디션 방지)
 let layoutRequestSeq = 0;
@@ -1014,6 +1089,7 @@ function switchVehicle(key){
   editingIndex = null;
   document.getElementById('editBanner').style.display = 'none';
   closeMyRecordsPanel(); // 다른 차량 화면으로 전환 시 운행기록 확인수정 패널/버튼을 비활성화한다
+  resetAccidentState(); renderAccidentNotice(); updateAccidentSubmitGate();
   const v = VEHICLES[key];
   document.getElementById('orgName').textContent = v.chairman ? '회장' : v.org;
   document.getElementById('modelName').textContent = v.modelFull;
@@ -1059,6 +1135,7 @@ function setHoegjangMode(mode){
   editingIndex = null;
   document.getElementById('editBanner').style.display = 'none';
   closeMyRecordsPanel(); // 다른 화면(모드)으로 전환 시 운행기록 확인수정 패널/버튼을 비활성화한다
+  resetAccidentState(); renderAccidentNotice(); updateAccidentSubmitGate();
   const driverInput = document.getElementById('driverName');
   const v = VEHICLES[currentVehicleKey];
   if(mode === 'staff'){
@@ -1149,14 +1226,20 @@ async function refreshDriverPhase(mySeq){
     if(openTrip){
       driverPhase = 'end';
       openTripIndex = openTrip._idx;
+      // 출발 등록 시 사고접수를 마쳐둔 기록이면 도착 등록 화면에서도 "완료" 상태를 복원한다
+      resetAccidentState();
+      if(openTrip.accidentReported && openTrip.accidentId) markAccidentCompleted(openTrip.accidentId);
+      else { renderAccidentNotice(); updateAccidentSubmitGate(); }
       renderDriverPhaseUI(openTrip);
     } else if(completeTrip){
       driverPhase = 'done';
       openTripIndex = null;
+      resetAccidentState(); renderAccidentNotice(); updateAccidentSubmitGate();
       renderDriverPhaseUI(null);
     } else {
       driverPhase = 'start';
       openTripIndex = null;
+      resetAccidentState(); renderAccidentNotice(); updateAccidentSubmitGate();
       renderDriverPhaseUI(null);
     }
   }catch(e){
@@ -1164,6 +1247,7 @@ async function refreshDriverPhase(mySeq){
     if(mySeq !== layoutRequestSeq) return;
     driverPhase = 'start';
     openTripIndex = null;
+    resetAccidentState(); renderAccidentNotice(); updateAccidentSubmitGate();
     renderDriverPhaseUI(null);
   }
 }
@@ -1480,6 +1564,12 @@ async function submitLog(){
   const submitBtn = document.getElementById('submitBtnMain');
   const v = VEHICLES[currentVehicleKey];
 
+  // 사고접수가 진행중(작성 미완료)이면 최종 제출을 막는다 (공용차량 시스템과 동일한 잠금 흐름)
+  if(accidentPending && !accidentCompleted){
+    showToast('🚨 사고보고서 작성을 완료해야 제출할 수 있습니다.', true);
+    return;
+  }
+
   // 대리운전/대차 차량 사용 시 필수 입력 검증
   const subSwitch = document.getElementById('substituteSwitch');
   const subCond = document.getElementById('substituteCond');
@@ -1587,12 +1677,15 @@ async function submitLog(){
         overtimePeriods: collectPeriods('overtimePeriodsList'),
         overtimeStart:'', overtimeEnd:'', // (구버전 호환용 — 출발 단계에서는 항상 비어있음, 도착 등록 시 첫 구간으로 채움)
         plate: v.plate, vehicleKey: currentVehicleKey, status:'open',
+        accidentReported: accidentCompleted, accidentId: accidentCompleted ? accidentId : '',
         submittedAt: new Date().toISOString()
       };
       trips.push(trip);
       await fbSet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`, trips);
 
+      notifyDedicatedAccidentSubmitted(v.plate, v.org, driver);
       openSubmitConfirm('출발 정보가 등록되었습니다.');
+      resetAccidentState(); renderAccidentNotice(); updateAccidentSubmitGate();
       resetFormAfterSubmit();
       await refreshHoegjangLayout();
       loadMyRecords();
@@ -1621,7 +1714,9 @@ async function submitLog(){
         waitPeriods: collectPeriods('waitPeriodsList'),
         restPeriods: collectPeriods('restPeriodsList'),
         overtimePeriods: collectPeriods('overtimePeriodsList'),
-        status:'complete', editedAt: new Date().toISOString()
+        status:'complete', editedAt: new Date().toISOString(),
+        accidentReported: accidentCompleted ? true : (base.accidentReported||false),
+        accidentId: accidentCompleted ? accidentId : (base.accidentId||'')
       };
       // 구버전 호환용: 첫 심야시간 구간을 overtimeStart/overtimeEnd에도 동일하게 기록
       const opFirst0 = trip.overtimePeriods[0] || {start:'', end:''};
@@ -1629,7 +1724,9 @@ async function submitLog(){
       trips[openTripIndex] = trip;
       await fbSet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`, trips);
 
+      notifyDedicatedAccidentSubmitted(v.plate, v.org, driver);
       openSubmitConfirm('도착 정보가 등록되었습니다.');
+      resetAccidentState(); renderAccidentNotice(); updateAccidentSubmitGate();
       resetFormAfterSubmit();
       await refreshHoegjangLayout();
       loadMyRecords();
@@ -1666,6 +1763,7 @@ async function submitLog(){
         isSubstituteDriver, substituteDriverReason, isSubstituteVehicle, substituteVehicle,
         fuelCost,
         plate: v.plate, vehicleKey: currentVehicleKey, status:'complete',
+        accidentReported: accidentCompleted, accidentId: accidentCompleted ? accidentId : '',
         submittedAt: new Date().toISOString()
       };
 
@@ -1690,11 +1788,13 @@ async function submitLog(){
       }
       await fbSet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`, trips);
 
+      notifyDedicatedAccidentSubmitted(v.plate, v.org, driver);
       openSubmitConfirm(wasEditing ? '운행기록이 수정되었습니다.' : '운행기록이 저장되었습니다.');
       editingIndex = null;
       document.getElementById('editBanner').style.display = 'none';
       const myRecordsBtnEl1 = document.getElementById('myRecordsBtn');
       if(myRecordsBtnEl1) myRecordsBtnEl1.disabled = false;
+      resetAccidentState(); renderAccidentNotice(); updateAccidentSubmitGate();
       resetFormAfterSubmit(trip.endOdo);
       await refreshHoegjangLayout();
       loadMyRecords();
@@ -1871,6 +1971,12 @@ function startEditRecord(idx){
     });
   }
 
+  // 기존 기록에 사고접수 이력이 있으면 "완료" 상태로 복원(공용차량 시스템이 카드 렌더링 시
+  // r.accidentReported를 읽어 markAccidentCompleted()로 복원하는 것과 동일한 처리)
+  resetAccidentState();
+  if(t.accidentReported && t.accidentId) markAccidentCompleted(t.accidentId);
+  else { renderAccidentNotice(); updateAccidentSubmitGate(); }
+
   document.getElementById('editBanner').style.display = 'flex';
   document.getElementById('editBannerText').textContent = `${formatYYMMDD(t.dateFrom)||t.dateFrom||''} 운행기록을 수정하는 중입니다.`;
   document.getElementById('submitBtnMain').textContent = '수정 저장';
@@ -1884,6 +1990,7 @@ function cancelEditMode(){
   editingIndex = null;
   document.getElementById('editBanner').style.display = 'none';
   closeMyRecordsPanel();
+  resetAccidentState(); renderAccidentNotice(); updateAccidentSubmitGate();
   resetFormAfterSubmit();
   refreshHoegjangLayout();
 }
@@ -1933,6 +2040,158 @@ const EMAILJS_TEMPLATE_ID = 'template_iuxxjc5';
 const ADMIN_EMAIL         = 'newhead@ksa.or.kr';
 if(window.emailjs && EMAILJS_PUBLIC_KEY && !EMAILJS_PUBLIC_KEY.startsWith('YOUR_')){
   emailjs.init({publicKey: EMAILJS_PUBLIC_KEY});
+}
+
+// ============================================================
+// ★ 사고접수 (공용차량 시스템 index.html의 openAccidentPopup() 흐름과 동일) ★
+// - 버튼을 누르는(=사고접수를 "선택"하는) 시점에 바로 "사고접수 진행중"으로 표시하여
+//   사고보고서 작성이 끝날 때까지 최종 제출 버튼을 잠근다.
+// - accident-report.html(새 창)에서 접수를 마치면 postMessage로 통지받아 자동으로 "완료" 전환.
+// ============================================================
+function openAccidentPopup(){
+  const v = VEHICLES[currentVehicleKey];
+  const submitter = (currentVehicleKey === 'hoegjang' && hoegjangMode === 'staff')
+    ? 'KSA직원'
+    : (document.getElementById('driverName').value.trim() || v.driver);
+
+  if(!accidentCompleted) markAccidentPending();
+
+  const reportUrl = 'accident-report.html?' + new URLSearchParams({
+    plate: v.plate, model: v.model, branch: v.org, submitter, reqId: accidentReqId
+  }).toString();
+
+  const body = document.getElementById('accidentModalBody');
+  body.innerHTML = accidentCompleted ? `
+    <div class="ded-accident-head">
+      <div>
+        <div class="ded-accident-title">✅ 사고보고서 접수완료</div>
+        <div class="ded-accident-sub">접수번호: ${escapeHtmlDed(accidentId)}</div>
+      </div>
+      <button type="button" class="ded-accident-close-x" onclick="closeAccidentPopup()">✕</button>
+    </div>
+    <div class="ded-accident-sub" style="margin-top:14px;">사고보고서가 이미 접수되었습니다. 운행정보 입력을 계속 진행해 최종 제출해 주세요.</div>
+    <button type="button" class="ded-accident-write ded-accident-write--done" onclick="window.open('${reportUrl}','_blank')">제출한 사고보고서 다시 열기</button>
+  ` : `
+    <div class="ded-accident-head">
+      <div>
+        <div class="ded-accident-title">🚨 사고접수 안내</div>
+        <div class="ded-accident-sub">사고 발생 시 아래 번호로 롯데렌터카에 사고접수를 먼저 진행해 주세요.</div>
+      </div>
+      <button type="button" class="ded-accident-close-x" onclick="closeAccidentPopup()">✕</button>
+    </div>
+    <a href="tel:1588-1230" class="ded-accident-call">1588-1230 전화 걸기<span class="sub">롯데렌터카 대표번호</span></a>
+    <button type="button" class="ded-accident-write" onclick="window.open('${reportUrl}','_blank')">📝 차량사고보고서 작성하기</button>
+    <div class="ded-accident-hint">운행종료 후 운행정보 입력을 모두 마친 상태에서 작성해주세요</div>
+    <div class="ded-accident-warn">🚨 사고보고서 작성을 완료해야 운행기록 최종 제출 가능.</div>
+  `;
+  document.getElementById('accidentOverlay').classList.add('open');
+}
+
+function closeAccidentPopup(){
+  document.getElementById('accidentOverlay').classList.remove('open');
+}
+
+function escapeHtmlDed(s){
+  return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function markAccidentPending(){
+  if(!accidentReqId){
+    accidentReqId = 'accreq_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
+  }
+  accidentPending = true;
+  const btn = document.getElementById('accidentBtn');
+  if(btn) btn.classList.add('ded-accident-pending');
+  renderAccidentNotice();
+  updateAccidentSubmitGate();
+}
+
+function markAccidentCompleted(newAccidentId){
+  accidentPending = true;
+  accidentCompleted = true;
+  accidentId = newAccidentId || '';
+  const btn = document.getElementById('accidentBtn');
+  if(btn){ btn.classList.remove('ded-accident-pending'); btn.classList.add('ded-accident-done'); }
+  renderAccidentNotice();
+  updateAccidentSubmitGate();
+}
+
+function cancelAccidentReport(){
+  if(accidentCompleted){
+    if(!confirm('이미 접수된 사고보고서가 있습니다. 이 운행기록에서 사고접수 표시만 취소하시겠습니까?\n(접수된 사고보고서 자체는 삭제되지 않습니다)')) return;
+  }
+  resetAccidentState();
+  renderAccidentNotice();
+  updateAccidentSubmitGate();
+}
+
+function resetAccidentState(){
+  accidentPending = false;
+  accidentCompleted = false;
+  accidentId = '';
+  accidentReqId = '';
+  const btn = document.getElementById('accidentBtn');
+  if(btn) btn.classList.remove('ded-accident-pending','ded-accident-done');
+}
+
+function renderAccidentNotice(){
+  const notice = document.getElementById('accidentNotice');
+  if(!notice) return;
+  if(accidentCompleted){
+    notice.className = 'ded-accident-notice done';
+    notice.innerHTML = `✅ 사고보고서 접수완료 (접수번호: ${escapeHtmlDed(accidentId)})<br><span class="cancel-link" onclick="cancelAccidentReport()">사고접수 표시 취소</span>`;
+  }else if(accidentPending){
+    notice.className = 'ded-accident-notice pending';
+    notice.innerHTML = `🚨 사고보고서 작성이 필요합니다 — 위 "사고접수" 버튼을 눌러 작성을 완료해 주세요.<br><span class="cancel-link" onclick="cancelAccidentReport()">사고접수 취소</span>`;
+  }else{
+    notice.className = 'ded-accident-notice';
+    notice.innerHTML = '';
+  }
+}
+
+// 사고접수가 진행중(작성 미완료)이면 최종 제출 버튼을 잠근다.
+function updateAccidentSubmitGate(){
+  const submitBtn = document.getElementById('submitBtnMain');
+  const hint = document.getElementById('accidentGateHint');
+  const gated = accidentPending && !accidentCompleted;
+  if(submitBtn) submitBtn.disabled = gated;
+  if(hint){
+    hint.style.display = gated ? 'block' : 'none';
+    hint.textContent = gated ? '🚨 사고보고서 작성을 완료해야 제출할 수 있습니다.' : '';
+  }
+}
+
+// accident-report.html(새 창)에서 사고보고서 제출이 완료되면 postMessage로 통지받아
+// 이 화면의 사고접수 상태를 자동으로 "완료"로 전환한다.
+window.addEventListener('message', (e)=>{
+  if(e.origin !== window.location.origin) return;
+  const msg = e.data;
+  if(!msg || msg.type !== 'ksaAccidentReportSubmitted') return;
+  if(!msg.reqId || msg.reqId !== accidentReqId) return;
+  markAccidentCompleted(msg.accidentId);
+  if(document.getElementById('accidentOverlay')?.classList.contains('open')) closeAccidentPopup();
+});
+
+// 사고접수가 첨부된 운행기록이 최종 제출되면 관리자에게 별도 이메일 알림
+// (공용차량 index.html의 notifyAccidentSubmitted()와 동일한 시점·의미: 접수 시점이 아니라
+//  그 사고접수가 딸린 운행정보가 여기서 "운행기록 제출"로 최종 제출되는 시점에 보낸다.)
+async function notifyDedicatedAccidentSubmitted(plate, branch, submitter){
+  if(!accidentCompleted || !accidentId) return;
+  if(!window.emailjs || !EMAILJS_PUBLIC_KEY || EMAILJS_PUBLIC_KEY.startsWith('YOUR_')){
+    console.warn('[사고접수 알림] EmailJS 설정이 완료되지 않아 이메일을 발송하지 않았습니다.');
+    return;
+  }
+  try{
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: ADMIN_EMAIL,
+      plate, branch: branch||'', submitter,
+      status: '🚨 사고접수(운행기록 최종제출)',
+      detail: `접수번호: ${accidentId}`,
+      submitted_at: new Date().toLocaleString('ko-KR')
+    });
+  }catch(e){
+    console.error('[사고접수 알림] 이메일 발송 실패:', e);
+  }
 }
 
 function toggleMaintPanel(){
