@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>차량사고 보고 — KSA 차량운행정보</title>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<style>
+  @font-face {font-family:'Paperlogy';font-weight:400;src:url('fonts/Paperlogy-4Regular.ttf') format('truetype');}
+  @font-face {font-family:'Paperlogy';font-weight:500;src:url('fonts/Paperlogy-5Medium.ttf') format('truetype');}
+  @font-face {font-family:'Paperlogy';font-weight:600;src:url('fonts/Paperlogy-6SemiBold.ttf') format('truetype');}
+  @font-face {font-family:'Paperlogy';font-weight:700;src:url('fonts/Paperlogy-7Bold.ttf') format('truetype');}
+
+  :root{
+    --navy:#17593d; --navy-2:#10975c; --paper:#F5F5F5; --card:#FFFFFF;
+    --ink:#333333; --muted:#999999; --accent:#7eb138; --accent-soft:#e8f2d0;
+    --bad:#e81657; --bad-soft:#fde8ef; --line:#dddddd; --radius:16px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0;background:#e9e9e9;color:var(--ink);
+    font-family:'Paperlogy','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .device{max-width:480px;margin:0 auto;background:var(--paper);min-height:100vh;position:relative;}
+  .conn-flag{
+    background:#222;color:#fff;text-align:center;font-size:11.5px;font-weight:600;
+    padding:6px 10px;letter-spacing:.02em;
+  }
+  .conn-flag.err{background:var(--bad);}
+
+  /* 헤더 */
+  .hdr{
+    background:linear-gradient(135deg,var(--bad) 0%,#c4104a 100%);
+    color:#fff;padding:22px 20px 20px;position:relative;
+  }
+  .hdr-eyebrow{font-size:11px;letter-spacing:.14em;font-weight:700;opacity:.85;text-transform:uppercase;}
+  .hdr-title{font-size:22px;font-weight:700;margin-top:4px;display:flex;align-items:center;gap:8px;}
+  .hdr-vehicle{
+    margin-top:14px;background:rgba(255,255,255,.14);border-radius:12px;padding:12px 14px;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .hdr-vehicle .v-main{font-size:15px;font-weight:700;}
+  .hdr-vehicle .v-sub{font-size:12px;opacity:.85;margin-top:2px;}
+  .hdr-vehicle .v-badge{
+    font-size:11px;background:rgba(255,255,255,.9);color:var(--bad);
+    padding:4px 9px;border-radius:20px;font-weight:700;
+  }
+  .hdr-noctx{
+    margin-top:10px;background:rgba(255,255,255,.14);border-radius:10px;padding:9px 12px;
+    font-size:11.5px;line-height:1.5;
+  }
+
+  /* 본문 */
+  .body{padding:18px 16px 130px;}
+  .section{background:var(--card);border-radius:var(--radius);padding:18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  .section-title{font-size:15px;font-weight:700;color:var(--navy);margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+  .section-title .req{font-size:11px;color:var(--bad);font-weight:600;}
+  .field{margin-bottom:14px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{display:block;font-size:12.5px;color:var(--muted);font-weight:600;margin-bottom:6px;}
+  .field input[type=text], .field input[type=datetime-local], .field textarea, .field select{
+    width:100%;border:1.5px solid var(--line);border-radius:10px;padding:11px 12px;
+    font-family:'Paperlogy',sans-serif;font-size:14.5px;color:var(--ink);background:var(--paper);
+  }
+  .field textarea{min-height:80px;resize:vertical;line-height:1.5;}
+  .field input:focus, .field textarea:focus, .field select:focus{outline:none;border-color:var(--accent);background:#fff;}
+
+  .row2{display:flex;gap:10px;}
+  .row2 .field{flex:1;}
+
+  .gps-row{display:flex;gap:8px;}
+  .gps-row input{flex:1;}
+  .btn-gps{
+    flex-shrink:0;border:1.5px solid var(--accent);background:#fff;color:var(--navy-2);
+    border-radius:10px;padding:0 14px;font-size:13px;font-weight:700;cursor:pointer;
+    display:flex;align-items:center;gap:5px;
+  }
+  .gps-status{font-size:11.5px;color:var(--muted);margin-top:6px;}
+  .gps-status.ok{color:var(--navy-2);font-weight:600;}
+
+  /* 사진 첨부 */
+  .photo-tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+  .photo-tag{font-size:11.5px;padding:5px 10px;border-radius:20px;border:1.5px solid var(--line);color:var(--muted);font-weight:600;cursor:pointer;}
+  .photo-tag.on{border-color:var(--navy-2);background:var(--accent-soft);color:var(--navy);}
+  .photo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+  .photo-add{
+    aspect-ratio:1;border:1.5px dashed var(--line);border-radius:10px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    color:var(--muted);font-size:11px;cursor:pointer;background:var(--paper);
+  }
+  .photo-add .plus{font-size:20px;line-height:1;}
+  .photo-thumb{aspect-ratio:1;border-radius:10px;overflow:hidden;position:relative;background:#ddd;}
+  .photo-thumb img{width:100%;height:100%;object-fit:cover;}
+  .photo-thumb .del{
+    position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;
+    background:rgba(0,0,0,.55);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+  .photo-thumb .ptag{
+    position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);color:#fff;
+    font-size:9.5px;text-align:center;padding:2px 0;
+  }
+
+  /* 상대차량 카드 */
+  .other-party{
+    border:1.5px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;position:relative;
+  }
+  .other-party .op-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .other-party .op-head b{font-size:13.5px;color:var(--navy);}
+  .op-remove{font-size:11.5px;color:var(--bad);cursor:pointer;font-weight:600;}
+  .btn-add-dashed{
+    width:100%;border:1.5px dashed var(--accent);background:var(--accent-soft);color:var(--navy);
+    border-radius:10px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;
+  }
+
+  .helper{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.5;}
+
+  /* 하단 고정 제출 */
+  .submit-bar{
+    position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;
+    background:var(--card);padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px));
+    box-shadow:0 -4px 16px rgba(0,0,0,.08);
+  }
+  .btn-submit{
+    width:100%;background:linear-gradient(135deg,var(--bad),#c4104a);color:#fff;border:none;
+    border-radius:14px;padding:16px;font-size:16px;font-weight:700;cursor:pointer;
+    box-shadow:0 4px 14px rgba(232,22,87,.3);
+  }
+  .btn-submit:disabled{opacity:.55;cursor:not-allowed;}
+  .submit-err{color:var(--bad);font-size:12.5px;font-weight:600;text-align:center;margin-top:8px;display:none;}
+
+  /* 롯데렌터카 사고접수 안내 팝업 */
+  .lotte-overlay{
+    position:fixed;inset:0;background:rgba(10,10,10,.68);z-index:200;
+    display:flex;align-items:center;justify-content:center;padding:24px;
+  }
+  .lotte-modal{
+    background:#fff;border-radius:20px;padding:26px 22px 22px;max-width:360px;width:100%;
+    text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.3);
+  }
+  .lotte-modal .icon{font-size:34px;margin-bottom:10px;}
+  .lotte-modal h3{margin:0 0 8px;font-size:17px;color:var(--bad);font-weight:700;}
+  .lotte-modal p{margin:0 0 18px;font-size:13.5px;color:var(--ink);line-height:1.6;}
+  .lotte-modal .phone-btn{
+    display:block;width:100%;background:var(--bad);color:#fff;text-decoration:none;
+    border-radius:12px;padding:14px;font-size:17px;font-weight:700;margin-bottom:10px;
+  }
+  .lotte-modal .phone-btn small{display:block;font-size:11px;font-weight:500;opacity:.85;margin-top:2px;}
+  .lotte-modal .proceed-btn{
+    width:100%;background:transparent;border:1.5px solid var(--line);color:var(--muted);
+    border-radius:12px;padding:12px;font-size:13.5px;font-weight:600;cursor:pointer;
+  }
+
+  /* 완료 화면 */
+  .done-overlay{
+    position:fixed;inset:0;background:rgba(10,10,10,.7);z-index:250;
+    display:flex;align-items:center;justify-content:center;padding:24px;
+  }
+  .done-modal{
+    background:#fff;border-radius:20px;padding:30px 24px;max-width:360px;width:100%;
+    text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.3);
+  }
+  .done-modal .icon{font-size:40px;margin-bottom:12px;}
+  .done-modal h3{margin:0 0 8px;font-size:18px;color:var(--navy);font-weight:700;}
+  .done-modal p{margin:0 0 20px;font-size:13.5px;color:var(--ink);line-height:1.6;}
+  .done-modal .idtag{font-size:11px;color:var(--muted);margin-bottom:18px;font-family:monospace;}
+  .done-modal .close-btn{
+    width:100%;background:var(--navy-2);color:#fff;border:none;border-radius:12px;
+    padding:14px;font-size:15px;font-weight:700;cursor:pointer;
+  }
+</style>
+</head>
+<body>
+
+<div class="lotte-overlay" id="lotteOverlay">
+  <div class="lotte-modal">
+    <div class="icon">📞</div>
+    <h3>사고접수를 먼저 진행해주세요</h3>
+    <p>차량사고 보고 입력에 앞서, <b>롯데렌터카 대표번호</b>로<br>사고접수를 먼저 완료해야 합니다.</p>
+    <a class="phone-btn" href="tel:1588-1230">1588-1230 전화걸기<small>롯데렌터카 대표번호</small></a>
+    <button class="proceed-btn" onclick="document.getElementById('lotteOverlay').remove()">사고접수 완료 — 보고 입력 계속하기</button>
+  </div>
+</div>
+
+<div class="device">
+  <div class="conn-flag" id="connFlag">Firebase 연결 확인 중...</div>
+
+  <div class="hdr">
+    <div class="hdr-eyebrow">KSA 차량운행정보 · 차량사고 보고</div>
+    <div class="hdr-title">🚨 차량사고 보고</div>
+    <div class="hdr-vehicle" id="vehicleBox" style="display:none;">
+      <div>
+        <div class="v-main" id="vMain"></div>
+        <div class="v-sub" id="vSub"></div>
+      </div>
+      <div class="v-badge">자동입력</div>
+    </div>
+    <div class="hdr-noctx" id="noCtxBox" style="display:none;">
+      ⚠ 차량·운전자 정보가 전달되지 않았습니다. 운행정보 입력화면의 "🚨 사고접수" 버튼을 통해 접속해주세요.
+      아래 사고 정보만으로도 접수는 가능하나, 차량 확인이 늦어질 수 있습니다.
+    </div>
+  </div>
+
+  <div class="body">
+
+    <!-- 사고 일시/장소 -->
+    <div class="section">
+      <div class="section-title">사고 정보 <span class="req">필수</span></div>
+      <div class="field">
+        <label>사고 일시 (신고 시각으로 자동 설정 — 실제 사고 시각으로 수정 가능)</label>
+        <input type="datetime-local" id="occurredAt">
+      </div>
+      <div class="field">
+        <label>사고 장소</label>
+        <div class="gps-row">
+          <input type="text" id="locInput" placeholder="주소 또는 위치 설명 입력">
+          <button type="button" class="btn-gps" onclick="getLoc()">📍 현재위치</button>
+        </div>
+        <div class="gps-status" id="locStatus">버튼을 누르면 GPS로 자동 입력됩니다</div>
+      </div>
+      <div class="field">
+        <label>사고 내용 (육하원칙에 따라 구체적으로)</label>
+        <textarea id="description" placeholder="언제, 어디서, 어떻게 사고가 발생했는지 기재"></textarea>
+      </div>
+      <div class="field">
+        <label>동승자</label>
+        <input type="text" id="companion" placeholder="없으면 비워두세요">
+      </div>
+    </div>
+
+    <!-- 사진 첨부 -->
+    <div class="section">
+      <div class="section-title">현장 사진 <span style="color:var(--muted);font-weight:500;font-size:11.5px;" id="photoCountLabel">(선택, 최대 6장)</span></div>
+      <div class="photo-tags">
+        <div class="photo-tag on" data-tag="현장">현장</div>
+        <div class="photo-tag" data-tag="파손부위">파손부위</div>
+        <div class="photo-tag" data-tag="상대차량">상대차량</div>
+      </div>
+      <div class="photo-grid" id="photoGrid">
+        <label class="photo-add" id="photoAddLabel">
+          <span class="plus">＋</span>사진 추가
+          <input type="file" accept="image/*" multiple style="display:none" onchange="addPhotos(event)">
+        </label>
+      </div>
+    </div>
+
+    <!-- 상대차량 -->
+    <div class="section">
+      <div class="section-title">상대 차량 <span style="color:var(--muted);font-weight:500;font-size:11.5px;">(단독사고 시 생략)</span></div>
+      <div id="otherPartyList"></div>
+      <button type="button" class="btn-add-dashed" onclick="addOtherParty()">+ 상대차량 추가</button>
+    </div>
+
+  </div>
+
+  <div class="submit-bar">
+    <button type="button" class="btn-submit" id="submitBtn" onclick="submitAccidentReport()">
+      차량사고 보고 접수
+    </button>
+    <div class="submit-err" id="submitErr"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Firebase 연동 — index.html과 동일한 프로젝트/DB를 사용합니다.
+// (fleet-data/accidents 하위에 저장, REST API + 익명 인증 방식은 index.html과 동일한 패턴)
+// ============================================================
+const FIREBASE_URL = 'https://ksa-vehicle-log-default-rtdb.asia-southeast1.firebasedatabase.app';
+const firebaseConfig = {
+  apiKey: "AIzaSyAGS2iP6VVLpsdbxGgaE1V5eIu-IHWNrH8",
+  authDomain: "ksa-vehicle-log.firebaseapp.com",
+  databaseURL: FIREBASE_URL,
+  projectId: "ksa-vehicle-log"
+};
+firebase.initializeApp(firebaseConfig);
+
+const EMAILJS_PUBLIC_KEY  = 'FKYkua9Eho5keKczQ';
+const EMAILJS_SERVICE_ID  = 'service_g6e8xin';
+const EMAILJS_TEMPLATE_ID = 'template_iuxxjc5';
+const ADMIN_EMAIL = 'newhead@ksa.or.kr';
+if(window.emailjs){ emailjs.init({publicKey: EMAILJS_PUBLIC_KEY}); }
+
+let _authReadyResolve;
+const authReadyPromise = new Promise(res=>{ _authReadyResolve = res; });
+firebase.auth().onAuthStateChanged(()=>{ _authReadyResolve(); });
+setTimeout(()=>_authReadyResolve(), 5000);
+firebase.auth().signInAnonymously().then(()=>{
+  document.getElementById('connFlag').textContent = '✓ 서버 연결됨 — 제출 시 실제 DB에 저장됩니다';
+}).catch(e=>{
+  const flag = document.getElementById('connFlag');
+  flag.textContent = '⚠ 서버 연결 실패 — 새로고침 후 다시 시도해주세요';
+  flag.classList.add('err');
+  console.error('[사고신고] 익명 인증 실패:', e);
+});
+
+async function getAuthToken(){
+  await authReadyPromise;
+  const user = firebase.auth().currentUser;
+  if(!user) return null;
+  try{ return await user.getIdToken(); }catch(e){ return null; }
+}
+async function fbSet(path, value){
+  const token = await getAuthToken();
+  const url = `${FIREBASE_URL}/${path}.json${token?`?auth=${token}`:''}`;
+  const r = await fetch(url, {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(value)
+  });
+  if(!r.ok) throw new Error(`Firebase 쓰기 실패 (${r.status})`);
+  return r.json();
+}
+
+function escapeHtml(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============================================================
+// URL 쿼리로 전달된 차량/운전자 컨텍스트 (index.html "🚨 사고접수" 버튼에서 전달)
+// ============================================================
+const qs = new URLSearchParams(window.location.search);
+const ctx = {
+  plate: qs.get('plate') || '',
+  model: qs.get('model') || '',
+  branch: qs.get('branch') || '',
+  submitter: qs.get('submitter') || ''
+};
+(function initHeader(){
+  if(ctx.plate){
+    document.getElementById('vehicleBox').style.display = 'flex';
+    document.getElementById('vMain').textContent = ctx.plate + (ctx.model?(' · '+ctx.model):'');
+    document.getElementById('vSub').textContent = (ctx.branch||'') + (ctx.submitter?(' · 운전자 '+ctx.submitter):'');
+  }else{
+    document.getElementById('noCtxBox').style.display = 'block';
+  }
+})();
+
+// 사고일시 기본값 = 현재 시각(로컬)
+(function initDateTime(){
+  const now = new Date();
+  const pad = n=>String(n).padStart(2,'0');
+  const local = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  document.getElementById('occurredAt').value = local;
+})();
+
+function localDateKey(d){
+  const pad = n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+let lastGeo = null;
+function getLoc(){
+  const status = document.getElementById('locStatus');
+  const input = document.getElementById('locInput');
+  if(!navigator.geolocation){ status.textContent='이 기기에서는 GPS를 지원하지 않습니다'; return; }
+  status.textContent='위치 확인 중...';
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      const {latitude, longitude} = pos.coords;
+      lastGeo = {lat:latitude, lng:longitude};
+      input.value = `위도 ${latitude.toFixed(5)}, 경도 ${longitude.toFixed(5)}`;
+      status.textContent = '현재 위치가 입력되었습니다';
+      status.classList.add('ok');
+    },
+    err=>{ status.textContent='위치 권한이 거부되었습니다 — 직접 입력해주세요'; }
+  );
+}
+
+// 태그 선택
+let activeTag = '현장';
+document.querySelectorAll('.photo-tag').forEach(tag=>{
+  tag.onclick = ()=>{
+    document.querySelectorAll('.photo-tag').forEach(t=>t.classList.remove('on'));
+    tag.classList.add('on');
+    activeTag = tag.dataset.tag;
+  };
+});
+
+// ============================================================
+// 사진 첨부 — 서버 용량 부담을 줄이기 위해 업로드 전 클라이언트에서 리사이징+압축
+// (최대 가로/세로 1280px, JPEG 품질 0.7), base64로 보관해 Firebase RTDB에 그대로 저장
+// ============================================================
+const MAX_DIM = 1280;
+const JPEG_QUALITY = 0.7;
+const MAX_PHOTOS = 6;
+let photoSeq = 0;
+const photoStore = {}; // id -> {dataUrl, tag}
+
+function updatePhotoCountUI(){
+  const n = Object.keys(photoStore).length;
+  const label = document.getElementById('photoCountLabel');
+  const addLabel = document.getElementById('photoAddLabel');
+  label.textContent = `(선택, ${n}/${MAX_PHOTOS}장)`;
+  label.style.color = n>=MAX_PHOTOS ? 'var(--bad)' : 'var(--muted)';
+  addLabel.style.display = n>=MAX_PHOTOS ? 'none' : 'flex';
+}
+
+function compressImage(file){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = e=>{ img.src = e.target.result; };
+    img.onload = ()=>{
+      let {width, height} = img;
+      if(width > MAX_DIM || height > MAX_DIM){
+        const ratio = Math.min(MAX_DIM/width, MAX_DIM/height);
+        width = Math.round(width*ratio); height = Math.round(height*ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+      const compressedKB = Math.round((dataUrl.length * 0.75) / 1024);
+      resolve({ dataUrl, originalKB: Math.round(file.size/1024), compressedKB });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+async function addPhotos(evt){
+  const grid = document.getElementById('photoGrid');
+  const addBtn = grid.querySelector('.photo-add');
+  const files = Array.from(evt.target.files);
+  const remaining = MAX_PHOTOS - Object.keys(photoStore).length;
+  if(remaining <= 0){
+    alert(`현장 사진은 최대 ${MAX_PHOTOS}장까지 첨부할 수 있습니다.`);
+    evt.target.value='';
+    return;
+  }
+  const overLimit = files.length > remaining;
+  for(const file of files.slice(0, remaining)){
+    const { dataUrl, originalKB, compressedKB } = await compressImage(file);
+    const id = 'p' + (++photoSeq);
+    photoStore[id] = { dataUrl, tag: activeTag };
+    const div = document.createElement('div');
+    div.className='photo-thumb';
+    div.dataset.photoId = id;
+    div.innerHTML = `<img src="${dataUrl}"><div class="ptag">${escapeHtml(activeTag)}</div><div class="del" onclick="removePhoto('${id}')">✕</div>`;
+    div.title = `원본 ${originalKB}KB → 압축 ${compressedKB}KB`;
+    grid.insertBefore(div, addBtn);
+  }
+  if(overLimit) alert(`현장 사진은 최대 ${MAX_PHOTOS}장까지 첨부할 수 있어 앞의 ${remaining}장만 추가되었습니다.`);
+  updatePhotoCountUI();
+  evt.target.value='';
+}
+function removePhoto(id){
+  delete photoStore[id];
+  const el = document.querySelector(`.photo-thumb[data-photo-id="${id}"]`);
+  if(el) el.remove();
+  updatePhotoCountUI();
+}
+
+// 상대차량 카드
+let opCount = 0;
+function otherPartyCardHtml(n){
+  return `
+    <div class="op-head"><b>상대차량 ${n}</b><span class="op-remove" onclick="this.closest('.other-party').remove()">삭제</span></div>
+    <div class="row2">
+      <div class="field"><label>차량번호</label><input type="text" class="op-plate" placeholder="예: 34나5678"></div>
+      <div class="field"><label>차량명</label><input type="text" class="op-name" placeholder="예: 쏘렌토"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>보험회사</label><input type="text" class="op-ins" placeholder="예: 삼성화재"></div>
+      <div class="field"><label>담당자 연락처</label><input type="text" class="op-contact" placeholder="010-0000-0000"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>인적 피해</label><input type="text" class="op-injury" placeholder="없음"></div>
+      <div class="field"><label>물적 피해</label><input type="text" class="op-damage" placeholder="예: 범퍼 파손"></div>
+    </div>`;
+}
+function addOtherParty(){
+  opCount++;
+  const wrap = document.getElementById('otherPartyList');
+  const card = document.createElement('div');
+  card.className='other-party';
+  card.innerHTML = otherPartyCardHtml(opCount);
+  wrap.appendChild(card);
+}
+
+function collectOtherParties(){
+  return Array.from(document.querySelectorAll('#otherPartyList .other-party')).map(card=>({
+    vehicleName: card.querySelector('.op-name').value.trim(),
+    plate: card.querySelector('.op-plate').value.trim(),
+    insuranceCompany: card.querySelector('.op-ins').value.trim(),
+    insuranceContact: card.querySelector('.op-contact').value.trim(),
+    personalInjury: card.querySelector('.op-injury').value.trim(),
+    propertyDamage: card.querySelector('.op-damage').value.trim()
+  })).filter(p=>p.vehicleName || p.plate || p.insuranceCompany || p.personalInjury || p.propertyDamage);
+}
+
+// ============================================================
+// 제출 — fleet-data/accidents/{accidentId}에 저장
+// ============================================================
+let submitting = false;
+async function submitAccidentReport(){
+  if(submitting) return;
+  const errBox = document.getElementById('submitErr');
+  errBox.style.display = 'none';
+
+  const occurredAtVal = document.getElementById('occurredAt').value;
+  const location = document.getElementById('locInput').value.trim();
+  const description = document.getElementById('description').value.trim();
+
+  if(!occurredAtVal || !location || !description){
+    errBox.textContent = '사고 일시·장소·사고 내용은 필수 입력 항목입니다.';
+    errBox.style.display = 'block';
+    return;
+  }
+
+  submitting = true;
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = '접수 중...';
+
+  try{
+    const now = new Date();
+    const pad = n=>String(n).padStart(2,'0');
+    const stamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const rand = Math.random().toString(36).slice(2,6);
+    const accidentId = `acc_${stamp}_${rand}`;
+    const createdAt = now.toISOString();
+
+    const photos = Object.values(photoStore).map(p=>({ url: p.dataUrl, tag: p.tag }));
+    const otherParties = collectOtherParties();
+
+    const record = {
+      accidentId,
+      createdAt,
+      reportedBy: { name: ctx.submitter || '', org: ctx.branch || '' },
+      ourVehicle: { plate: ctx.plate || '', model: ctx.model || '', org: ctx.branch || '' },
+      occurredAt: occurredAtVal,
+      location: { lat: lastGeo?lastGeo.lat:null, lng: lastGeo?lastGeo.lng:null, address: '', manualNote: location },
+      description,
+      companion: document.getElementById('companion').value.trim(),
+      otherParties,
+      photos,
+      status: '접수',
+      statusHistory: [ { status: '접수', at: createdAt, by: ctx.submitter || '' } ],
+      actionNotes: '',
+      repairCost: null
+    };
+
+    await fbSet(`fleet-data/accidents/${accidentId}`, record);
+
+    // 관리자 알림 이메일 (실패해도 접수 자체는 이미 완료된 것으로 처리)
+    if(window.emailjs && EMAILJS_PUBLIC_KEY){
+      try{
+        await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+          to_email: ADMIN_EMAIL,
+          plate: ctx.plate || '(미확인)',
+          branch: ctx.branch || '',
+          submitter: ctx.submitter || '(미확인)',
+          status: '🚨 사고접수',
+          detail: `사고일시: ${occurredAtVal}\n장소: ${location}\n내용: ${description}\n상대차량: ${otherParties.length}건\n사진: ${photos.length}장`,
+          submitted_at: now.toLocaleString('ko-KR')
+        });
+      }catch(e){
+        console.error('[사고접수 알림] 이메일 발송 실패:', e);
+      }
+    }
+
+    showDone(accidentId);
+  }catch(e){
+    console.error('[사고접수] 저장 실패:', e);
+    errBox.textContent = '저장에 실패했습니다: ' + e.message + ' — 잠시 후 다시 시도하거나, 롯데렌터카(1588-1230)로 직접 접수해주세요.';
+    errBox.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = '차량사고 보고 접수';
+  }
+  submitting = false;
+}
+
+function showDone(accidentId){
+  const overlay = document.createElement('div');
+  overlay.className = 'done-overlay';
+  overlay.innerHTML = `
+    <div class="done-modal">
+      <div class="icon">✅</div>
+      <h3>접수가 완료되었습니다</h3>
+      <p>관리부서에 알림이 전송되었습니다.<br>추가 확인이 필요하면 담당자가 별도로 연락드립니다.</p>
+      <div class="idtag">접수번호: ${escapeHtml(accidentId)}</div>
+      <button class="close-btn" onclick="window.close();document.getElementById('submitBtn').disabled=false;">닫기</button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+</script>
+</body>
+</html>

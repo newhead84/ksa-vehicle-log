@@ -35,14 +35,35 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-11] 사고신고 입력폼 3건 수정. ① 현장사진 첨부를 최대 6장으로 제한(초과분은 안내 후
+  앞쪽 6장까지만 반영, 개수 표시를 사진 섹션 라벨에 실시간 반영, 6장 도달 시 "사진 추가" 버튼 자동
+  숨김). ② 과실률 필드 전면 삭제 — 협회 렌터카 계약이 자기부담금 정액(5만원, 과실과 무관)이라
+  실무상 필수 정보가 아니라고 판단, 상대차량 카드에서 과실률 입력란과 관련 안내 문구 삭제,
+  collectOtherParties()의 faultRatio 필드 제거, 완료 팝업 문구도 과실률 언급 없이 수정,
+  ACCIDENT_REPORT_DESIGN.md 데이터 모델·미결정사항에도 반영. ③ index.html 사고접수 팝업의
+  "📝 차량사고보고서 작성하기" 버튼 하단에 "운행종료 후 운행정보 입력을 모두 마친 상태에서
+  작성해주세요" 안내문구 추가 | 변경: accident-report.html(사진 섹션/MAX_PHOTOS/
+  updatePhotoCountUI() 신규, addPhotos() 제한 로직, otherPartyCardHtml()/collectOtherParties()
+  과실률 제거), index.html(openAccidentPopup() 안내문구 추가), ACCIDENT_REPORT_DESIGN.md(갱신)
   [2026-08-11] 운행기록 입력화면 "차량 상태" 영역에 사고접수 버튼 추가. 기존 "정상"/"점검요망" 라벨
   옆에 있던 "사고접수 : 롯데렌터카 1588-1230" 안내 텍스트를 삭제하고, 대신 "✓ 정상 / ⚠ 점검요망 /
   🚨 사고접수" 3개 버튼을 한 줄에 배치(.status-toggle-3 신규, 컴팩트 패딩·폰트 적용). "정상"이 기존과
   동일하게 기본 선택값 유지. 사고접수 버튼은 차량상태 값을 변경하지 않고 클릭 시 기존 모달 컴포넌트
-  (#modalOverlay/#modalBody)를 이용해 롯데렌터카 대표번호(1588-1230) 안내 팝업만 표시(tel: 링크로
-  바로 전화 연결). setStatus()의 버튼 초기화 대상 선택자를 .status-btn[data-val]로 제한해 사고접수
-  버튼(data-val 없음)이 정상/점검요망 토글 시 함께 초기화되지 않도록 수정 | 변경: CSS(.status-toggle-3,
-  .status-btn.accident-btn), HTML(차량 상태 필드), setStatus()(선택자), openAccidentPopup()(신규)
+  (#modalOverlay/#modalBody)를 이용해 롯데렌터카 대표번호(1588-1230) 안내 팝업을 표시(tel: 링크로
+  바로 전화 연결), 팝업 하단에 "📝 차량사고보고서 작성하기" 버튼을 추가해 신규 페이지 accident-report.html을
+  새 창으로 엶(현재 차량번호·차종·사업장·제출자 이름을 URL 쿼리로 전달). setStatus()의 버튼 초기화
+  대상 선택자를 .status-btn[data-val]로 제한해 사고접수 버튼(data-val 없음)이 정상/점검요망 토글 시
+  함께 초기화되지 않도록 수정 | 변경: CSS(.status-toggle-3, .status-btn.accident-btn), HTML(차량 상태
+  필드), setStatus()(선택자), openAccidentPopup(btn)(신규, 차량정보 쿼리스트링 전달)
+  [2026-08-11] 사고신고 입력폼 실반영(accident-report.html 신규 파일) — 기존 UI 프로토타입
+  (accident-report-sample.html, 이번에 제거)을 실제 Firebase Realtime Database 연동 버전으로 교체.
+  index.html과 동일한 Firebase 프로젝트·익명 인증(REST API + ?auth= 토큰) 패턴 재사용,
+  fleet-data/accidents/{accidentId} 경로에 저장. 차량정보 URL 쿼리 자동표시, 사고일시 기본값
+  자동설정, 현장사진은 캔버스 리사이징(최대 1280px)+JPEG 압축(품질 0.7) 후 base64로 저장(Storage
+  미사용, 용량 이슈 시 추후 전환 검토), 제출 시 접수번호(acc_YYYYMMDD_HHMMSS_xxxx) 생성 및
+  status:'접수'/statusHistory 기록, EmailJS로 관리자 알림 발송(실패해도 저장은 유지), 필수값
+  미입력 시 제출 차단, 접수 완료 팝업(접수번호 표시). 관리자 대시보드(목록조회·상태변경)는 이번
+  범위 제외(추후 Phase 2) | 변경: 신규 파일 accident-report.html 추가, accident-report-sample.html 삭제
   [2026-08-09] 시작화면(#roleOverlay) 상단 "주말·공휴일 개인사용 안내"/"DT센터 주차안내" 버튼 2개의
   불필요한 우측 여백 제거: 기존에는 고정폭(280px) 플렉스 컨테이너에 버튼이 늘어나 채워지면서, 텍스트가
   짧은 "DT센터 주차안내" 버튼 오른쪽에 빈 공간이 크게 남던 문제 → 컨테이너를 display:inline-grid(단일
@@ -5669,7 +5690,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
         <div class="status-toggle status-toggle-3">
           <button class="status-btn active-good" onclick="setStatus(this,'정상')" data-val="정상">✓ 정상</button>
           <button class="status-btn" onclick="setStatus(this,'점검요망')" data-val="점검요망">⚠ 점검요망</button>
-          <button type="button" class="status-btn accident-btn" onclick="openAccidentPopup()">🚨 사고접수</button>
+          <button type="button" class="status-btn accident-btn" onclick="openAccidentPopup(this)">🚨 사고접수</button>
         </div>
       </div>
       <div class="check-field">
@@ -5811,7 +5832,13 @@ function setStatus(btn, val){
 }
 
 // "🚨 사고접수" 버튼 — 차량상태를 변경하지 않고 롯데렌터카 사고접수 안내만 표시
-function openAccidentPopup(){
+function openAccidentPopup(btn){
+  const plate = document.getElementById('userPlateSelect')?.value || '';
+  const branch = document.getElementById('userBranchSelect')?.value || '';
+  const submitter = document.getElementById('submitterInput')?.value?.trim() || '';
+  const model = REGISTRY_MAP[plate]?.model || '';
+  const reportUrl = 'accident-report.html?' + new URLSearchParams({plate, model, branch, submitter}).toString();
+
   document.getElementById('modalBody').innerHTML = `
     <div class="modal-head">
       <div><div class="plate-big" style="font-size:18px;">🚨 사고접수 안내</div><div class="muted" style="font-size:12px;word-break:keep-all;overflow-wrap:break-word;">사고 발생 시 아래 번호로 롯데렌터카에 사고접수를 먼저 진행해 주세요.</div></div>
@@ -5821,6 +5848,10 @@ function openAccidentPopup(){
       1588-1230 전화 걸기
       <div style="font-size:11.5px;font-weight:500;opacity:.85;margin-top:2px;">롯데렌터카 대표번호</div>
     </a>
+    <button type="button" onclick="window.open('${reportUrl}','_blank')" style="display:block;width:100%;text-align:center;background:#fff;color:var(--bad);border:1.5px solid var(--bad);border-radius:12px;padding:14px;font-size:15px;font-weight:700;margin-top:10px;cursor:pointer;">
+      📝 차량사고보고서 작성하기
+    </button>
+    <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:8px;line-height:1.5;">운행종료 후 운행정보 입력을 모두 마친 상태에서 작성해주세요</div>
   `;
   document.getElementById('modalOverlay').classList.add('show');
   lockBodyScroll();
