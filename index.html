@@ -35,6 +35,18 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-11] 개인사용 영수증 첨부 UI 6건 개선. ① 버튼 구성 변경: 기존 [📷 지금 첨부]/
+  [⏳ 나중에 첨부] 2개 → [📷 영수증 촬영]/[🖼️ 앨범에서 선택]/[⏳ 나중에 첨부] 3개로 확장(앨범
+  선택용 capture 속성 없는 별도 file input #receiptFileAlbum-${id} 신규 추가). ② "나중에 첨부"
+  하단 안내문구에서 "(기한 초과 시 비용 환수 대상)" 문구 삭제(10일 이내 재제출 안내만 유지).
+  ③ "나중에 첨부" 클릭 시 뜨던 confirm() 팝업 제거 — 하단 안내문구로 동일 내용 전달되므로 즉시
+  진행. ④ 3버튼 중 하나 선택 시 나머지 2개는 비활성화(disabled+opacity) 표시(3버튼 동일 로직,
+  updateReceiptButtonStates()). ⑤ "나중에 첨부"를 다시 누르면 선택 해제되어 다른 버튼 재활성화 +
+  하단 안내문구 숨김(토글 동작) | 변경: addTripRow() 영수증 첨부 UI 마크업(#receiptBtnCamera-${id}/
+  #receiptBtnAlbum-${id}/#receiptBtnLater-${id} id 추가, #receiptFileAlbum-${id} 신규),
+  updateReceiptButtonStates() 신규, onReceiptAttachAlbum() 신규, onReceiptAttachLater()(팝업 제거+
+  토글 로직), onReceiptFileSelected(source 파라미터 추가), resetReceiptState()(receiptActiveOption
+  초기화 반영), CSS .receipt-opt-active 신규(선택 상태 표시용 outline)
   [2026-08-11] 개인사용(주말·공휴일) 주유영수증 OCR 검증 기능 신규 구현
   (RECEIPT_OCR_DESIGN.md 기반). ① 개인사용 체크 시 운행입력 카드에 영수증 첨부 UI([📷 지금 첨부]/
   [⏳ 나중에 첨부]) 노출, 파일 선택 즉시 Google Cloud Vision OCR로 금액·일자를 함께 인식해 입력
@@ -96,22 +108,6 @@
   accidentCardHtml() 신규, renderAccidentHistory()/openVehicle() 차량별 사고이력 블록/
   deleteAccidentRecord() 리팩터, message 리스너에 closeModal() 추가, loadUserEditable()/
   saveUserEdits() 사고 이력 조회·검증·저장 로직 추가)
-  [2026-08-11] 관리자 대시보드 사고 이력 4건 개선. ① "🚨 사고 이력" 섹션을 adminSections 최하단
-  (공용차량 현황 다음)으로 이동. ② 각 사고 이력 카드에 첨부 사진 썸네일을 표시해 열람 가능하도록
-  개선(클릭 시 기존 원본이미지 라이트박스 #imgLightbox 재사용, 이전에는 사진 수량 배지만 있고
-  실제 이미지를 볼 방법이 없었음), "수정"/"삭제" 버튼 추가 — 수정은 상태·사고일시·장소·사고내용·
-  관리자 전용 처리메모를 편집하는 모달(openAccidentEditModal), 삭제는 확인 후 완전 삭제
-  (refreshDataFromStorage 재조회 후 반영해 동시수정 유실 방지). ③ 사고접수 안내 팝업의 안내문구를
-  "🚨 사고보고서 작성을 완료해야 이 운행기록을 최종 제출할 수 있습니다." → "🚨 사고보고서 작성을
-  완료해야 운행기록 최종 제출 가능."으로 축약. ④ 사고접수 버튼 클릭 시 비활성화되는 "정상" 버튼이
-  기존에는 opacity만 낮아져 초록색이 그대로 비쳐 보이던 문제 수정 — disabled 상태에 회색 스타일을
-  명시 적용. 추가로 임시저장(localStorage draft) 복원 시 이미 완료된 사고접수 상태가 카드에 반영되지
-  않아 재접속 시 "최초 안내" 팝업이 다시 뜨던 버그 수정(collectRows()에 accidentPending/accidentReqId
-  보존 필드 추가, restoreDraft()에서 markAccidentCompleted()/markAccidentPending() 재호출로 상태 복원)
-  | 변경: CSS(.status-btn.active-good:disabled 등), HTML(adminSections 섹션 순서), viewAccidentPhoto()/
-  openAccidentEditModal()/saveAccidentEdit()/deleteAccidentRecord() 신규, renderAccidentHistory()
-  (사진 썸네일·수정/삭제 버튼 추가), openAccidentPopup()(안내문구 축약), collectRows()/restoreDraft()
-  (사고접수 진행상태 보존·복원)
 -->
 
 <head>
@@ -911,6 +907,9 @@
     .mcc-metric-btn{padding:4px 9px;font-size:11px;}
     .mcc-groupby-btn{padding:4px 9px;font-size:11px;}
   }
+
+  /* ===== 개인사용 영수증 첨부 3버튼(촬영/앨범/나중에 첨부) 중 선택된 옵션 표시 ===== */
+  .receipt-opt-active{outline:2px solid #16A34A;outline-offset:1px;}
 
 </style>
 </head>
@@ -5868,17 +5867,19 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
           <div id="fuelminguide-${id}" style="display:none;margin-top:6px;font-size:11.5px;font-weight:700;color:#1D4ED8;line-height:1.6;"></div>
           <div id="receiptBox-${id}" style="margin-top:10px;padding-top:10px;border-top:1px dashed #93C5FD;">
             <div style="font-size:11.5px;font-weight:700;color:#1D4ED8;margin-bottom:6px;">🧾 주유영수증 첨부</div>
-            <div id="receiptButtons-${id}" style="display:flex;gap:8px;">
-              <button type="button" onclick="onReceiptAttachNow('${id}')" style="flex:1;padding:9px 8px;border-radius:8px;border:none;background:#1D4ED8;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">📷 지금 첨부</button>
-              <button type="button" onclick="onReceiptAttachLater('${id}')" style="flex:1;padding:9px 8px;border-radius:8px;border:1px solid #93C5FD;background:#fff;color:#1D4ED8;font-size:12.5px;font-weight:700;cursor:pointer;">⏳ 나중에 첨부</button>
+            <div id="receiptButtons-${id}" style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button type="button" id="receiptBtnCamera-${id}" class="receipt-opt-btn" onclick="onReceiptAttachNow('${id}')" style="flex:1 1 30%;min-width:88px;padding:9px 6px;border-radius:8px;border:none;background:#1D4ED8;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">📷 영수증 촬영</button>
+              <button type="button" id="receiptBtnAlbum-${id}" class="receipt-opt-btn" onclick="onReceiptAttachAlbum('${id}')" style="flex:1 1 30%;min-width:88px;padding:9px 6px;border-radius:8px;border:1px solid #93C5FD;background:#fff;color:#1D4ED8;font-size:12px;font-weight:700;cursor:pointer;">🖼️ 앨범에서 선택</button>
+              <button type="button" id="receiptBtnLater-${id}" class="receipt-opt-btn" onclick="onReceiptAttachLater('${id}')" style="flex:1 1 30%;min-width:88px;padding:9px 6px;border-radius:8px;border:1px solid #93C5FD;background:#fff;color:#1D4ED8;font-size:12px;font-weight:700;cursor:pointer;">⏳ 나중에 첨부</button>
             </div>
-            <input type="file" id="receiptFile-${id}" accept="image/*" capture="environment" style="display:none;" onchange="onReceiptFileSelected(this,'${id}')">
+            <input type="file" id="receiptFile-${id}" accept="image/*" capture="environment" style="display:none;" onchange="onReceiptFileSelected(this,'${id}','camera')">
+            <input type="file" id="receiptFileAlbum-${id}" accept="image/*" style="display:none;" onchange="onReceiptFileSelected(this,'${id}','album')">
             <div id="receiptThumbWrap-${id}" style="display:none;margin-top:8px;gap:8px;align-items:flex-start;">
               <img id="receiptThumb-${id}" src="" alt="영수증 미리보기" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #93C5FD;flex-shrink:0;">
               <div id="receiptOcrStatus-${id}" style="font-size:11.5px;flex:1;"></div>
             </div>
             <div id="receiptDeferredNote-${id}" style="display:none;margin-top:8px;font-size:11.5px;color:#B91C1C;background:#FEE2E2;border-radius:8px;padding:8px 10px;line-height:1.5;word-break:keep-all;overflow-wrap:break-word;">
-              ⏳ 영수증 미첨부 — 제출일로부터 <b>10일 이내</b> "내 제출 기록 수정"에서 반드시 추가 제출해주세요. (기한 초과 시 비용 환수 대상)
+              ⏳ 영수증 미첨부 — 제출일로부터 <b>10일 이내</b> "내 제출 기록 수정"에서 반드시 추가 제출해주세요.
             </div>
           </div>
         </div>
@@ -6235,6 +6236,7 @@ function resetReceiptState(id){
   const card = document.getElementById(id);
   if(card){
     delete card.dataset.receiptDeferred;
+    delete card.dataset.receiptActiveOption;
     delete card.dataset.receiptOcrAmount;
     delete card.dataset.receiptOcrMatched;
     delete card.dataset.receiptOcrDate;
@@ -6246,6 +6248,29 @@ function resetReceiptState(id){
   if(deferredNote) deferredNote.style.display = 'none';
   const btnRow = document.getElementById('receiptButtons-'+id);
   if(btnRow) btnRow.style.display = 'flex';
+  updateReceiptButtonStates(id);
+}
+
+// 영수증 첨부 3버튼(촬영/앨범/나중에 첨부) 중 선택된 옵션 1개만 활성 표시하고 나머지는 비활성화.
+// 선택 해제(active==='') 시 3개 버튼 모두 다시 활성화.
+function updateReceiptButtonStates(id){
+  const card = document.getElementById(id);
+  const active = card?.dataset.receiptActiveOption || '';
+  [['receiptBtnCamera-'+id,'camera'],['receiptBtnAlbum-'+id,'album'],['receiptBtnLater-'+id,'later']].forEach(([btnId,key])=>{
+    const btn = document.getElementById(btnId);
+    if(!btn) return;
+    if(!active || active===key){
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+      btn.classList.toggle('receipt-opt-active', active===key);
+    } else {
+      btn.disabled = true;
+      btn.style.opacity = '.4';
+      btn.style.cursor = 'not-allowed';
+      btn.classList.remove('receipt-opt-active');
+    }
+  });
 }
 
 function onReceiptAttachNow(id){
@@ -6253,25 +6278,41 @@ function onReceiptAttachNow(id){
   if(fileInp) fileInp.click();
 }
 
+function onReceiptAttachAlbum(id){
+  const fileInp = document.getElementById('receiptFileAlbum-'+id);
+  if(fileInp) fileInp.click();
+}
+
 function onReceiptAttachLater(id){
-  const ok = confirm('영수증을 준비 못하셨습니다. 제출일로부터 10일 이내에 "내 제출 기록 수정"에서 반드시 추가 제출해주세요.\n(기한 초과 시 비용 환수 대상이 될 수 있습니다)\n\n확인 시 "나중에 첨부"로 진행됩니다.');
-  if(!ok) return;
   const card = document.getElementById(id);
-  if(card) card.dataset.receiptDeferred = '1';
+  const wasActive = card?.dataset.receiptActiveOption === 'later';
+  const deferredNote = document.getElementById('receiptDeferredNote-'+id);
+  if(wasActive){
+    // 다시 누르면 선택 해제 — 다른 버튼 재활성화 + 안내문구 숨김
+    if(card){ delete card.dataset.receiptDeferred; delete card.dataset.receiptActiveOption; }
+    if(deferredNote) deferredNote.style.display = 'none';
+    updateReceiptButtonStates(id);
+    return;
+  }
+  if(card){ card.dataset.receiptDeferred = '1'; card.dataset.receiptActiveOption = 'later'; }
   delete window._receiptFileMap[id];
   const thumbWrap = document.getElementById('receiptThumbWrap-'+id);
   if(thumbWrap) thumbWrap.style.display = 'none';
-  const deferredNote = document.getElementById('receiptDeferredNote-'+id);
   if(deferredNote) deferredNote.style.display = 'block';
+  updateReceiptButtonStates(id);
 }
 
-async function onReceiptFileSelected(inputEl, id){
+async function onReceiptFileSelected(inputEl, id, source){
   const file = inputEl.files && inputEl.files[0];
   if(!file) return;
   const card = document.getElementById(id);
-  if(card) delete card.dataset.receiptDeferred;
+  if(card){
+    delete card.dataset.receiptDeferred;
+    card.dataset.receiptActiveOption = source || 'camera';
+  }
   const deferredNote = document.getElementById('receiptDeferredNote-'+id);
   if(deferredNote) deferredNote.style.display = 'none';
+  updateReceiptButtonStates(id);
 
   window._receiptFileMap[id] = file;
 
