@@ -319,6 +319,22 @@ function escapeHtml(s){
   return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// index.html의 '내 제출 기록 수정'과 동일한 기기 식별 토큰(localStorage 키 동일)을 사용해,
+// 이 사고보고서를 제출한 기기에서만 본인이 조회·수정할 수 있도록 한다.
+const EDIT_DEVICE_TOKEN_KEY = 'ksaEditDeviceToken';
+function getDeviceEditToken(){
+  try{
+    let tok = localStorage.getItem(EDIT_DEVICE_TOKEN_KEY);
+    if(!tok){
+      tok = 'dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,12);
+      localStorage.setItem(EDIT_DEVICE_TOKEN_KEY, tok);
+    }
+    return tok;
+  }catch(e){
+    return '__no-storage__';
+  }
+}
+
 // ============================================================
 // URL 쿼리로 전달된 차량/운전자 컨텍스트 (index.html "🚨 사고접수" 버튼에서 전달)
 // ============================================================
@@ -600,7 +616,8 @@ async function submitAccidentReport(){
       status: '접수',
       statusHistory: [ { status: '접수', at: createdAt, by: ctx.submitter || '' } ],
       actionNotes: '',
-      repairCost: null
+      repairCost: null,
+      editToken: getDeviceEditToken() // 이 사고보고서를 제출한 기기 식별용(index.html '내 제출 기록 수정' 접근 제어에 사용)
     };
 
     await fbSet(`fleet-data/accidents/${accidentId}`, record);
