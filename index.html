@@ -35,6 +35,19 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-11] 사고접수/점검요망 관련 3건 개선. ① 사고보고서 접수완료 안내문구 수정: "관리부서에
+  알림이 전송되었습니다" → "운행 기록을 최종 제출하면 관리부서로 자동 통보됩니다"(실제 발송 시점은
+  index.html 최종 제출 시이므로 문구 오해 소지 제거). ② "내 제출 기록 수정" 위(이전종료거리 안내
+  아래)에 선택한 차량의 최근 점검요망/사고접수 이력(최대 3건, 최신순)을 표시해 다음 운행자가 동일
+  건을 중복 접수하지 않도록 개선. ③ 상단 "제출자 이름" 입력란 삭제 — 각 운행기록의 "운행자" 이름이
+  곧 제출자로 취급되며(신규 행은 이전 행 운행자명 자동입력), "내 제출 기록 수정" 조회도 운행자명
+  기준으로만 가능하도록 단순화(제출자/운행자 토글 제거). ④ 모바일에서 공용차량현황 카드(차량 상세
+  모달) 상단 "재배치 반영"/"운용중지" 버튼·입력줄이 프레임 밖으로 벗어나던 문제 수정 | 변경:
+  accident-report.html(showDone()), index.html(renderVehicleAlertPanel() 신규 및 차량선택 관련
+  함수들에서 호출, 제출자 입력 HTML 제거, syncUserFields()/syncSubmitterFromUser()/
+  setUserEditSearchType() 제거, addTripRow()/openAccidentPopup()/submitDirectInput()/doSubmit()/
+  saveDraft()/restoreDraft()/loadUserEditable() 제출자→운행자 기준 정리, CSS .branch-edit 모바일
+  규칙 신규)
   [2026-08-11] 사고접수 관리자 알림 이메일 발송 시점 변경. 기존에는 accident-report.html에서
   사고보고서 접수가 완료되는 즉시 이메일이 발송되었으나, 사고접수가 첨부된 해당 운행정보가
   index.html에서 "제출하기"로 최종 제출되는 시점으로 변경(운행정보 자체가 아직 제출되지 않은
@@ -854,6 +867,14 @@
     .trip-table td.trip-usage-cell .edit-inp{max-width:100%!important;width:100%;}
     .trip-table td.trip-usage-cell .trip-split-chks,
     .trip-table td.trip-usage-cell .trip-split-btns{margin-top:4px;}
+
+    /* 차량 상세 모달 상단(재배치/운용중지 등) 버튼·입력줄: 좁은 화면에서 한 줄에 몰아넣지 않고
+       줄바꿈하여 프레임(모달 폭) 밖으로 벗어나지 않도록 함 */
+    .branch-edit{flex-wrap:wrap;}
+    .branch-edit select,
+    .branch-edit input{width:auto;flex:1 1 120px;min-width:0;max-width:100%;box-sizing:border-box;}
+    .branch-edit button,
+    .branch-edit .btn{flex:0 0 auto;}
   }
 
   /* ===== 월별 가동율 표: 가동율(%) 아래 운행거리(km) 병기 ===== */
@@ -1006,13 +1027,6 @@
 
   <!-- ===== 사용자: 직접 입력 폼 ===== -->
   <div id="userInputSection" style="display:none;padding-bottom:20px;">
-    <!-- 제출자 이름 입력 (사업장 위) -->
-    <div style="background:var(--card);padding:16px;border-bottom:1px solid var(--line);margin-bottom:0;">
-      <label style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:8px;">제출자 이름</label>
-      <input id="submitterInput" placeholder="이름을 입력하세요" maxlength="20" oninput="syncUserFields(this.value)" onkeydown="this.dataset.syncedFromDriver='false'"
-        style="width:100%;border:1.5px solid var(--line);border-radius:12px;padding:15px 14px;font-size:16px;font-family:'Paperlogy',sans-serif;background:#fff;color:var(--ink);"
-        onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--line)'">
-    </div>
     <div class="vehicle-select-card" style="padding:16px 16px 20px;border-radius:0;border-bottom:1px solid var(--line);margin-bottom:0;">
       <label>사업장 선택</label>
       <select class="plate-select" id="userBranchSelect" onchange="onBranchSelect()" style="margin-bottom:12px;">
@@ -1026,6 +1040,10 @@
       </div>
       <div id="qrLockNote" style="display:none;font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5;word-break:keep-all;overflow-wrap:break-word;">🔒 QR 스캔으로 연동된 사업장·차량입니다. 다른 차량으로 변경이 필요하면 관리자에게 문의해주세요.</div>
       <div class="last-odo-hint" id="lastOdoHint">이전 종료거리: <b>–</b> km</div>
+      <div id="vehicleAlertPanel" style="display:none;margin-top:10px;padding:12px 14px;background:var(--bad-soft);border:1px solid var(--bad);border-radius:10px;">
+        <div style="font-size:12px;font-weight:700;color:var(--bad);margin-bottom:6px;">⚠ 이 차량의 최근 점검요망·사고접수 이력 (중복 접수 주의)</div>
+        <div id="vehicleAlertList" style="font-size:12.5px;color:var(--ink);line-height:1.7;word-break:keep-all;overflow-wrap:break-word;"></div>
+      </div>
     </div>
     <div class="form-err" id="userFormErr"></div>
     <div id="tripRows"></div>
@@ -1063,11 +1081,8 @@
     </div>
     <div style="padding:14px 18px 10px;border-bottom:1px solid var(--line);">
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap;margin-bottom:12px;">
-        <div style="display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex-shrink:0;">
-          <button type="button" id="searchTypeDriverBtn" class="search-type-btn active" onclick="setUserEditSearchType('user',this)" style="border:none;background:var(--navy);color:#fff;padding:7px 9px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Paperlogy';white-space:nowrap;">운행자</button>
-          <button type="button" id="searchTypeSubmitterBtn" class="search-type-btn" onclick="setUserEditSearchType('submitter',this)" style="border:none;background:#fff;color:var(--muted);padding:7px 9px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Paperlogy';white-space:nowrap;">제출자</button>
-        </div>
-        <input id="searchSubmitterInput" type="text" style="border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-family:'Paperlogy';font-size:13px;flex:1;min-width:0;" placeholder="이름 입력">
+        <span style="flex-shrink:0;border:1px solid var(--line);border-radius:7px;background:var(--navy);color:#fff;padding:7px 9px;font-size:12px;font-weight:600;white-space:nowrap;">운행자</span>
+        <input id="searchSubmitterInput" type="text" style="border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-family:'Paperlogy';font-size:13px;flex:1;min-width:0;" placeholder="운행자 이름 입력">
         <button class="btn btn-primary" style="padding:8px 12px;font-size:13px;flex-shrink:0;white-space:nowrap;" onclick="loadUserEditable()">조회</button>
       </div>
       <div style="font-size:11.5px;color:var(--muted);word-break:keep-all;overflow-wrap:break-word;margin:-4px 0 0;">
@@ -5269,26 +5284,6 @@ function buildBranchDropdown(){
   });
 }
 
-function syncSubmitterFromUser(inp){
-  const subInp = document.getElementById('submitterInput');
-  if(!subInp) return;
-  // 제출자가 비어있거나, 이전에 운행자에 의해 자동입력된 경우에만 업데이트
-  if(!subInp.value.trim() || subInp.dataset.syncedFromDriver === 'true'){
-    subInp.value = inp.value;
-    subInp.dataset.syncedFromDriver = inp.value ? 'true' : 'false';
-  }
-}
-
-function syncUserFields(name){
-  // 제출자 이름 변경 시 운행자 필드가 비어있거나 이전 제출자 값이면 동기화
-  document.querySelectorAll('.tr-user').forEach(inp=>{
-    if(!inp.value || inp.dataset.autoFilled==='true'){
-      inp.value = name;
-      inp.dataset.autoFilled = 'true';
-    }
-  });
-}
-
 function onBranchSelect(){
   const branch = document.getElementById('userBranchSelect').value;
   const wrap = document.getElementById('plateSelectWrap');
@@ -5302,6 +5297,7 @@ function onBranchSelect(){
   if(addRowBtn) addRowBtn.style.display='none';
   if(submitBar) submitBar.style.display='none';
   if(hint) hint.style.display='none';
+  renderVehicleAlertPanel(null);
   rowCounter=0;
 
   if(!branch){ wrap.style.display='none'; sel.innerHTML='<option value="">-- 차량번호를 선택하세요 --</option>'; return; }
@@ -5382,6 +5378,36 @@ function getLastTripMeta(plate){
   return {endOdo: Number(last.endOdo) || null, isDaeCha: !!last.isDaeCha, user: last.user||''};
 }
 
+// 차량 선택 시, 다음 운행자가 동일 건을 중복 접수하지 않도록 해당 차량의 최근
+// 점검요망/사고접수 이력(최대 3건, 최신순)을 이전종료거리 안내 바로 아래에 보여준다.
+function renderVehicleAlertPanel(plate){
+  const panel = document.getElementById('vehicleAlertPanel');
+  const list = document.getElementById('vehicleAlertList');
+  if(!panel || !list) return;
+  if(!plate){ panel.style.display='none'; list.innerHTML=''; return; }
+
+  const items=[];
+  (data.vehicles[plate]?.trips||[]).forEach(t=>{
+    if(t.status==='점검요망'){
+      items.push({type:'점검요망', icon:'⚠', user:t.user||'', date:t.isoDate||'', ts:t.submittedAt||t.isoDate||''});
+    }
+  });
+  Object.keys(data.accidents||{}).forEach(id=>{
+    const a=data.accidents[id];
+    if((a.ourVehicle?.plate||'')===plate){
+      items.push({type:'사고접수', icon:'🚨', user:a.reportedBy?.name||'', date:(a.occurredAt||a.createdAt||'').slice(0,10), ts:a.createdAt||a.occurredAt||''});
+    }
+  });
+  items.sort((a,b)=>String(b.ts).localeCompare(String(a.ts)));
+  const top3 = items.slice(0,3);
+
+  if(!top3.length){ panel.style.display='none'; list.innerHTML=''; return; }
+  list.innerHTML = top3.map(it=>
+    `<div>${it.icon} <b>${it.type}</b> · 운행자: ${escapeHtml(it.user||'미기재')} · ${escapeHtml(it.date||'-')}</div>`
+  ).join('');
+  panel.style.display='block';
+}
+
 function onVehicleSelect(){
   const plate = document.getElementById('userPlateSelect').value;
   const hint = document.getElementById('lastOdoHint');
@@ -5390,8 +5416,9 @@ function onVehicleSelect(){
   document.getElementById('tripRows').innerHTML = '';
   rowCounter = 0;
 
-  if(!plate){ hint.style.display='none'; addBtn.style.display='none'; bar.style.display='none'; return; }
+  if(!plate){ hint.style.display='none'; addBtn.style.display='none'; bar.style.display='none'; renderVehicleAlertPanel(null); return; }
 
+  renderVehicleAlertPanel(plate);
   const {endOdo:lastOdo, isDaeCha:lastWasDaeCha, user:lastUser} = getLastTripMeta(plate);
   if(lastOdo !== null){
     hint.style.display = 'block';
@@ -5593,9 +5620,9 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
       <div class="form-field">
         <label style="display:flex;align-items:center;justify-content:space-between;">
           <span>운행자</span>
-          <span style="font-size:11px;color:var(--muted);font-weight:400;">제출자와 다를 경우 수정하세요</span>
+          <span style="font-size:11px;color:var(--muted);font-weight:400;">실제 운행한 사람의 이름을 입력하세요</span>
         </label>
-        <input type="text" class="tr-user" placeholder="운행자 이름" oninput="this.dataset.autoFilled='false';syncSubmitterFromUser(this);scheduleDraft()">
+        <input type="text" class="tr-user" placeholder="운행자 이름" oninput="this.dataset.autoFilled='false';scheduleDraft()">
       </div>
       <div class="form-field">
         <label>차량 상태</label>
@@ -5668,11 +5695,13 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
       </div>
     </div>`;
   document.getElementById('tripRows').appendChild(card);
-  // 운행자 필드에 제출자 이름 자동입력
-  const submitterVal = document.getElementById('submitterInput')?.value.trim();
-  if(submitterVal){
-    const userInp = card.querySelector('.tr-user');
-    if(userInp && !userInp.value) userInp.value = submitterVal;
+  // 운행자 필드에 이전 행의 운행자 이름 자동입력(동일 운행자가 여러 건 입력하는 경우가 많음)
+  if(rows.length > 0){
+    const lastUserVal = rows[rows.length-1].querySelector('.tr-user')?.value.trim();
+    if(lastUserVal){
+      const userInp = card.querySelector('.tr-user');
+      if(userInp && !userInp.value){ userInp.value = lastUserVal; userInp.dataset.autoFilled='true'; }
+    }
   }
   // 운행기간 기본값(오늘~오늘)에 대한 업무일 기준 안내문구를 사용자가 날짜를 직접 건드리지 않아도
   // 카드 생성 시점에 바로 표시 (기존엔 날짜 변경 이벤트가 발생해야만 노출됨)
@@ -5752,7 +5781,7 @@ function openAccidentPopup(btn){
   const card = btn.closest('.trip-card');
   const plate = document.getElementById('userPlateSelect')?.value || '';
   const branch = document.getElementById('userBranchSelect')?.value || '';
-  const submitter = document.getElementById('submitterInput')?.value?.trim() || '';
+  const submitter = card?.querySelector('.tr-user')?.value?.trim() || '';
   const model = REGISTRY_MAP[plate]?.model || '';
 
   if(card && card.dataset.accidentCompleted !== '1'){
@@ -6133,7 +6162,7 @@ function showSubmitConfirm(submitter, plate, rows){
   // 헤더 정보
   html += `<div style="background:var(--paper);border-radius:12px;padding:14px 16px;margin-bottom:14px;">
     <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-      <span style="font-size:12px;color:var(--muted);">제출자</span>
+      <span style="font-size:12px;color:var(--muted);">운행자</span>
       <span style="font-size:14px;font-weight:700;color:var(--ink);">${submitter}</span>
     </div>
     <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
@@ -6200,9 +6229,7 @@ async function confirmAndSubmit(){
 }
 
 async function submitDirectInput(){
-  const submitter = document.getElementById('submitterInput').value.trim();
   const plate = document.getElementById('userPlateSelect').value;
-  if(!submitter){ showUserFormErr('제출자 이름을 입력해 주세요.'); return; }
   if(!plate){ showUserFormErr('차량번호를 선택해 주세요.'); return; }
 
   const rows = collectRows();
@@ -6220,6 +6247,7 @@ async function submitDirectInput(){
   for(let i=0; i<rows.length; i++){
     const r = rows[i];
     if(!r.dateFrom){ showUserFormErr(`${i+1}번 운행기록: 운행기간 시작일을 입력해 주세요.`); return; }
+    if(!r.user){ showUserFormErr(`${i+1}번 운행기록: 운행자 이름을 입력해 주세요.`); return; }
     if(!r.endOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리를 입력해 주세요.`); return; }
     if(r.endOdo <= r.startOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리가 시작거리보다 작습니다.`); return; }
     if(!r.dest){ showUserFormErr(`${i+1}번 운행기록: 행선지를 입력해 주세요.`); return; }
@@ -6243,7 +6271,8 @@ async function submitDirectInput(){
     if(!confirm(`⚠️ 개인사용 주유비가 주행거리 대비 예상 금액(4등급 연비 휘발유 기준)보다 적게 입력되었습니다.\n\n${msg}\n\n입력하신 주유비가 맞는지 확인해 주세요.\n계속 진행하시겠습니까?`)) return;
   }
 
-  // 검증 통과 → 팝업 표시
+  // 검증 통과 → 팝업 표시 (대표 운행자명: 첫 번째 운행기록의 운행자)
+  const submitter = rows[0]?.user || '';
   _pendingSubmitData = {submitter, plate, rows};
   showSubmitConfirm(submitter, plate, rows);
 }
@@ -6404,7 +6433,7 @@ async function doSubmit(submitter, plate, rows){
       date: dateDisplay, isoDate, dateTo, usageDates: allDates,
       startOdo:r.startOdo, endOdo:r.endOdo, distance:r.distance,
       user:r.user, dest:r.dest, fuel:r.fuel, status:r.status, note:r.note,
-      submitter, branchAtTime, imgKey:null, isPersonal:r.isPersonal||false,
+      submitter:r.user, branchAtTime, imgKey:null, isPersonal:r.isPersonal||false,
       isDaeCha:r.isDaeCha||false, daeChaPate:r.daeChaPate||'',
       isCommute:r.isCommute||false, commuteDir:r.commuteDir||'',
       submittedAt: new Date().toISOString(),
@@ -6453,12 +6482,11 @@ function scheduleDraft(){
 }
 
 async function saveDraft(){
-  const submitter = document.getElementById('submitterInput')?.value.trim()||'';
   const plate = document.getElementById('userPlateSelect')?.value||'';
   if(!plate) return;
   const rows = collectRows();
   const branch = document.getElementById('userBranchSelect')?.value||'';
-  const draft = {submitter, plate, branch, savedAt:new Date().toISOString(), rows};
+  const draft = {plate, branch, savedAt:new Date().toISOString(), rows};
   try{
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     const hint = document.getElementById('draftSavedHint');
@@ -6491,9 +6519,6 @@ async function restoreDraft(){
     if(!raw) return;
     const draft = JSON.parse(raw);
     document.getElementById('draftBanner').style.display='none';
-
-    // 이름 복원
-    if(draft.submitter) document.getElementById('submitterInput').value = draft.submitter;
 
     // 사업장 먼저 복원
     const draftBranch = data.vehicles[draft.plate]?.branch ||
@@ -6554,6 +6579,7 @@ async function restoreDraft(){
 
 async function onVehicleSelectAsync(plate){
   document.getElementById('userPlateSelect').value = plate;
+  renderVehicleAlertPanel(plate);
   const {endOdo:lastOdo, isDaeCha:lastWasDaeCha, user:lastUser} = getLastTripMeta(plate);
   const hint = document.getElementById('lastOdoHint');
   if(lastOdo!==null){
@@ -6662,22 +6688,6 @@ async function confirmAddVehicle(){
   closeModal();
 }
 
-// '내 제출 기록 수정' 조회 기준: 기본값 운행자(user), 버튼으로 제출자(submitter)와 전환
-let userEditSearchType='user';
-function setUserEditSearchType(type,btn){
-  userEditSearchType=type;
-  document.querySelectorAll('.search-type-btn').forEach(b=>{
-    b.classList.remove('active');
-    b.style.background='#fff';
-    b.style.color='var(--muted)';
-  });
-  btn.classList.add('active');
-  btn.style.background='var(--navy)';
-  btn.style.color='#fff';
-  const inp=document.getElementById('searchSubmitterInput');
-  if(inp) inp.placeholder = type==='submitter' ? '제출자 이름 입력' : '운행자 이름 입력';
-}
-
 // ============================================================
 // 사용자 제출 기록 수정
 // ============================================================
@@ -6689,8 +6699,8 @@ function loadUserEditable(){
   if(!name){err.textContent='이름을 입력해 주세요.';err.style.display='block';if(summary)summary.textContent='';return;}
   err.style.display='none';
 
-  // 이름 기준으로 내 제출 기록 검색 (조회기준: 운행자 또는 제출자, 상단 토글로 선택)
-  const field = userEditSearchType==='submitter' ? 'submitter' : 'user';
+  // 이름 기준으로 내 제출 기록 검색 (조회기준: 운행자명만 지원)
+  const field = 'user';
   let found=[]; // [{plate, tripIdx, trip}]
   Object.keys(data.vehicles).forEach(plate=>{
     (data.vehicles[plate].trips||[]).forEach((t,i)=>{
@@ -6718,8 +6728,8 @@ function loadUserEditable(){
   found=found.slice().sort((a,b)=>tripChronoCompare(b.trip,a.trip));
 
   // 본인이 제출한 사고 이력(사고보고서)도 함께 검색 — accident-report.html의 "제출자" 필드는
-  // index.html 상단 제출자 이름과 동일값이므로, 조회기준(운행자/제출자) 토글과 무관하게
-  // reportedBy.name 기준으로 매칭한다. 보안 기준(기기토큰·기간)은 운행기록과 동일하게 적용.
+  // 사고접수를 선택한 운행기록의 운행자 이름과 동일값이므로, reportedBy.name 기준으로 매칭한다.
+  // 보안 기준(기기토큰·기간)은 운행기록과 동일하게 적용.
   let foundAcc = Object.keys(data.accidents||{}).map(id=>({id, ...data.accidents[id]}))
     .filter(a=>(a.reportedBy?.name||'')===name);
   const accNameMatchedCount = foundAcc.length;
