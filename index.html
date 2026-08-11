@@ -35,6 +35,22 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-11] 관리자 대시보드 사고 이력 4건 개선. ① "🚨 사고 이력" 섹션을 adminSections 최하단
+  (공용차량 현황 다음)으로 이동. ② 각 사고 이력 카드에 첨부 사진 썸네일을 표시해 열람 가능하도록
+  개선(클릭 시 기존 원본이미지 라이트박스 #imgLightbox 재사용, 이전에는 사진 수량 배지만 있고
+  실제 이미지를 볼 방법이 없었음), "수정"/"삭제" 버튼 추가 — 수정은 상태·사고일시·장소·사고내용·
+  관리자 전용 처리메모를 편집하는 모달(openAccidentEditModal), 삭제는 확인 후 완전 삭제
+  (refreshDataFromStorage 재조회 후 반영해 동시수정 유실 방지). ③ 사고접수 안내 팝업의 안내문구를
+  "🚨 사고보고서 작성을 완료해야 이 운행기록을 최종 제출할 수 있습니다." → "🚨 사고보고서 작성을
+  완료해야 운행기록 최종 제출 가능."으로 축약. ④ 사고접수 버튼 클릭 시 비활성화되는 "정상" 버튼이
+  기존에는 opacity만 낮아져 초록색이 그대로 비쳐 보이던 문제 수정 — disabled 상태에 회색 스타일을
+  명시 적용. 추가로 임시저장(localStorage draft) 복원 시 이미 완료된 사고접수 상태가 카드에 반영되지
+  않아 재접속 시 "최초 안내" 팝업이 다시 뜨던 버그 수정(collectRows()에 accidentPending/accidentReqId
+  보존 필드 추가, restoreDraft()에서 markAccidentCompleted()/markAccidentPending() 재호출로 상태 복원)
+  | 변경: CSS(.status-btn.active-good:disabled 등), HTML(adminSections 섹션 순서), viewAccidentPhoto()/
+  openAccidentEditModal()/saveAccidentEdit()/deleteAccidentRecord() 신규, renderAccidentHistory()
+  (사진 썸네일·수정/삭제 버튼 추가), openAccidentPopup()(안내문구 축약), collectRows()/restoreDraft()
+  (사고접수 진행상태 보존·복원)
   [2026-08-11] 사고신고 입력폼·플로우 3건 개선. ① 사고 장소: GPS 버튼 클릭 시 위도/경도 대신
   OpenStreetMap Nominatim으로 역지오코딩한 실제 주소를 자동 입력(주소 변환 실패 시 좌표로 대체
   표시), GPS 사용 불가/오작동 시를 대비해 입력창 아래 "직접 입력" 안내문구 상시 노출(입력창은
@@ -82,12 +98,6 @@
   status:'접수'/statusHistory 기록, EmailJS로 관리자 알림 발송(실패해도 저장은 유지), 필수값
   미입력 시 제출 차단, 접수 완료 팝업(접수번호 표시). 관리자 대시보드(목록조회·상태변경)는 이번
   범위 제외(추후 Phase 2) | 변경: 신규 파일 accident-report.html 추가, accident-report-sample.html 삭제
-  [2026-08-09] 시작화면(#roleOverlay) 상단 "주말·공휴일 개인사용 안내"/"DT센터 주차안내" 버튼 2개의
-  불필요한 우측 여백 제거: 기존에는 고정폭(280px) 플렉스 컨테이너에 버튼이 늘어나 채워지면서, 텍스트가
-  짧은 "DT센터 주차안내" 버튼 오른쪽에 빈 공간이 크게 남던 문제 → 컨테이너를 display:inline-grid(단일
-  컬럼, max-content)로 전환해 두 버튼이 더 긴 텍스트("주말·공휴일 개인사용 안내") 기준의 동일한 폭으로
-  자동 축소되도록 수정(화면 중앙 정렬은 상위 .role-logo-area의 align-items:center로 유지) | 변경:
-  HTML(#noticeBtnGroup 인라인 스타일), showAdminLogin()(토글 시 display 값도 flex→inline-grid로 동기화)
 -->
 
 <head>
@@ -644,6 +654,7 @@
   .status-btn.accident-btn{border-color:var(--bad);color:var(--bad);background:#fff;}
   .status-btn.accident-btn:active{background:var(--bad-soft);}
   .status-btn:disabled{opacity:.45;cursor:not-allowed;}
+  .status-btn.active-good:disabled,.status-btn.active-bad:disabled{border-color:var(--line);background:var(--paper);color:var(--muted);}
   .status-btn.accident-btn.accident-pending{background:var(--bad-soft);}
   .status-btn.accident-btn.accident-done{border-color:var(--good);color:var(--good);background:var(--good-soft);}
   .accident-flow-notice{display:none;font-size:12px;border-radius:10px;padding:10px 12px;margin-top:8px;line-height:1.6;word-break:keep-all;overflow-wrap:break-word;}
@@ -1070,14 +1081,6 @@
   <!-- ===== 관리자 전용: 통계 및 차량 현황 ===== -->
   <div id="adminSections" style="display:none;padding:0 24px;">
     <div class="section-head">
-      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>🚨 사고 이력 <span id="accidentCountBadge" style="font-size:11px;color:var(--bad);font-weight:700;"></span></h2>
-    </div>
-    <div class="section-body" id="accidentHistoryWrap">
-      <input class="search-box" id="accidentSearchBox" placeholder="차량번호·사업장·제출자 검색…" oninput="renderAccidentHistory()" style="margin-bottom:12px;max-width:280px;">
-      <div id="accidentHistoryList"></div>
-    </div>
-
-    <div class="section-head">
       <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>지역구분별 가동현황</h2>
     </div>
     <div class="section-body" id="regionSummaryWrap">
@@ -1155,6 +1158,14 @@
     </div>
     <div class="section-body" id="vehicleAreaWrap">
       <div id="vehicleArea"></div>
+    </div>
+
+    <div class="section-head">
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>🚨 사고 이력 <span id="accidentCountBadge" style="font-size:11px;color:var(--bad);font-weight:700;"></span></h2>
+    </div>
+    <div class="section-body" id="accidentHistoryWrap">
+      <input class="search-box" id="accidentSearchBox" placeholder="차량번호·사업장·제출자 검색…" oninput="renderAccidentHistory()" style="margin-bottom:12px;max-width:280px;">
+      <div id="accidentHistoryList"></div>
     </div>
   </div>
 
@@ -2859,7 +2870,8 @@ function renderAll(){ renderStats(); renderVehicles(); renderMonthly(monthlyYear
 
 // ============================================================
 // 사고 이력 (관리자 대시보드) — accident-report.html이 fleet-data/accidents/{accidentId}에
-// 저장한 접수건을 목록으로 조회. 이번 범위는 조회 전용(상태변경은 추후 검토).
+// 저장한 접수건을 목록으로 조회·수정·삭제. 사진은 base64 dataURL로 photos[]에 저장되어 있어
+// 별도 스토리지 조회 없이 바로 썸네일/원본 열람 가능(viewAccidentPhoto → 기존 imgLightbox 재사용).
 // ============================================================
 function accidentListSorted(){
   const acc = data.accidents || {};
@@ -2870,6 +2882,17 @@ function accidentStatusBadge(status){
   const color = s==='완료' ? 'var(--good)' : (s==='처리중' ? 'var(--accent)' : 'var(--bad)');
   const bg = s==='완료' ? 'var(--good-soft)' : (s==='처리중' ? 'var(--accent-soft)' : 'var(--bad-soft)');
   return `<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;color:${color};background:${bg};">${escapeHtml(s)}</span>`;
+}
+// 사고 접수 사진 1장을 기존 원본이미지 라이트박스(#imgLightbox)로 확대 열람
+function viewAccidentPhoto(url, meta){
+  const lb=document.getElementById('imgLightbox');
+  const lbImg=document.getElementById('lbImg');
+  const lbMeta=document.getElementById('lbMeta');
+  if(!lb||!lbImg) return;
+  lbImg.src = url;
+  lbImg.style.display='block';
+  lbMeta.textContent = meta || '';
+  lb.style.display='flex';
 }
 function renderAccidentHistory(){
   const wrap = document.getElementById('accidentHistoryList');
@@ -2889,8 +2912,11 @@ function renderAccidentHistory(){
     return;
   }
   wrap.innerHTML = list.map(a=>{
-    const photoCount = (a.photos||[]).length;
+    const photos = a.photos||[];
     const otherCount = (a.otherParties||[]).length;
+    const photoThumbs = photos.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+        ${photos.map((p,i)=>`<img src="${p.url}" alt="${escapeHtml(p.tag||'사고사진')}" title="${escapeHtml(p.tag||'')}" loading="lazy" data-photo-url="${p.url}" data-photo-meta="${escapeHtml((a.ourVehicle?.plate||'미확인')+' · '+(p.tag||'')+' ('+(i+1)+'/'+photos.length+')')}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:pointer;" onclick="viewAccidentPhoto(this.dataset.photoUrl,this.dataset.photoMeta)">`).join('')}
+      </div>` : `<div class="muted" style="font-size:11.5px;margin-top:8px;">첨부된 사진이 없습니다.</div>`;
     return `<div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:#fff;">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
         <div style="font-size:14px;font-weight:700;color:var(--navy);font-family:'Paperlogy';">${escapeHtml(a.ourVehicle?.plate||'미확인')} ${a.ourVehicle?.model?('· '+escapeHtml(a.ourVehicle.model)):''}</div>
@@ -2901,14 +2927,105 @@ function renderAccidentHistory(){
         <div><span class="muted">장소</span> ${escapeHtml(a.location?.manualNote || a.location?.address || '-')}</div>
         <div><span class="muted">접수자</span> ${escapeHtml(a.reportedBy?.name||'-')} ${a.reportedBy?.org?('· '+escapeHtml(a.reportedBy.org)):''}</div>
         <div style="word-break:keep-all;overflow-wrap:break-word;"><span class="muted">사고내용</span> ${escapeHtml(a.description||'-')}</div>
+        ${a.actionNotes?`<div style="word-break:keep-all;overflow-wrap:break-word;"><span class="muted">처리메모</span> ${escapeHtml(a.actionNotes)}</div>`:''}
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
-        <span style="font-size:11px;color:var(--muted);background:var(--paper);border-radius:20px;padding:3px 9px;">📷 사진 ${photoCount}장</span>
+      ${photoThumbs}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center;">
+        <span style="font-size:11px;color:var(--muted);background:var(--paper);border-radius:20px;padding:3px 9px;">📷 사진 ${photos.length}장</span>
         ${otherCount?`<span style="font-size:11px;color:var(--muted);background:var(--paper);border-radius:20px;padding:3px 9px;">상대차량 ${otherCount}건</span>`:''}
         <span style="font-size:11px;color:var(--muted);background:var(--paper);border-radius:20px;padding:3px 9px;">접수번호 ${escapeHtml(a.id)}</span>
+        <span style="flex:1;"></span>
+        <button type="button" class="reset-btn" style="font-size:11.5px;padding:5px 10px;" onclick="openAccidentEditModal('${a.id}')">✏ 수정</button>
+        <button type="button" class="reset-btn" style="font-size:11.5px;padding:5px 10px;border-color:var(--bad);color:var(--bad);" onclick="deleteAccidentRecord('${a.id}')">🗑 삭제</button>
       </div>
     </div>`;
   }).join('');
+}
+
+// 사고 이력 수정 모달 — 상태/사고일시/장소/사고내용/처리메모를 관리자가 직접 수정.
+// 제출자·차량정보·사진·상대차량 정보는 접수 당시 원본 그대로 표시만 하고 편집 대상에서 제외.
+function openAccidentEditModal(id){
+  const a = (data.accidents||{})[id];
+  if(!a){ alert('해당 사고 이력을 찾을 수 없습니다.'); return; }
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-head">
+      <div><div class="plate-big" style="font-size:18px;">🚨 사고 이력 수정</div><div class="muted" style="font-size:12px;">${escapeHtml(a.ourVehicle?.plate||'미확인')} · 접수번호 ${escapeHtml(id)}</div></div>
+      <button class="close-x" onclick="closeModal()">✕</button>
+    </div>
+    <div id="accidentEditErr" style="display:none;color:var(--bad);font-size:12.5px;margin-top:8px;"></div>
+    <div class="form-field" style="margin-top:12px;">
+      <label>처리 상태</label>
+      <select id="accEditStatus" style="width:100%;border:1px solid var(--line);border-radius:7px;padding:9px 10px;font-family:'Paperlogy';font-size:14px;">
+        ${['접수','처리중','완료'].map(s=>`<option value="${s}" ${((a.status||'접수')===s)?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-field">
+      <label>사고일시</label>
+      <input type="text" id="accEditOccurredAt" value="${escapeHtml(a.occurredAt||'')}" style="width:100%;border:1px solid var(--line);border-radius:7px;padding:9px 10px;font-family:'Paperlogy';font-size:14px;">
+    </div>
+    <div class="form-field">
+      <label>장소</label>
+      <input type="text" id="accEditLocation" value="${escapeHtml(a.location?.manualNote || a.location?.address || '')}" style="width:100%;border:1px solid var(--line);border-radius:7px;padding:9px 10px;font-family:'Paperlogy';font-size:14px;">
+    </div>
+    <div class="form-field">
+      <label>사고내용</label>
+      <textarea id="accEditDescription" rows="3" style="width:100%;border:1px solid var(--line);border-radius:7px;padding:9px 10px;font-family:'Paperlogy';font-size:14px;resize:vertical;">${escapeHtml(a.description||'')}</textarea>
+    </div>
+    <div class="form-field">
+      <label>처리메모 <span style="font-weight:400;color:var(--muted);">(관리자 전용, 제출자에게 노출되지 않음)</span></label>
+      <textarea id="accEditActionNotes" rows="2" style="width:100%;border:1px solid var(--line);border-radius:7px;padding:9px 10px;font-family:'Paperlogy';font-size:14px;resize:vertical;">${escapeHtml(a.actionNotes||'')}</textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button type="button" class="btn btn-primary" style="flex:1;" onclick="saveAccidentEdit('${id}')">저장</button>
+      <button type="button" class="reset-btn" style="flex:1;" onclick="closeModal()">취소</button>
+    </div>
+  `;
+  document.getElementById('modalOverlay').classList.add('show');
+  lockBodyScroll();
+}
+
+async function saveAccidentEdit(id){
+  const errEl = document.getElementById('accidentEditErr');
+  if(errEl){ errEl.style.display='none'; errEl.textContent=''; }
+  const status = document.getElementById('accEditStatus').value;
+  const occurredAt = document.getElementById('accEditOccurredAt').value.trim();
+  const location = document.getElementById('accEditLocation').value.trim();
+  const description = document.getElementById('accEditDescription').value.trim();
+  const actionNotes = document.getElementById('accEditActionNotes').value.trim();
+  if(!occurredAt || !description){
+    if(errEl){ errEl.textContent='사고일시·사고내용은 비워둘 수 없습니다.'; errEl.style.display='block'; }
+    return;
+  }
+  await refreshDataFromStorage();
+  const a = (data.accidents||{})[id];
+  if(!a){ if(errEl){ errEl.textContent='이미 삭제된 사고 이력입니다.'; errEl.style.display='block'; } return; }
+  const prevStatus = a.status || '접수';
+  a.occurredAt = occurredAt;
+  a.location = {...(a.location||{}), manualNote: location};
+  a.description = description;
+  a.actionNotes = actionNotes;
+  a.status = status;
+  if(status !== prevStatus){
+    if(!Array.isArray(a.statusHistory)) a.statusHistory = [];
+    a.statusHistory.push({status, at:new Date().toISOString(), by:'관리자'});
+  }
+  const saved = await saveData();
+  if(!saved){ if(errEl){ errEl.textContent='저장 실패: 서버에 반영되지 않았습니다.'; errEl.style.display='block'; } return; }
+  closeModal();
+  renderAccidentHistory();
+  showAdminToast('✓ 사고 이력이 수정되었습니다.','good');
+}
+
+async function deleteAccidentRecord(id){
+  const a = (data.accidents||{})[id];
+  const label = a ? `${a.ourVehicle?.plate||'미확인'} · ${a.occurredAt||''}` : id;
+  if(!confirm(`🚨 사고 이력을 삭제합니다.\n${label}\n첨부 사진을 포함해 완전히 삭제되며 되돌릴 수 없습니다.\n\n계속 진행하시겠습니까?`)) return;
+  await refreshDataFromStorage();
+  if(!data.accidents || !data.accidents[id]){ renderAccidentHistory(); return; }
+  delete data.accidents[id];
+  const saved = await saveData();
+  if(!saved) showAdminToast('⚠ 저장 실패: 삭제가 서버에 반영되지 않았습니다.','bad');
+  renderAccidentHistory();
 }
 
 function digits(num){
@@ -5667,7 +5784,7 @@ function openAccidentPopup(btn){
       📝 차량사고보고서 작성하기
     </button>
     <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:8px;line-height:1.5;">운행종료 후 운행정보 입력을 모두 마친 상태에서 작성해주세요</div>
-    <div style="font-size:11.5px;color:var(--bad);text-align:center;margin-top:10px;line-height:1.6;background:var(--bad-soft);border-radius:8px;padding:8px 10px;word-break:keep-all;overflow-wrap:break-word;">🚨 사고보고서 작성을 완료해야 이 운행기록을 최종 제출할 수 있습니다.</div>
+    <div style="font-size:11.5px;color:var(--bad);text-align:center;margin-top:10px;line-height:1.6;background:var(--bad-soft);border-radius:8px;padding:8px 10px;word-break:keep-all;overflow-wrap:break-word;">🚨 사고보고서 작성을 완료해야 운행기록 최종 제출 가능.</div>
   `;
   document.getElementById('modalOverlay').classList.add('show');
   lockBodyScroll();
@@ -5950,7 +6067,10 @@ function collectRows(){
     const isCommute = !!commuteDir;
     const accidentReported = card.dataset.accidentCompleted === '1';
     const accidentId = accidentReported ? (card.dataset.accidentId || '') : '';
-    return {dateFrom, dateTo, startOdo, endOdo, distance: Math.max(0, endOdo-startOdo), dest, user, fuel, status, note, isDaeCha, daeChaPate, isPersonal, isCommute, commuteDir, accidentReported, accidentId};
+    // 완료 전 "접수 진행중" 상태도 함께 보존(임시저장 복원 시 최초 안내 팝업이 다시 뜨지 않도록)
+    const accidentPending = !accidentReported && card.dataset.accidentPending === '1';
+    const accidentReqId = card.dataset.accidentReqId || '';
+    return {dateFrom, dateTo, startOdo, endOdo, distance: Math.max(0, endOdo-startOdo), dest, user, fuel, status, note, isDaeCha, daeChaPate, isPersonal, isCommute, commuteDir, accidentReported, accidentId, accidentPending, accidentReqId};
   });
 }
 
@@ -6385,6 +6505,10 @@ async function restoreDraft(){
         const cBtn=card.querySelector(`.commute-btn[data-dir="${r.commuteDir}"]`);
         if(cBtn) setCommuteDirection(cBtn, card.id);
       }
+      // 사고접수 진행상태 복원 — 미복원 시 이미 접수완료된 건도 "최초 안내" 팝업이 다시 뜨는 문제 방지
+      if(r.accidentReqId) card.dataset.accidentReqId = r.accidentReqId;
+      if(r.accidentReported) markAccidentCompleted(card, r.accidentId);
+      else if(r.accidentPending) markAccidentPending(card);
       calcRowDist(card.id);
     });
   }catch(e){}
