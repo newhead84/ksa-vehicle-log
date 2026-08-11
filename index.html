@@ -35,6 +35,14 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-11] 운행기록 입력화면 "차량 상태" 영역에 사고접수 버튼 추가. 기존 "정상"/"점검요망" 라벨
+  옆에 있던 "사고접수 : 롯데렌터카 1588-1230" 안내 텍스트를 삭제하고, 대신 "✓ 정상 / ⚠ 점검요망 /
+  🚨 사고접수" 3개 버튼을 한 줄에 배치(.status-toggle-3 신규, 컴팩트 패딩·폰트 적용). "정상"이 기존과
+  동일하게 기본 선택값 유지. 사고접수 버튼은 차량상태 값을 변경하지 않고 클릭 시 기존 모달 컴포넌트
+  (#modalOverlay/#modalBody)를 이용해 롯데렌터카 대표번호(1588-1230) 안내 팝업만 표시(tel: 링크로
+  바로 전화 연결). setStatus()의 버튼 초기화 대상 선택자를 .status-btn[data-val]로 제한해 사고접수
+  버튼(data-val 없음)이 정상/점검요망 토글 시 함께 초기화되지 않도록 수정 | 변경: CSS(.status-toggle-3,
+  .status-btn.accident-btn), HTML(차량 상태 필드), setStatus()(선택자), openAccidentPopup()(신규)
   [2026-08-09] 시작화면(#roleOverlay) 상단 "주말·공휴일 개인사용 안내"/"DT센터 주차안내" 버튼 2개의
   불필요한 우측 여백 제거: 기존에는 고정폭(280px) 플렉스 컨테이너에 버튼이 늘어나 채워지면서, 텍스트가
   짧은 "DT센터 주차안내" 버튼 오른쪽에 빈 공간이 크게 남던 문제 → 컨테이너를 display:inline-grid(단일
@@ -903,6 +911,9 @@
   .status-btn.active-good{border-color:var(--good);background:var(--good-soft);color:var(--good);}
   .status-btn.active-bad{border-color:var(--bad);background:var(--bad-soft);color:var(--bad);}
   .status-btn.active-commute{border-color:#8B5CF6;background:#F5F3FF;color:#7C3AED;}
+  .status-toggle-3 .status-btn{padding:12px 4px;font-size:12.5px;white-space:nowrap;}
+  .status-btn.accident-btn{border-color:var(--bad);color:var(--bad);background:#fff;}
+  .status-btn.accident-btn:active{background:var(--bad-soft);}
 
   /* 토글 스위치 스타일 체크박스 */
   .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-top:1px solid var(--line);}
@@ -5654,13 +5665,11 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
         <input type="text" class="tr-user" placeholder="운행자 이름" oninput="this.dataset.autoFilled='false';syncSubmitterFromUser(this);scheduleDraft()">
       </div>
       <div class="form-field">
-        <label style="display:flex;align-items:center;justify-content:space-between;">
-          <span>차량 상태</span>
-          <span style="font-size:11px;color:var(--muted);font-weight:400;">사고접수 : 롯데렌터카 1588-1230</span>
-        </label>
-        <div class="status-toggle">
+        <label>차량 상태</label>
+        <div class="status-toggle status-toggle-3">
           <button class="status-btn active-good" onclick="setStatus(this,'정상')" data-val="정상">✓ 정상</button>
           <button class="status-btn" onclick="setStatus(this,'점검요망')" data-val="점검요망">⚠ 점검요망</button>
+          <button type="button" class="status-btn accident-btn" onclick="openAccidentPopup()">🚨 사고접수</button>
         </div>
       </div>
       <div class="check-field">
@@ -5785,7 +5794,7 @@ function autoFillNextRow(id){
 
 function setStatus(btn, val){
   const toggle = btn.closest('.status-toggle');
-  toggle.querySelectorAll('.status-btn').forEach(b=>{b.className='status-btn';});
+  toggle.querySelectorAll('.status-btn[data-val]').forEach(b=>{b.className='status-btn';});
   btn.className = val==='정상' ? 'status-btn active-good' : 'status-btn active-bad';
   // 점검요망 선택 시 비고를 필수 입력으로 표시 (개인사용→주유비 필수 표시와 동일한 패턴)
   const card = btn.closest('.trip-card');
@@ -5799,6 +5808,22 @@ function setStatus(btn, val){
     if(noteInp) noteInp.placeholder = isBad ? '점검요망 사유를 입력해 주세요' : '특이사항';
   }
   scheduleDraft();
+}
+
+// "🚨 사고접수" 버튼 — 차량상태를 변경하지 않고 롯데렌터카 사고접수 안내만 표시
+function openAccidentPopup(){
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-head">
+      <div><div class="plate-big" style="font-size:18px;">🚨 사고접수 안내</div><div class="muted" style="font-size:12px;word-break:keep-all;overflow-wrap:break-word;">사고 발생 시 아래 번호로 롯데렌터카에 사고접수를 먼저 진행해 주세요.</div></div>
+      <button class="close-x" onclick="closeModal()">✕</button>
+    </div>
+    <a href="tel:1588-1230" style="display:block;text-align:center;background:var(--bad);color:#fff;text-decoration:none;border-radius:12px;padding:16px;font-size:19px;font-weight:700;margin-top:14px;">
+      1588-1230 전화 걸기
+      <div style="font-size:11.5px;font-weight:500;opacity:.85;margin-top:2px;">롯데렌터카 대표번호</div>
+    </a>
+  `;
+  document.getElementById('modalOverlay').classList.add('show');
+  lockBodyScroll();
 }
 
 function toggleDaeCha(chk, id){
