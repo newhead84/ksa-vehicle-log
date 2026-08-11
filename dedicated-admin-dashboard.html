@@ -274,6 +274,17 @@
   .ded-dot.warn::before{background:var(--ded-red);}
   .ded-dot.ok::before{background:var(--ded-good);}
 
+  /* 운행기록 수정/삭제 버튼 */
+  .ded-trip-actions{display:flex; gap:8px; justify-content:flex-end;}
+  .ded-trip-act-btn{
+    background:none; border:1px solid var(--ded-line); color:var(--ded-muted);
+    padding:5px 10px; font-size:15px; cursor:pointer; border-radius:3px; line-height:1;
+  }
+  .ded-trip-act-btn:hover{border-color:var(--ded-beige); color:var(--ded-beige);}
+  .ded-trip-act-btn.del:hover{border-color:var(--ded-red); color:var(--ded-red);}
+  /* 운행기록 수정 모달 — 계약정보 모달의 field-line 스타일 재사용 */
+  .trip-edit-checkbox-line{flex:1; display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ded-text);}
+
   @media (max-width:760px){
     .ded-stat-strip{grid-template-columns:1fr 1fr;}
     .ded-stat-card{padding:16px;}
@@ -345,7 +356,7 @@
     <table class="ded-table">
       <thead>
         <tr>
-          <th>날짜</th><th>운행자</th><th id="routeColHeader">구간</th><th>거리</th><th>대리운전</th><th>비고</th>
+          <th>날짜</th><th>운행자</th><th id="routeColHeader">구간</th><th>거리</th><th>대리운전</th><th>비고</th><th style="text-align:right;">관리</th>
         </tr>
       </thead>
       <tbody id="tripRows"></tbody>
@@ -408,6 +419,27 @@
         <button class="primary" onclick="saveContracts()" id="contractSaveBtn">💾 저장</button>
       </div>
       <div id="contractSaveMsg" style="margin-top:10px;font-size:12px;color:var(--ded-muted);"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ 운행기록 수정 모달 ═══════ -->
+<div class="ded-qr-overlay" id="dedTripEditOverlay" onclick="if(event.target===this)closeTripEditModal()">
+  <div class="ded-qr-card" style="max-width:460px;">
+    <div class="ded-qr-head">
+      <div>
+        <div class="plate" style="font-size:15px;">✏ 운행기록 수정</div>
+        <div class="org" id="tripEditPlateLabel"></div>
+      </div>
+      <button class="ded-qr-close" onclick="closeTripEditModal()">✕</button>
+    </div>
+    <div class="ded-qr-body" style="text-align:left;">
+      <div class="contract-row" style="border-bottom:none; padding-top:0;" id="tripEditFormRows"></div>
+      <div class="ded-qr-actions">
+        <button onclick="closeTripEditModal()">취소</button>
+        <button class="primary" onclick="saveTripEdit()" id="tripEditSaveBtn">💾 저장</button>
+      </div>
+      <div id="tripEditSaveMsg" style="margin-top:10px;font-size:12px;color:var(--ded-muted);"></div>
     </div>
   </div>
 </div>
@@ -546,9 +578,14 @@ async function loadTripsFromFirebase(){
     const vehNode = raw && raw[v.plate];
     const trips = Array.isArray(vehNode?.trips) ? vehNode.trips.filter(t=>t)
                 : (vehNode?.trips && typeof vehNode.trips==='object' ? Object.values(vehNode.trips) : []);
-    trips.forEach(t=>{
+    trips.forEach((t,i)=>{
       flat.push({
         v: v.key,
+        plate: v.plate,
+        // 수정/삭제 시 원본 레코드를 다시 찾기 위한 고유키(dedTripKey)와 원본 필드 전체 보관.
+        // 화면표시용 매핑필드만으론 되돌려 쓸 수 없으므로 raw를 별도로 유지한다.
+        _uid: `${v.key}::${i}::${t.dateFrom||t.isoDateFrom||''}::${t.startOdo||0}::${t.endOdo||0}`,
+        raw: t,
         date: t.dateFrom || t.isoDateFrom || '',
         isoDate: t.isoDateFrom || '',
         driver: t.driver || v.driver,
@@ -565,6 +602,17 @@ async function loadTripsFromFirebase(){
   // 최신 제출 순으로 정렬
   flat.sort((a,b)=> (b.isoDate||'').localeCompare(a.isoDate||''));
   return flat;
+}
+
+// 운행기록을 Firebase에서 다시 조회해 되돌려 쓸 때 원본 레코드를 식별하기 위한 합성키.
+// (동시 제출로 인한 배열 인덱스 변경에도 안전하게 대상 레코드를 찾기 위함 — index.html의 tripChronoCompare 키 패턴과 동일 원리)
+function dedTripKey(t){
+  return `${t.dateFrom||t.isoDateFrom||''}|${t.startOdo||0}|${t.endOdo||0}|${t.driver||''}`;
+}
+function dedTripsToArray(val){
+  if(Array.isArray(val)) return val.filter(t=>t);
+  if(val && typeof val==='object') return Object.values(val).filter(t=>t);
+  return [];
 }
 
 // 이번 달(YYYY-MM) 기준 차량별 운행일수/주행거리 집계
@@ -705,7 +753,7 @@ function renderTrips(){
   routeColHeader.textContent = (filteredVehicle && !filteredVehicle.chairman) ? '행선지' : '구간';
 
   if(rows.length===0){
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--ded-muted-2);padding:32px 12px;">해당 조건의 운행기록이 없습니다</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ded-muted-2);padding:32px 12px;">해당 조건의 운행기록이 없습니다</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(t => {
@@ -724,9 +772,153 @@ function renderTrips(){
       <td data-label="거리" class="num">${t.km}km</td>
       <td data-label="대리운전"><span class="ded-dot ${t.sub?'warn':'ok'}">${t.sub?'사용':'미사용'}</span></td>
       <td data-label="비고">${t.note || '–'}</td>
+      <td data-label="관리">
+        <div class="ded-trip-actions">
+          <button type="button" class="ded-trip-act-btn" onclick="openTripEditModal('${t._uid}')" title="수정">✏</button>
+          <button type="button" class="ded-trip-act-btn del" onclick="deleteDedicatedTrip('${t._uid}')" title="삭제">🗑</button>
+        </div>
+      </td>
     </tr>
   `;
   }).join('');
+}
+
+// ── 운행기록 수정 모달 ──
+let _editingTripUid = null;
+
+function tripEditFieldLine(label, innerHtml){
+  return `<div class="field-line"><label>${label}</label>${innerHtml}</div>`;
+}
+
+function openTripEditModal(uid){
+  const t = TRIPS.find(x=>x._uid===uid);
+  if(!t){ alert('운행기록을 찾을 수 없습니다. 새로고침 후 다시 시도해주세요.'); return; }
+  const v = VEHICLES.find(x=>x.key===t.v);
+  if(!v) return;
+  _editingTripUid = uid;
+  const r = t.raw || {};
+  const isChairmanTrip = !!v.chairman;
+  const esc = s => String(s==null?'':s).replace(/"/g,'&quot;');
+
+  document.getElementById('tripEditPlateLabel').textContent = `${v.org} · ${v.plate}`;
+
+  let html = '';
+  html += tripEditFieldLine('시작일자', `<input type="date" id="teDateFrom" value="${esc(r.dateFrom||r.isoDateFrom||'')}">`);
+  html += tripEditFieldLine('종료일자', `<input type="date" id="teDateTo" value="${esc(r.dateTo||r.isoDateTo||r.dateFrom||'')}">`);
+  html += tripEditFieldLine('운행자', `<input type="text" id="teDriver" value="${esc(r.driver||'')}">`);
+  if(isChairmanTrip){
+    html += tripEditFieldLine('출발지', `<input type="text" id="teStartLoc" value="${esc(r.startLocation||'')}">`);
+    html += tripEditFieldLine('경유지', `<input type="text" id="teRouteNote" value="${esc(r.routeNote||'')}">`);
+    html += tripEditFieldLine('도착지', `<input type="text" id="teEndLoc" value="${esc(r.endLocation||'')}">`);
+  } else {
+    html += tripEditFieldLine('행선지', `<input type="text" id="teRouteNote" value="${esc(r.routeNote||'')}">`);
+  }
+  html += tripEditFieldLine('시작거리(km)', `<input type="text" inputmode="numeric" id="teStartOdo" value="${(r.startOdo||0).toLocaleString()}" oninput="formatMoneyInput(this)">`);
+  html += tripEditFieldLine('종료거리(km)', `<input type="text" inputmode="numeric" id="teEndOdo" value="${(r.endOdo||0).toLocaleString()}" oninput="formatMoneyInput(this)">`);
+  html += tripEditFieldLine('주유비(원)', `<input type="text" inputmode="numeric" id="teFuelCost" value="${(r.fuelCost||0).toLocaleString()}" oninput="formatMoneyInput(this)">`);
+  html += tripEditFieldLine('대리운전', `<label class="trip-edit-checkbox-line"><input type="checkbox" id="teSubDriver" ${r.isSubstituteDriver?'checked':''} style="accent-color:var(--ded-beige);"> 사용함</label>`);
+  html += tripEditFieldLine('대리운전 사유', `<input type="text" id="teSubDriverReason" value="${esc(r.substituteDriverReason||'')}">`);
+  html += tripEditFieldLine('대차 운행', `<label class="trip-edit-checkbox-line"><input type="checkbox" id="teSubVehicle" ${r.isSubstituteVehicle?'checked':''} style="accent-color:var(--ded-beige);"> 사용함</label>`);
+  html += tripEditFieldLine('대차 차량', `<input type="text" id="teSubVehicleName" value="${esc(r.substituteVehicle||'')}">`);
+
+  document.getElementById('tripEditFormRows').innerHTML = html;
+  const msgEl = document.getElementById('tripEditSaveMsg');
+  msgEl.textContent = '';
+  msgEl.style.color = 'var(--ded-muted)';
+  document.getElementById('dedTripEditOverlay').classList.add('open');
+}
+
+function closeTripEditModal(){
+  document.getElementById('dedTripEditOverlay').classList.remove('open');
+  _editingTripUid = null;
+}
+
+async function saveTripEdit(){
+  const t = TRIPS.find(x=>x._uid===_editingTripUid);
+  if(!t) return;
+  const v = VEHICLES.find(x=>x.key===t.v);
+  if(!v) return;
+  const msgEl = document.getElementById('tripEditSaveMsg');
+  const btn = document.getElementById('tripEditSaveBtn');
+
+  const dateFrom = document.getElementById('teDateFrom').value;
+  const dateTo = document.getElementById('teDateTo').value || dateFrom;
+  const driver = document.getElementById('teDriver').value.trim();
+  const startOdo = moneyValue(document.getElementById('teStartOdo'));
+  const endOdo = moneyValue(document.getElementById('teEndOdo'));
+  const fuelCost = moneyValue(document.getElementById('teFuelCost'));
+  const isSubstituteDriver = document.getElementById('teSubDriver').checked;
+  const substituteDriverReason = document.getElementById('teSubDriverReason').value.trim();
+  const isSubstituteVehicle = document.getElementById('teSubVehicle').checked;
+  const substituteVehicle = document.getElementById('teSubVehicleName').value.trim();
+  const routeNoteEl = document.getElementById('teRouteNote');
+  const routeNote = routeNoteEl ? routeNoteEl.value.trim() : (t.raw.routeNote||'');
+  const startLocEl = document.getElementById('teStartLoc');
+  const endLocEl = document.getElementById('teEndLoc');
+  const startLocation = startLocEl ? startLocEl.value.trim() : (t.raw.startLocation||'');
+  const endLocation = endLocEl ? endLocEl.value.trim() : (t.raw.endLocation||'');
+
+  if(!dateFrom){ msgEl.style.color='var(--ded-red)'; msgEl.textContent='시작일자를 입력해주세요.'; return; }
+  if(!driver){ msgEl.style.color='var(--ded-red)'; msgEl.textContent='운행자를 입력해주세요.'; return; }
+  if(endOdo < startOdo){ msgEl.style.color='var(--ded-red)'; msgEl.textContent='종료거리가 시작거리보다 작습니다.'; return; }
+  if(isSubstituteDriver && !substituteDriverReason){ msgEl.style.color='var(--ded-red)'; msgEl.textContent='대리운전 사유를 입력해주세요.'; return; }
+  if(isSubstituteVehicle && !substituteVehicle){ msgEl.style.color='var(--ded-red)'; msgEl.textContent='대차 차량 정보를 입력해주세요.'; return; }
+
+  btn.disabled = true; btn.textContent = '저장 중…';
+  msgEl.style.color = 'var(--ded-muted)';
+  msgEl.textContent = '';
+  try{
+    // 저장 직전 최신 데이터를 다시 조회해 원본 레코드를 합성키로 찾는다(동시 제출 유실 방지).
+    const key = dedTripKey(t.raw);
+    const remoteVal = await fbGet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`);
+    const arr = dedTripsToArray(remoteVal);
+    const idx = arr.findIndex(x=>dedTripKey(x)===key);
+    if(idx===-1) throw new Error('원본 기록을 찾을 수 없습니다(이미 변경/삭제됨). 새로고침 후 다시 시도해주세요.');
+    const target = arr[idx];
+    target.dateFrom = dateFrom; target.isoDateFrom = dateFrom;
+    target.dateTo = dateTo; target.isoDateTo = dateTo;
+    target.driver = driver;
+    target.startOdo = startOdo; target.endOdo = endOdo;
+    target.distance = Math.max(0, endOdo - startOdo);
+    target.fuelCost = fuelCost;
+    target.routeNote = routeNote;
+    target.startLocation = startLocation;
+    target.endLocation = endLocation;
+    target.isSubstituteDriver = isSubstituteDriver;
+    target.substituteDriverReason = isSubstituteDriver ? substituteDriverReason : '';
+    target.isSubstituteVehicle = isSubstituteVehicle;
+    target.substituteVehicle = isSubstituteVehicle ? substituteVehicle : '';
+    await fbPut(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`, arr);
+    closeTripEditModal();
+    await refreshDashboard();
+  }catch(e){
+    msgEl.style.color = 'var(--ded-red)';
+    msgEl.textContent = '저장 실패: ' + e.message;
+  }finally{
+    btn.disabled = false; btn.textContent = '💾 저장';
+  }
+}
+
+async function deleteDedicatedTrip(uid){
+  const t = TRIPS.find(x=>x._uid===uid);
+  if(!t) return;
+  const v = VEHICLES.find(x=>x.key===t.v);
+  if(!v) return;
+  const distLabel = t.km ? `${t.km}km` : '';
+  const warnMsg = `⚠️ '${v.org} · ${v.plate}' 차량의 아래 운행기록을 삭제합니다.\n${t.date||''}${distLabel?' · '+distLabel:''}${t.driver?' · '+t.driver:''}\n이 작업은 되돌릴 수 없습니다.\n\n계속 진행하시겠습니까?`;
+  if(!confirm(warnMsg)) return;
+  try{
+    const key = dedTripKey(t.raw);
+    const remoteVal = await fbGet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`);
+    const arr = dedTripsToArray(remoteVal);
+    const idx = arr.findIndex(x=>dedTripKey(x)===key);
+    if(idx===-1){ alert('원본 기록을 찾을 수 없습니다(이미 변경/삭제됨). 새로고침 후 다시 시도해주세요.'); return; }
+    arr.splice(idx,1);
+    await fbPut(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`, arr);
+    await refreshDashboard();
+  }catch(e){
+    alert('삭제 실패: ' + e.message);
+  }
 }
 
 // ── QR / 링크 모달 ──
