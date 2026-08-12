@@ -35,18 +35,6 @@
 <!--
 =================================================================
   CHANGELOG
-  [2026-08-11] 개인사용 영수증 첨부 UI 6건 개선. ① 버튼 구성 변경: 기존 [📷 지금 첨부]/
-  [⏳ 나중에 첨부] 2개 → [📷 영수증 촬영]/[🖼️ 앨범에서 선택]/[⏳ 나중에 첨부] 3개로 확장(앨범
-  선택용 capture 속성 없는 별도 file input #receiptFileAlbum-${id} 신규 추가). ② "나중에 첨부"
-  하단 안내문구에서 "(기한 초과 시 비용 환수 대상)" 문구 삭제(10일 이내 재제출 안내만 유지).
-  ③ "나중에 첨부" 클릭 시 뜨던 confirm() 팝업 제거 — 하단 안내문구로 동일 내용 전달되므로 즉시
-  진행. ④ 3버튼 중 하나 선택 시 나머지 2개는 비활성화(disabled+opacity) 표시(3버튼 동일 로직,
-  updateReceiptButtonStates()). ⑤ "나중에 첨부"를 다시 누르면 선택 해제되어 다른 버튼 재활성화 +
-  하단 안내문구 숨김(토글 동작) | 변경: addTripRow() 영수증 첨부 UI 마크업(#receiptBtnCamera-${id}/
-  #receiptBtnAlbum-${id}/#receiptBtnLater-${id} id 추가, #receiptFileAlbum-${id} 신규),
-  updateReceiptButtonStates() 신규, onReceiptAttachAlbum() 신규, onReceiptAttachLater()(팝업 제거+
-  토글 로직), onReceiptFileSelected(source 파라미터 추가), resetReceiptState()(receiptActiveOption
-  초기화 반영), CSS .receipt-opt-active 신규(선택 상태 표시용 outline)
   [2026-08-11] 개인사용(주말·공휴일) 주유영수증 OCR 검증 기능 신규 구현
   (RECEIPT_OCR_DESIGN.md 기반). ① 개인사용 체크 시 운행입력 카드에 영수증 첨부 UI([📷 지금 첨부]/
   [⏳ 나중에 첨부]) 노출, 파일 선택 즉시 Google Cloud Vision OCR로 금액·일자를 함께 인식해 입력
@@ -109,6 +97,27 @@
   exportToExcel() 전체운행기록 시트에 대차구분/대차차량번호/대차차종/대차하이패스/대차주유게이지/
   대차이상여부 컬럼 추가, applyTripRecordImport() 신규 컬럼 파싱 반영),
   dedicated-driver-input.html(점검요청 텍스트만 동일 반영, 대차 기능 없음)
+  [2026-08-12] 대차인수/반납 UX 6건 개선. ① "🚗 대차인수" 안내문구를 "(대차 차량 인수 당일에
+  반드시 체크 입력)"로 변경하고 줄바꿈해 2번째 줄에 표시. ② 대차인수/반납 체크 시 행선지가
+  "대차인수"/"대차반납"(둘 다 체크 시 "대차인수/반납")으로 자동 표기되고, 해제 시 이전 입력값으로
+  복원(출퇴근 자동표기와 별도 dataset 키 사용해 충돌 방지). ③ 주유게이지 확인 방식을 선택형
+  드롭다운에서 사진 촬영으로 전환 — 캔버스 리사이즈(가로 800px)+JPEG 60% 압축 후 Firebase
+  Storage(daecha-photos/) 업로드, 관리자 화면 대차번호 열에 📷 보기 버튼 추가. ④ 대차반납 체크
+  시 해당 차량에 진행중인(미반납) 대차 인수 정보가 있으면 대차 차량번호·차량 이상여부를 자동으로
+  가져와 채움(이상여부는 운행 후 추가 기재 가능하도록 기존 값 유지). ⑤ 운행기록 입력페이지에
+  차량 선택 시 진행중인 대차가 있으면 상단에 안내 배너 표시. ⑥ 대차반납의 종료거리가 다음
+  운행기록의 시작거리로 그대로 이어지지 않도록, 대차반납 체크 시 시작거리를 "대차 인수 직전
+  원차량 종료거리"로 재연동(원차량 계기판 기준 복귀)하고, 종료거리는 원차량 계기판을 직접
+  확인해 입력하도록 안내문구 변경(정비소 왕복 거리 개념) | 변경: getLastTripMeta()(isDaeCha 대신
+  needsRecheck 반환 — 대차인수만 있고 미반납인 경우에만 재확인 경고), getActiveDaeChaInfo() 신규
+  (진행중인 대차 인수 정보 및 인수 직전 원차량 종료거리 조회), toggleDaeChaPickup()/
+  toggleDaeChaReturn()에 applyDaeChaDestAutofill()/applyDaeChaReturnPrefill() 신규 연동,
+  onVehicleSelect() 대차 진행중 배너(#daechaActiveBanner) 반영, addTripRow() 주유게이지
+  select→사진 촬영 UI 교체(#daechaFuelFile-pickup/return-${id}), onDaeChaFuelPhotoSelected()/
+  compressDaeChaFuelPhoto()/buildDaeChaFuelPhotoFileName()/uploadDaeChaFuelPhoto()/
+  fetchDaeChaFuelPhotoUrl()/viewDaeChaFuelPhoto() 신규, doSubmit() 사진 압축·업로드 반영,
+  collectRows()/restoreDraft() 사진 필드 처리(File 객체 미복원 시 재촬영 안내), exportToExcel()
+  대차주유게이지 컬럼을 "사진 첨부" 표기로 변경
 -->
 
 <head>
@@ -1043,6 +1052,7 @@
       </div>
       <div id="qrLockNote" style="display:none;font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5;word-break:keep-all;overflow-wrap:break-word;">🔒 QR 스캔으로 연동된 사업장·차량입니다. 다른 차량으로 변경이 필요하면 관리자에게 문의해주세요.</div>
       <div class="last-odo-hint" id="lastOdoHint">이전 종료거리: <b>–</b> km</div>
+      <div id="daechaActiveBanner" style="display:none;margin-top:10px;padding:10px 12px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:10px;font-size:12.5px;color:var(--accent);font-weight:700;line-height:1.6;word-break:keep-all;overflow-wrap:break-word;"></div>
       <div id="vehicleAlertPanel" style="display:none;margin-top:10px;padding:12px 14px;background:var(--bad-soft);border:1px solid var(--bad);border-radius:10px;">
         <div style="font-size:12px;font-weight:700;color:var(--bad);margin-bottom:6px;">⚠ 이 차량의 최근 점검요청·사고접수 이력 (중복 접수 주의)</div>
         <div id="vehicleAlertList" style="font-size:12.5px;color:var(--ink);line-height:1.7;word-break:keep-all;overflow-wrap:break-word;"></div>
@@ -1793,6 +1803,86 @@ function compressReceiptImage(file){
     img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('이미지 로드 실패')); };
     img.src = url;
   });
+}
+
+// 대차 인수/반납 시 주유게이지 확인용 사진 선택 핸들러.
+// File 객체는 window._daeChaFuelFileMap[id+'_'+phase]에 보관하고(직렬화 불가), 실제 압축·업로드는 제출 시점(doSubmit)에 수행.
+window._daeChaFuelFileMap = window._daeChaFuelFileMap || {};
+function onDaeChaFuelPhotoSelected(input, id, phase){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  window._daeChaFuelFileMap[id+'_'+phase] = file;
+  const card = document.getElementById(id);
+  const hiddenInp = card?.querySelector(phase==='pickup' ? '.tr-daecha-fuel-pickup' : '.tr-daecha-fuel-return');
+  if(hiddenInp) hiddenInp.value = 'attached';
+  const thumb = document.getElementById(`daechaFuelThumb-${phase}-${id}`);
+  const wrap = document.getElementById(`daechaFuelThumbWrap-${phase}-${id}`);
+  if(thumb && wrap){
+    thumb.src = URL.createObjectURL(file);
+    wrap.style.display = 'flex';
+  }
+  scheduleDraft();
+}
+
+// 캔버스로 리사이즈(가로 800px 내외) + JPEG 60% 압축 — 유관으로 확인 가능한 최소 해상도만 유지
+function compressDaeChaFuelPhoto(file){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = ()=>{
+      const maxW = 800;
+      const scale = img.width > maxW ? maxW / img.width : 1;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob=>{
+        URL.revokeObjectURL(url);
+        if(blob) resolve(blob); else reject(new Error('이미지 압축 실패'));
+      }, 'image/jpeg', 0.6);
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('이미지 로드 실패')); };
+    img.src = url;
+  });
+}
+
+function buildDaeChaFuelPhotoFileName(userName, isoDateStr, phase){
+  const ymd = (isoDateStr || todayLocalISO()).replace(/-/g,'');
+  const safeName = (userName||'미상').replace(/[^\w가-힣]/g,'');
+  const rand = Math.random().toString(36).slice(2,6);
+  return `${ymd}_${safeName}_${phase==='pickup'?'인수':'반납'}-${rand}.jpg`;
+}
+
+async function uploadDaeChaFuelPhoto(blob, fileName){
+  const token = await getAuthToken();
+  const path = `daecha-photos/${fileName}`;
+  const url = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o?name=${encodeURIComponent(path)}`;
+  const res = await fbFetchWithTimeout(url, {
+    method:'POST',
+    headers:{ 'Content-Type':'image/jpeg', ...(token?{'Authorization':`Firebase ${token}`}:{}) },
+    body: blob
+  }, 20000);
+  if(!res.ok) throw new Error(`주유게이지 사진 업로드 실패 (${res.status})`);
+  return path;
+}
+
+async function fetchDaeChaFuelPhotoUrl(path){
+  const token = await getAuthToken();
+  const url = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/${encodeURIComponent(path)}?alt=media`;
+  const res = await fbFetchWithTimeout(url, { headers: token?{'Authorization':`Firebase ${token}`}:{} }, 20000);
+  if(!res.ok) throw new Error(`사진 조회 실패 (${res.status})`);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+async function viewDaeChaFuelPhoto(path){
+  try{
+    const url = await fetchDaeChaFuelPhotoUrl(path);
+    window.open(url, '_blank');
+  }catch(e){
+    alert('주유게이지 사진을 불러오지 못했습니다: ' + (e.message||e));
+  }
 }
 
 // {YYYYMMDD}_{이름}_{금액}-{랜덤4자리}.jpg 파일명 생성 (설계 4-3)
@@ -4154,7 +4244,7 @@ function openVehicle(plate){
               </div>
             </span>
           </td>
-          <td data-label="대차번호"><span class="view-val">${escapeHtml(t.daeChaPate||'')}</span><input class="edit-inp" value="${escapeHtml(t.daeChaPate||'')}" data-f="daeChaPate" placeholder="대차 차량번호(필수)" style="display:none;width:80px;"></td>
+          <td data-label="대차번호"><span class="view-val">${escapeHtml(t.daeChaPate||'')}</span>${(()=>{const gaugePath=t.isDaeChaPickup?t.daeChaPickupFuelGauge:t.isDaeChaReturn?t.daeChaReturnFuelGauge:'';return gaugePath?`<button type="button" class="btn-ghost" style="padding:1px 5px;font-size:10px;margin-left:4px;" title="주유게이지 사진" onclick="viewDaeChaFuelPhoto('${gaugePath.replace(/'/g,"\\'")}')">📷</button>`:'';})()}<input class="edit-inp" value="${escapeHtml(t.daeChaPate||'')}" data-f="daeChaPate" placeholder="대차 차량번호(필수)" style="display:none;width:80px;"></td>
           <td data-label="비고"><span class="view-val">${escapeHtml(t.note||'')}</span><input class="edit-inp" value="${escapeHtml(t.note||'')}" data-f="note" style="display:none;width:80px;"></td>
           <td data-label="" class="trip-del-cell">${viewerMode?'':`<button class="trip-del" onclick="deleteTrip('${plate}',${i})">삭제</button>`}</td>
         </tr>`).join('')}
@@ -5061,7 +5151,8 @@ function exportToExcel(){
   plates.forEach(p=>(data.vehicles[p].trips||[]).slice().sort(tripChronoCompare).forEach(t=>{
     const daeChaGubun = t.isDaeChaPickup?'대차인수':t.isDaeChaReturn?'대차반납':'';
     const daeChaHipass = t.isDaeChaPickup?(t.daeChaPickupHipass?'이동장착':''):t.isDaeChaReturn?(t.daeChaReturnHipass?'원상복구':''):'';
-    const daeChaFuelGauge = t.isDaeChaPickup?(t.daeChaPickupFuelGauge||''):t.isDaeChaReturn?(t.daeChaReturnFuelGauge||''):'';
+    // 주유게이지는 사진 촬영 방식으로 전환됨(Storage 경로 저장) — 엑셀에는 첨부 여부만 표기
+    const daeChaFuelGauge = t.isDaeChaPickup?(t.daeChaPickupFuelGauge?'사진 첨부':''):t.isDaeChaReturn?(t.daeChaReturnFuelGauge?'사진 첨부':''):'';
     const daeChaCondition = t.isDaeChaPickup?(t.daeChaPickupCondition||''):t.isDaeChaReturn?(t.daeChaReturnCondition||''):'';
     tripRows.push({'차량번호':p,'지역구분':data.vehicles[p].branch||'','시작일자':excelDateCell(t.isoDate),'종료일자':excelDateCell(t.dateTo||t.isoDate),'시작거리':t.startOdo,'종료거리':t.endOdo,'주행거리(km)':t.distance,'제출자':t.submitter||'','운행자':t.user||'','행선지':t.dest||'','주유비(원)':t.fuel||0,'개인사용여부':t.isPersonal?'개인사용':'','출퇴근사용여부':t.isCommute?(t.commuteDir||'출퇴근사용'):'','출퇴근거리(km)':t.isCommute?(t.distance||0):'','차량상태':t.status||'','대차구분':daeChaGubun,'대차차량번호':t.daeChaPate||'','대차차종':t.daeChaModel||'','대차하이패스':daeChaHipass,'대차주유게이지':daeChaFuelGauge,'대차이상여부':daeChaCondition,'비고':t.note||'','입력일시':t.submittedAt?new Date(t.submittedAt).toLocaleString('ko-KR'):'','최종수정일시':t.lastEditedAt?new Date(t.lastEditedAt).toLocaleString('ko-KR'):''});
   }));
@@ -5648,10 +5739,37 @@ function isChainLocked(plate, trip){
 
 function getLastTripMeta(plate){
   const trips = (data.vehicles[plate]?.trips || []);
-  if(!trips.length) return {endOdo:null, isDaeCha:false, user:''};
+  if(!trips.length) return {endOdo:null, isDaeCha:false, needsRecheck:false, user:''};
   const sorted = trips.slice().sort(tripChronoCompare);
   const last = sorted[sorted.length - 1];
-  return {endOdo: Number(last.endOdo) || null, isDaeCha: !!last.isDaeCha, user: last.user||''};
+  // 대차반납이 포함된 기록은 반납 시점에 원차량 기준으로 재연동되어 종료거리를 신뢰할 수 있으므로,
+  // "시작거리 재확인 필요" 경고는 대차인수만 있고 아직 반납되지 않은 경우에만 표시한다.
+  const needsRecheck = !!(last.isDaeChaPickup && !last.isDaeChaReturn);
+  return {endOdo: Number(last.endOdo) || null, isDaeCha: !!last.isDaeCha, needsRecheck, user: last.user||''};
+}
+
+// 차량에 현재 진행중인(아직 반납되지 않은) 대차가 있는지 확인.
+// 있다면 인수 당시 정보(대차번호/차종/이상여부)와, 대차 인수 직전 원차량의 마지막 종료거리
+// (반납 시 원차량 시작거리 재연동용)를 함께 반환. 없으면 null.
+function getActiveDaeChaInfo(plate){
+  const trips = (data.vehicles[plate]?.trips || []);
+  if(!trips.length) return null;
+  const sorted = trips.slice().sort(tripChronoCompare);
+  let active = null;
+  sorted.forEach((t, i)=>{
+    if(t.isDaeChaPickup && !active){
+      const prev = sorted[i-1];
+      active = {
+        pickupTrip: t,
+        preDaeChaOdo: prev ? (Number(prev.endOdo)||0) : null,
+        plate: t.daeChaPate||'',
+        model: t.daeChaModel||'',
+        condition: t.daeChaPickupCondition||''
+      };
+    }
+    if(t.isDaeChaReturn) active = null;
+  });
+  return active;
 }
 
 // 차량 선택 시, 다음 운행자가 동일 건을 중복 접수하지 않도록 해당 차량의 최근
@@ -5692,22 +5810,33 @@ function onVehicleSelect(){
   document.getElementById('tripRows').innerHTML = '';
   rowCounter = 0;
 
-  if(!plate){ hint.style.display='none'; addBtn.style.display='none'; bar.style.display='none'; renderVehicleAlertPanel(null); return; }
+  if(!plate){ hint.style.display='none'; addBtn.style.display='none'; bar.style.display='none'; renderVehicleAlertPanel(null); const b=document.getElementById('daechaActiveBanner'); if(b) b.style.display='none'; return; }
 
   renderVehicleAlertPanel(plate);
-  const {endOdo:lastOdo, isDaeCha:lastWasDaeCha, user:lastUser} = getLastTripMeta(plate);
+  const {endOdo:lastOdo, needsRecheck:lastNeedsRecheck, user:lastUser} = getLastTripMeta(plate);
   if(lastOdo !== null){
     hint.style.display = 'block';
     const userPart = lastUser ? ` <span style="margin-left:8px;color:var(--muted);">· 이전 운행자: <b>${escapeHtml(lastUser)}</b></span>` : '';
-    hint.innerHTML = lastWasDaeCha
+    hint.innerHTML = lastNeedsRecheck
       ? `⚠️ 이전 종료거리: <b>${lastOdo.toLocaleString()}</b> km${userPart} <span style="color:var(--bad);font-weight:700;">(대차 운행 건 — 시작거리를 반드시 확인해주세요)</span>`
       : `이전 종료거리: <b>${lastOdo.toLocaleString()}</b> km${userPart}`;
   } else {
     hint.style.display = 'none';
   }
+  // 현재 진행중인(미반납) 대차가 있으면 안내 배너 표시
+  const activeDaeCha = getActiveDaeChaInfo(plate);
+  const daechaBanner = document.getElementById('daechaActiveBanner');
+  if(daechaBanner){
+    if(activeDaeCha){
+      daechaBanner.innerHTML = `🚗 현재 <b>대차 차량(${escapeHtml(activeDaeCha.plate||'번호 미기재')}${activeDaeCha.model?' · '+escapeHtml(activeDaeCha.model):''})</b> 운행중입니다. 대차를 반납했다면 아래에서 <b>↩ 대차반납</b>을 체크해 주세요.`;
+      daechaBanner.style.display = 'block';
+    } else {
+      daechaBanner.style.display = 'none';
+    }
+  }
   addBtn.style.display = 'block';
   bar.style.display = 'flex';
-  addTripRow(lastOdo, lastWasDaeCha);
+  addTripRow(lastOdo, lastNeedsRecheck);
   scheduleDraft();
 }
 
@@ -5832,7 +5961,11 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
     const lastCard = rows[rows.length-1];
     const lastEnd = lastCard.querySelector('.tr-end');
     prefillStart = lastEnd && lastEnd.value ? Number(lastEnd.value.replace(/,/g,'')) : null;
-    prefillWasDaeCha = isRowDaeChaActive(lastCard);
+    // 대차인수만 체크되고 반납은 아직 체크되지 않은 경우에만 "재확인 필요"로 표시
+    // (대차반납이 체크된 행은 원차량 기준으로 재연동되어 종료거리를 신뢰할 수 있음)
+    const lastPickup = lastCard.querySelector('.tr-daecha-pickup-chk')?.checked || false;
+    const lastReturn = lastCard.querySelector('.tr-daecha-return-chk')?.checked || false;
+    prefillWasDaeCha = lastPickup && !lastReturn;
   }
 
   const card = document.createElement('div');
@@ -5968,7 +6101,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
         <label class="check-label">
           <input type="checkbox" class="tr-daecha-pickup-chk native-chk" onchange="toggleDaeChaPickup(this,'${id}')">
           <span class="check-icon"></span>
-          <span class="check-text">🚗 대차인수 <span style="font-size:12px;color:var(--muted);font-weight:400;">(대차 차량을 받은 날 체크 · 운행 없이 인수만 한 경우도 체크)</span></span>
+          <span class="check-text">🚗 대차인수<br><span style="font-size:12px;color:var(--muted);font-weight:400;">(대차 차량 인수 당일에 반드시 체크 입력)</span></span>
         </label>
         <div class="daecha-pickup-field" id="daechaPickup-${id}" style="display:none;margin-top:8px;">
           <div style="background:var(--accent-soft);border:1px solid var(--accent);border-radius:9px;padding:10px 12px;">
@@ -5981,15 +6114,15 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
               <span class="check-icon"></span>
               <span class="check-text" style="font-size:12.5px;">기존 차량 하이패스카드를 대차로 이동 장착함</span>
             </label>
-            <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">주유게이지 확인 <span style="font-size:11px;color:var(--muted);font-weight:400;">(반납 시 동일 수준으로 주유해야 합니다)</span></div>
-            <select class="tr-daecha-fuel-pickup" style="width:100%;border:1.5px solid var(--accent);border-radius:7px;padding:9px 10px;font-family:'Paperlogy';font-size:14px;background:#fff;box-sizing:border-box;" onchange="scheduleDraft()">
-              <option value="">선택</option>
-              <option value="F">가득참(F)</option>
-              <option value="3/4">3/4</option>
-              <option value="1/2">1/2(중간)</option>
-              <option value="1/4">1/4</option>
-              <option value="E">부족(E)</option>
-            </select>
+            <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">주유게이지 확인 사진 <span style="font-size:11px;color:var(--muted);font-weight:400;">(계기판을 촬영해 남겨주세요 · 반납 시 동일 수준으로 주유해야 합니다)</span></div>
+            <input type="hidden" class="tr-daecha-fuel-pickup" value="">
+            <button type="button" onclick="document.getElementById('daechaFuelFile-pickup-${id}').click()" style="width:100%;padding:10px 12px;border-radius:7px;border:1.5px dashed var(--accent);background:#fff;color:var(--accent);font-size:13px;font-weight:700;cursor:pointer;">📷 주유게이지 촬영</button>
+            <input type="file" id="daechaFuelFile-pickup-${id}" accept="image/*" capture="environment" style="display:none;" onchange="onDaeChaFuelPhotoSelected(this,'${id}','pickup')">
+            <div id="daechaFuelThumbWrap-pickup-${id}" style="display:none;margin-top:8px;align-items:center;gap:8px;">
+              <img id="daechaFuelThumb-pickup-${id}" src="" alt="주유게이지 사진" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--accent);flex-shrink:0;">
+              <span style="font-size:11.5px;color:var(--good);font-weight:700;">✓ 촬영 완료</span>
+              <button type="button" onclick="document.getElementById('daechaFuelFile-pickup-${id}').click()" style="margin-left:auto;font-size:11px;color:var(--accent);background:none;border:none;text-decoration:underline;cursor:pointer;">다시 촬영</button>
+            </div>
             <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">차량 이상여부</div>
             <input type="text" class="tr-daecha-condition-pickup" placeholder="예: 앞범퍼 스크래치 (없으면 비워두세요)" style="border:1.5px solid var(--accent);border-radius:7px;padding:10px 12px;font-family:'Paperlogy';font-size:14px;width:100%;background:#fff;box-sizing:border-box;" oninput="scheduleDraft()">
             <div style="font-size:11px;color:var(--accent);margin-top:8px;line-height:1.5;">💡 원 차량 기준으로 가동일이 반영됩니다. 거리 불연속은 정상입니다. 이 운행기록의 <b>시작거리</b>가 인수 당시 계기판 거리로 사용됩니다. 인수만 하고 운행하지 않았다면 시작거리·종료거리를 동일하게 입력해 주세요.</div>
@@ -6011,18 +6144,19 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
               <span class="check-icon"></span>
               <span class="check-text" style="font-size:12.5px;">기존 차량 하이패스카드를 원상복구함</span>
             </label>
-            <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">주유게이지 원복 확인</div>
-            <select class="tr-daecha-fuel-return" style="width:100%;border:1.5px solid var(--accent);border-radius:7px;padding:9px 10px;font-family:'Paperlogy';font-size:14px;background:#fff;box-sizing:border-box;" onchange="scheduleDraft()">
-              <option value="">선택</option>
-              <option value="F">가득참(F)</option>
-              <option value="3/4">3/4</option>
-              <option value="1/2">1/2(중간)</option>
-              <option value="1/4">1/4</option>
-              <option value="E">부족(E)</option>
-            </select>
-            <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">차량 이상여부</div>
+            <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">주유게이지 원복 확인 사진</div>
+            <input type="hidden" class="tr-daecha-fuel-return" value="">
+            <button type="button" onclick="document.getElementById('daechaFuelFile-return-${id}').click()" style="width:100%;padding:10px 12px;border-radius:7px;border:1.5px dashed var(--accent);background:#fff;color:var(--accent);font-size:13px;font-weight:700;cursor:pointer;">📷 주유게이지 촬영</button>
+            <input type="file" id="daechaFuelFile-return-${id}" accept="image/*" capture="environment" style="display:none;" onchange="onDaeChaFuelPhotoSelected(this,'${id}','return')">
+            <div id="daechaFuelThumbWrap-return-${id}" style="display:none;margin-top:8px;align-items:center;gap:8px;">
+              <img id="daechaFuelThumb-return-${id}" src="" alt="주유게이지 사진" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--accent);flex-shrink:0;">
+              <span style="font-size:11.5px;color:var(--good);font-weight:700;">✓ 촬영 완료</span>
+              <button type="button" onclick="document.getElementById('daechaFuelFile-return-${id}').click()" style="margin-left:auto;font-size:11px;color:var(--accent);background:none;border:none;text-decoration:underline;cursor:pointer;">다시 촬영</button>
+            </div>
+            <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">차량 이상여부 <span style="font-size:11px;color:var(--muted);font-weight:400;">(인수 시 기록된 이상여부가 아래 표시되며, 운행 후 추가 확인된 사항을 이어서 기재해 주세요)</span></div>
             <input type="text" class="tr-daecha-condition-return" placeholder="예: 이상없음" style="border:1.5px solid var(--accent);border-radius:7px;padding:10px 12px;font-family:'Paperlogy';font-size:14px;width:100%;background:#fff;box-sizing:border-box;" oninput="scheduleDraft()">
-            <div style="font-size:11px;color:var(--accent);margin-top:8px;line-height:1.5;">💡 이 운행기록의 <b>종료거리</b>가 반납 당시 계기판 거리로 사용됩니다.</div>
+            <div id="daechaReturnRelinkNote-${id}" style="display:none;font-size:11px;color:var(--accent);margin-top:8px;line-height:1.5;"></div>
+            <div style="font-size:11px;color:var(--accent);margin-top:8px;line-height:1.5;">💡 위 <b>시작거리</b>는 원 차량 기준으로 자동 재연동됩니다. <b>종료거리</b>는 원 차량을 직접 인수한 후 계기판을 확인해 입력해 주세요(대차로 인해 정비소까지 운행한 거리 개념).</div>
           </div>
         </div>
       </div>
@@ -6307,12 +6441,73 @@ function toggleDaeChaPickup(chk, id){
   const field = document.getElementById('daechaPickup-'+id);
   if(field) field.style.display = chk.checked ? 'block' : 'none';
   applyDaeChaActiveState(id);
+  applyDaeChaDestAutofill(id);
 }
 
 function toggleDaeChaReturn(chk, id){
   const field = document.getElementById('daechaReturn-'+id);
   if(field) field.style.display = chk.checked ? 'block' : 'none';
   applyDaeChaActiveState(id);
+  applyDaeChaDestAutofill(id);
+  applyDaeChaReturnPrefill(id, chk.checked);
+}
+
+// 대차인수/대차반납 체크 상태에 따라 행선지를 자동으로 "대차인수"/"대차반납"으로 표기.
+// 체크 해제 시에는 자동표기 이전에 사용자가 입력해 두었던 값으로 복원한다.
+function applyDaeChaDestAutofill(id){
+  const card = document.getElementById(id);
+  const destInp = card?.querySelector('.tr-dest');
+  if(!destInp) return;
+  const pickup = card.querySelector('.tr-daecha-pickup-chk')?.checked || false;
+  const ret = card.querySelector('.tr-daecha-return-chk')?.checked || false;
+  const label = pickup && ret ? '대차인수/반납' : pickup ? '대차인수' : ret ? '대차반납' : '';
+  if(label){
+    if(destInp.dataset.daechaAutoFilled !== 'true') destInp.dataset.beforeDaecha = destInp.value;
+    destInp.value = label;
+    destInp.dataset.daechaAutoFilled = 'true';
+  } else if(destInp.dataset.daechaAutoFilled === 'true'){
+    destInp.value = destInp.dataset.beforeDaecha || '';
+    destInp.dataset.daechaAutoFilled = 'false';
+  }
+  scheduleDraft();
+}
+
+// 대차반납 체크 시, 해당 차량에 현재 진행중인(미반납) 대차 인수 정보가 있으면
+// 대차 차량번호·차량 이상여부를 그대로 가져와 채워준다(이상여부는 운행 후 추가 기재 가능하도록 이어붙임).
+// 아울러 이 운행기록의 시작거리를 "대차 인수 직전 원차량 종료거리"로 재연동한다(원차량 계기판 기준 복귀).
+function applyDaeChaReturnPrefill(id, checked){
+  const card = document.getElementById(id);
+  if(!card) return;
+  const relinkNote = document.getElementById('daechaReturnRelinkNote-'+id);
+  if(!checked){ if(relinkNote) relinkNote.style.display='none'; return; }
+  const plate = document.getElementById('userPlateSelect')?.value || '';
+  const info = plate ? getActiveDaeChaInfo(plate) : null;
+  if(!info){ if(relinkNote) relinkNote.style.display='none'; return; }
+  const plateInp = card.querySelector('.tr-daecha-plate-return');
+  if(plateInp && !plateInp.value) plateInp.value = info.plate || '';
+  const condInp = card.querySelector('.tr-daecha-condition-return');
+  if(condInp && !condInp.dataset.prefilled){
+    if(info.condition && !condInp.value) condInp.value = info.condition;
+    condInp.dataset.prefilled = '1';
+  }
+  // 대차 인수 자체가 이번 운행기록(같은 카드)이 아닌 경우에만 시작거리를 재연동(같은 카드에서 인수+반납을 동시 체크한 경우는 제외)
+  const isPickupSameRow = card.querySelector('.tr-daecha-pickup-chk')?.checked;
+  if(!isPickupSameRow && info.preDaeChaOdo !== null){
+    const startInp = card.querySelector('.tr-start');
+    if(startInp){
+      startInp.value = Number(info.preDaeChaOdo).toLocaleString();
+      startInp.classList.remove('needs-recheck');
+      startInp.classList.add('auto-filled');
+      delete card.dataset.savedStart;
+      delete card.dataset.savedStartAuto;
+      calcRowDist(id);
+    }
+    if(relinkNote){
+      relinkNote.textContent = `🔗 원 차량 대차 인수 직전 종료거리(${Number(info.preDaeChaOdo).toLocaleString()}km)로 시작거리가 재연동되었습니다. 원 차량 계기판과 다르면 직접 수정해 주세요.`;
+      relinkNote.style.display = 'block';
+    }
+  } else if(relinkNote){ relinkNote.style.display = 'none'; }
+  scheduleDraft();
 }
 
 // 대차인수/대차반납 체크 상태 변경 시 공통으로 반영되는 부분(계기판 연속성 경고, 시작거리 자동채움 해제 등).
@@ -7058,6 +7253,37 @@ async function doSubmit(submitter, plate, rows){
       }
     }
 
+    // 대차 인수/반납 주유게이지 확인 사진: 지금 촬영된 건은 여기서 압축+업로드를 수행.
+    // 업로드 실패 시에도 전체 제출은 막지 않고 사진 없이(빈 값으로) 저장.
+    let daeChaPickupFuelGaugePath = '';
+    if(r.isDaeChaPickup){
+      const file = window._daeChaFuelFileMap && window._daeChaFuelFileMap[r.id+'_pickup'];
+      if(file){
+        try{
+          const fileName = buildDaeChaFuelPhotoFileName(r.user, isoDate, 'pickup');
+          const compressed = await compressDaeChaFuelPhoto(file);
+          daeChaPickupFuelGaugePath = await uploadDaeChaFuelPhoto(compressed, fileName);
+        }catch(e){
+          console.error('[대차 인수 주유게이지 사진 업로드 실패]', e);
+          daeChaPickupFuelGaugePath = '';
+        }
+      }
+    }
+    let daeChaReturnFuelGaugePath = '';
+    if(r.isDaeChaReturn){
+      const file = window._daeChaFuelFileMap && window._daeChaFuelFileMap[r.id+'_return'];
+      if(file){
+        try{
+          const fileName = buildDaeChaFuelPhotoFileName(r.user, isoDate, 'return');
+          const compressed = await compressDaeChaFuelPhoto(file);
+          daeChaReturnFuelGaugePath = await uploadDaeChaFuelPhoto(compressed, fileName);
+        }catch(e){
+          console.error('[대차 반납 주유게이지 사진 업로드 실패]', e);
+          daeChaReturnFuelGaugePath = '';
+        }
+      }
+    }
+
     const newTrip = {
       date: dateDisplay, isoDate, dateTo, usageDates: allDates,
       startOdo:r.startOdo, endOdo:r.endOdo, distance:r.distance,
@@ -7066,8 +7292,8 @@ async function doSubmit(submitter, plate, rows){
       isDaeCha:r.isDaeCha||false, daeChaPate:r.daeChaPate||'',
       isDaeChaPickup:r.isDaeChaPickup||false, isDaeChaReturn:r.isDaeChaReturn||false,
       daeChaModel:r.daeChaModel||'', daeChaPickupHipass:r.daeChaPickupHipass||false,
-      daeChaPickupFuelGauge:r.daeChaPickupFuelGauge||'', daeChaPickupCondition:r.daeChaPickupCondition||'',
-      daeChaReturnHipass:r.daeChaReturnHipass||false, daeChaReturnFuelGauge:r.daeChaReturnFuelGauge||'',
+      daeChaPickupFuelGauge:daeChaPickupFuelGaugePath, daeChaPickupCondition:r.daeChaPickupCondition||'',
+      daeChaReturnHipass:r.daeChaReturnHipass||false, daeChaReturnFuelGauge:daeChaReturnFuelGaugePath,
       daeChaReturnCondition:r.daeChaReturnCondition||'',
       isCommute:r.isCommute||false, commuteDir:r.commuteDir||'',
       submittedAt: new Date().toISOString(),
@@ -7089,7 +7315,10 @@ async function doSubmit(submitter, plate, rows){
     added++;
   }
   // 제출이 끝났으니 이 화면에서 보관하던 첨부파일 참조를 정리 (메모리 누수 방지)
-  rows.forEach(r=>{ if(window._receiptFileMap) delete window._receiptFileMap[r.id]; });
+  rows.forEach(r=>{
+    if(window._receiptFileMap) delete window._receiptFileMap[r.id];
+    if(window._daeChaFuelFileMap){ delete window._daeChaFuelFileMap[r.id+'_pickup']; delete window._daeChaFuelFileMap[r.id+'_return']; }
+  });
 
   const saved = await saveData();
   if(!saved){
@@ -7213,6 +7442,12 @@ async function restoreDraft(){
         if(hipass) hipass.checked=!!r.daeChaPickupHipass;
         const fuel=card.querySelector('.tr-daecha-fuel-pickup');
         if(fuel) fuel.value=r.daeChaPickupFuelGauge||'';
+        // 임시저장 복원 시 사진 파일(File 객체)은 브라우저 저장소 특성상 복원 불가 — 재촬영 안내만 표시
+        if(r.daeChaPickupFuelGauge==='attached' && !(window._daeChaFuelFileMap && window._daeChaFuelFileMap[card.id+'_pickup'])){
+          if(fuel) fuel.value='';
+          const wrap=document.getElementById('daechaFuelThumbWrap-pickup-'+card.id);
+          if(wrap){ wrap.style.display='flex'; wrap.innerHTML='<span style="font-size:11.5px;color:var(--bad);">⚠ 이전 촬영 사진이 새로고침으로 사라졌습니다. 다시 촬영해 주세요.</span>'; }
+        }
         const cond=card.querySelector('.tr-daecha-condition-pickup');
         if(cond) cond.value=r.daeChaPickupCondition||'';
       } else if(r.isDaeCha && !r.isDaeChaReturn){
@@ -7231,6 +7466,11 @@ async function restoreDraft(){
         if(hipass) hipass.checked=!!r.daeChaReturnHipass;
         const fuel=card.querySelector('.tr-daecha-fuel-return');
         if(fuel) fuel.value=r.daeChaReturnFuelGauge||'';
+        if(r.daeChaReturnFuelGauge==='attached' && !(window._daeChaFuelFileMap && window._daeChaFuelFileMap[card.id+'_return'])){
+          if(fuel) fuel.value='';
+          const wrap=document.getElementById('daechaFuelThumbWrap-return-'+card.id);
+          if(wrap){ wrap.style.display='flex'; wrap.innerHTML='<span style="font-size:11.5px;color:var(--bad);">⚠ 이전 촬영 사진이 새로고침으로 사라졌습니다. 다시 촬영해 주세요.</span>'; }
+        }
         const cond=card.querySelector('.tr-daecha-condition-return');
         if(cond) cond.value=r.daeChaReturnCondition||'';
       }
