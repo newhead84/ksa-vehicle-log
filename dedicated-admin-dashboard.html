@@ -593,8 +593,11 @@ async function loadTripsFromFirebase(){
         via: t.routeNote || '',
         to: t.endLocation || '–',
         km: t.distance || 0,
-        sub: !!(t.isSubstituteDriver || t.isSubstituteVehicle),
-        note: t.substituteDriverReason || (t.isSubstituteVehicle ? `대차: ${t.substituteVehicle}` : ''),
+        sub: !!t.isSubstituteDriver,
+        note: [
+          t.isDaeChaPickup ? `대차인수: ${t.daeChaPlatePickup||''}` : '',
+          t.isDaeChaReturn ? `대차반납: ${t.daeChaPlateReturn||''}` : ''
+        ].filter(Boolean).join(' / '),
         fuel: t.fuelCost || 0
       });
     });
@@ -817,9 +820,15 @@ function openTripEditModal(uid){
   html += tripEditFieldLine('종료거리(km)', `<input type="text" inputmode="numeric" id="teEndOdo" value="${(r.endOdo||0).toLocaleString()}" oninput="formatMoneyInput(this)">`);
   html += tripEditFieldLine('주유비(원)', `<input type="text" inputmode="numeric" id="teFuelCost" value="${(r.fuelCost||0).toLocaleString()}" oninput="formatMoneyInput(this)">`);
   html += tripEditFieldLine('대리운전', `<label class="trip-edit-checkbox-line"><input type="checkbox" id="teSubDriver" ${r.isSubstituteDriver?'checked':''} style="accent-color:var(--ded-beige);"> 사용함</label>`);
-  html += tripEditFieldLine('대리운전 사유', `<input type="text" id="teSubDriverReason" value="${esc(r.substituteDriverReason||'')}">`);
-  html += tripEditFieldLine('대차 운행', `<label class="trip-edit-checkbox-line"><input type="checkbox" id="teSubVehicle" ${r.isSubstituteVehicle?'checked':''} style="accent-color:var(--ded-beige);"> 사용함</label>`);
-  html += tripEditFieldLine('대차 차량', `<input type="text" id="teSubVehicleName" value="${esc(r.substituteVehicle||'')}">`);
+  html += tripEditFieldLine('대차인수', `<label class="trip-edit-checkbox-line"><input type="checkbox" id="teDaeChaPickup" ${r.isDaeChaPickup?'checked':''} style="accent-color:var(--ded-beige);"> 인수함</label>`);
+  html += tripEditFieldLine('대차 차량번호(인수)', `<input type="text" id="teDaeChaPlatePickup" value="${esc(r.daeChaPlatePickup||'')}">`);
+  html += tripEditFieldLine('대차 차종(인수)', `<input type="text" id="teDaeChaModelPickup" value="${esc(r.daeChaModelPickup||'')}">`);
+  html += tripEditFieldLine('하이패스 이동(인수)', `<label class="trip-edit-checkbox-line"><input type="checkbox" id="teDaeChaHipassPickup" ${r.daeChaHipassPickup?'checked':''} style="accent-color:var(--ded-beige);"> 이동장착함</label>`);
+  html += tripEditFieldLine('차량 이상여부(인수)', `<input type="text" id="teDaeChaConditionPickup" value="${esc(r.daeChaConditionPickup||'')}">`);
+  html += tripEditFieldLine('대차반납', `<label class="trip-edit-checkbox-line"><input type="checkbox" id="teDaeChaReturn" ${r.isDaeChaReturn?'checked':''} style="accent-color:var(--ded-beige);"> 반납함</label>`);
+  html += tripEditFieldLine('대차 차량번호(반납)', `<input type="text" id="teDaeChaPlateReturn" value="${esc(r.daeChaPlateReturn||'')}">`);
+  html += tripEditFieldLine('하이패스 원복(반납)', `<label class="trip-edit-checkbox-line"><input type="checkbox" id="teDaeChaHipassReturn" ${r.daeChaHipassReturn?'checked':''} style="accent-color:var(--ded-beige);"> 원복함</label>`);
+  html += tripEditFieldLine('차량 이상여부(반납)', `<input type="text" id="teDaeChaConditionReturn" value="${esc(r.daeChaConditionReturn||'')}">`);
 
   document.getElementById('tripEditFormRows').innerHTML = html;
   const msgEl = document.getElementById('tripEditSaveMsg');
@@ -848,9 +857,15 @@ async function saveTripEdit(){
   const endOdo = moneyValue(document.getElementById('teEndOdo'));
   const fuelCost = moneyValue(document.getElementById('teFuelCost'));
   const isSubstituteDriver = document.getElementById('teSubDriver').checked;
-  const substituteDriverReason = document.getElementById('teSubDriverReason').value.trim();
-  const isSubstituteVehicle = document.getElementById('teSubVehicle').checked;
-  const substituteVehicle = document.getElementById('teSubVehicleName').value.trim();
+  const isDaeChaPickup = document.getElementById('teDaeChaPickup').checked;
+  const daeChaPlatePickup = document.getElementById('teDaeChaPlatePickup').value.trim();
+  const daeChaModelPickup = document.getElementById('teDaeChaModelPickup').value.trim();
+  const daeChaHipassPickup = document.getElementById('teDaeChaHipassPickup').checked;
+  const daeChaConditionPickup = document.getElementById('teDaeChaConditionPickup').value.trim();
+  const isDaeChaReturn = document.getElementById('teDaeChaReturn').checked;
+  const daeChaPlateReturn = document.getElementById('teDaeChaPlateReturn').value.trim();
+  const daeChaHipassReturn = document.getElementById('teDaeChaHipassReturn').checked;
+  const daeChaConditionReturn = document.getElementById('teDaeChaConditionReturn').value.trim();
   const routeNoteEl = document.getElementById('teRouteNote');
   const routeNote = routeNoteEl ? routeNoteEl.value.trim() : (t.raw.routeNote||'');
   const startLocEl = document.getElementById('teStartLoc');
@@ -861,8 +876,8 @@ async function saveTripEdit(){
   if(!dateFrom){ msgEl.style.color='var(--ded-red)'; msgEl.textContent='시작일자를 입력해주세요.'; return; }
   if(!driver){ msgEl.style.color='var(--ded-red)'; msgEl.textContent='운행자를 입력해주세요.'; return; }
   if(endOdo < startOdo){ msgEl.style.color='var(--ded-red)'; msgEl.textContent='종료거리가 시작거리보다 작습니다.'; return; }
-  if(isSubstituteDriver && !substituteDriverReason){ msgEl.style.color='var(--ded-red)'; msgEl.textContent='대리운전 사유를 입력해주세요.'; return; }
-  if(isSubstituteVehicle && !substituteVehicle){ msgEl.style.color='var(--ded-red)'; msgEl.textContent='대차 차량 정보를 입력해주세요.'; return; }
+  if(isDaeChaPickup && !daeChaPlatePickup){ msgEl.style.color='var(--ded-red)'; msgEl.textContent='대차 인수 차량번호를 입력해주세요.'; return; }
+  if(isDaeChaReturn && !daeChaPlateReturn){ msgEl.style.color='var(--ded-red)'; msgEl.textContent='대차 반납 차량번호를 입력해주세요.'; return; }
 
   btn.disabled = true; btn.textContent = '저장 중…';
   msgEl.style.color = 'var(--ded-muted)';
@@ -885,9 +900,15 @@ async function saveTripEdit(){
     target.startLocation = startLocation;
     target.endLocation = endLocation;
     target.isSubstituteDriver = isSubstituteDriver;
-    target.substituteDriverReason = isSubstituteDriver ? substituteDriverReason : '';
-    target.isSubstituteVehicle = isSubstituteVehicle;
-    target.substituteVehicle = isSubstituteVehicle ? substituteVehicle : '';
+    target.isDaeChaPickup = isDaeChaPickup;
+    target.daeChaPlatePickup = isDaeChaPickup ? daeChaPlatePickup : '';
+    target.daeChaModelPickup = isDaeChaPickup ? daeChaModelPickup : '';
+    target.daeChaHipassPickup = isDaeChaPickup ? daeChaHipassPickup : false;
+    target.daeChaConditionPickup = isDaeChaPickup ? daeChaConditionPickup : '';
+    target.isDaeChaReturn = isDaeChaReturn;
+    target.daeChaPlateReturn = isDaeChaReturn ? daeChaPlateReturn : '';
+    target.daeChaHipassReturn = isDaeChaReturn ? daeChaHipassReturn : false;
+    target.daeChaConditionReturn = isDaeChaReturn ? daeChaConditionReturn : '';
     await fbPut(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`, arr);
     closeTripEditModal();
     await refreshDashboard();

@@ -297,8 +297,6 @@
   }
   .ded-line-field input:focus{border-bottom-color:var(--ded-beige);}
   .ded-line-field input::placeholder{color:var(--ded-muted-2); font-size:15px;}
-  /* 대리운전 사유 예시문구가 길어 좁은 화면에서 잘리지 않도록 placeholder만 별도로 축소 */
-  #substituteDriverReason::placeholder{font-size:13px;}
   .ded-unit{font-size:14px; color:var(--ded-muted); flex:0 0 auto; white-space:nowrap;}
 
   /* ── 시작거리 자동 반영 안내문구 ── */
@@ -346,6 +344,10 @@
     max-height:0; overflow:hidden; transition:max-height .2s ease;
   }
   .ded-conditional.open{max-height:140px; padding-bottom:14px;}
+  .ded-conditional.daecha-cond.open{max-height:420px;}
+  .ded-conditional .daecha-chk-row{display:flex; align-items:center; gap:8px; margin:4px 0 10px;}
+  .ded-conditional .daecha-chk-row input[type="checkbox"]{width:16px; height:16px; accent-color:var(--ded-beige); flex-shrink:0;}
+  .ded-conditional .daecha-chk-row span{font-size:13px; color:var(--ded-muted);}
   #myRecordsPanel.open{max-height:520px; overflow-y:auto;}
   .ded-conditional .err{
     display:none; color:var(--ded-red); font-size:13px; margin-top:6px;
@@ -798,28 +800,55 @@
 
     <div class="ded-toggle-row">
       <div class="lbl">대리운전 사용</div>
-      <div class="ded-switch" id="substituteSwitch" onclick="toggleSwitch('substituteSwitch','substituteCond')"><div class="knob"></div></div>
-    </div>
-    <div class="ded-conditional" id="substituteCond">
-      <div class="ded-line-field">
-        <label style="flex-basis:56px;">사유<span class="req">*</span></label>
-        <div class="in-wrap"><input type="text" id="substituteDriverReason" placeholder="예시: 고객사명, 행사명 / 미팅, 네트워킹 등"></div>
-      </div>
-      <div class="err" id="substituteReasonErr">대리운전 사유를 입력해 주세요.</div>
+      <div class="ded-switch" id="substituteSwitch" onclick="this.classList.toggle('on')"><div class="knob"></div></div>
     </div>
 
     <div class="ded-toggle-row">
-      <div class="lbl">대차 차량 사용
-        <span class="sub">렌트 차량 정비 등으로 다른 차량 이용 시 켜주세요</span>
+      <div class="lbl">🚗 대차인수
+        <span class="sub">렌트 차량 정비 등으로 대차 차량을 인수한 날 켜주세요</span>
       </div>
-      <div class="ded-switch" id="substituteVehicleSwitch" onclick="toggleSwitch('substituteVehicleSwitch','substituteVehicleCond')"><div class="knob"></div></div>
+      <div class="ded-switch" id="daeChaPickupSwitch" onclick="toggleSwitch('daeChaPickupSwitch','daeChaPickupCond')"><div class="knob"></div></div>
     </div>
-    <div class="ded-conditional" id="substituteVehicleCond">
+    <div class="ded-conditional daecha-cond" id="daeChaPickupCond">
       <div class="ded-line-field">
-        <label>차량 정보<span class="req">*</span></label>
-        <div class="in-wrap"><input type="text" id="substituteVehicle" placeholder="차종/차량번호 입력"></div>
+        <label>대차 차량번호<span class="req">*</span></label>
+        <div class="in-wrap"><input type="text" id="daeChaPlatePickup" placeholder="대차 차량번호 입력(필수)"></div>
       </div>
-      <div class="err">대차 차량을 사용한 경우 차량 정보 입력은 필수입니다.</div>
+      <div class="ded-line-field">
+        <label>차종</label>
+        <div class="in-wrap"><input type="text" id="daeChaModelPickup" placeholder="예: 아반떼"></div>
+      </div>
+      <label class="daecha-chk-row">
+        <input type="checkbox" id="daeChaHipassPickup">
+        <span>기존 차량 하이패스카드를 대차로 이동 장착함</span>
+      </label>
+      <div class="ded-line-field">
+        <label>차량 이상여부</label>
+        <div class="in-wrap"><input type="text" id="daeChaConditionPickup" placeholder="예: 앞범퍼 스크래치 (없으면 비워두세요)"></div>
+      </div>
+      <div class="err" id="daeChaPickupErr">대차 차량번호 입력은 필수입니다.</div>
+    </div>
+
+    <div class="ded-toggle-row">
+      <div class="lbl">↩ 대차반납
+        <span class="sub">대차 차량을 반납하는 날 켜주세요</span>
+      </div>
+      <div class="ded-switch" id="daeChaReturnSwitch" onclick="toggleSwitch('daeChaReturnSwitch','daeChaReturnCond')"><div class="knob"></div></div>
+    </div>
+    <div class="ded-conditional daecha-cond" id="daeChaReturnCond">
+      <div class="ded-line-field">
+        <label>대차 차량번호<span class="req">*</span></label>
+        <div class="in-wrap"><input type="text" id="daeChaPlateReturn" placeholder="대차 차량번호 입력(필수)"></div>
+      </div>
+      <label class="daecha-chk-row">
+        <input type="checkbox" id="daeChaHipassReturn">
+        <span>기존 차량 하이패스카드를 원상복구함</span>
+      </label>
+      <div class="ded-line-field">
+        <label>차량 이상여부</label>
+        <div class="in-wrap"><input type="text" id="daeChaConditionReturn" placeholder="예: 이상없음"></div>
+      </div>
+      <div class="err" id="daeChaReturnErr">대차 차량번호 입력은 필수입니다.</div>
     </div>
   </div>
 
@@ -1596,28 +1625,28 @@ async function submitLog(){
     return;
   }
 
-  // 대리운전/대차 차량 사용 시 필수 입력 검증
-  const subSwitch = document.getElementById('substituteSwitch');
-  const subCond = document.getElementById('substituteCond');
-  const subInput = document.getElementById('substituteDriverReason');
-  if(subSwitch.classList.contains('on') && !subInput.value.trim()){
-    subCond.classList.add('invalid');
-    subInput.focus();
-    showToast('대리운전 사유를 입력해주세요.', true);
+  // 대차 인수/반납 시 차량번호 필수 입력 검증
+  const daeChaPickupSwitch = document.getElementById('daeChaPickupSwitch');
+  const daeChaPickupCond = document.getElementById('daeChaPickupCond');
+  const daeChaPlatePickupInput = document.getElementById('daeChaPlatePickup');
+  if(daeChaPickupSwitch.classList.contains('on') && !daeChaPlatePickupInput.value.trim()){
+    daeChaPickupCond.classList.add('invalid');
+    daeChaPlatePickupInput.focus();
+    showToast('대차 인수 차량번호를 입력해주세요.', true);
     return;
   }
-  subCond.classList.remove('invalid');
+  daeChaPickupCond.classList.remove('invalid');
 
-  const vehSwitch = document.getElementById('substituteVehicleSwitch');
-  const vehCond = document.getElementById('substituteVehicleCond');
-  const vehInput = document.getElementById('substituteVehicle');
-  if(vehSwitch.classList.contains('on') && !vehInput.value.trim()){
-    vehCond.classList.add('invalid');
-    vehInput.focus();
-    showToast('대차 차량 정보를 입력해주세요.', true);
+  const daeChaReturnSwitch = document.getElementById('daeChaReturnSwitch');
+  const daeChaReturnCond = document.getElementById('daeChaReturnCond');
+  const daeChaPlateReturnInput = document.getElementById('daeChaPlateReturn');
+  if(daeChaReturnSwitch.classList.contains('on') && !daeChaPlateReturnInput.value.trim()){
+    daeChaReturnCond.classList.add('invalid');
+    daeChaPlateReturnInput.focus();
+    showToast('대차 반납 차량번호를 입력해주세요.', true);
     return;
   }
-  vehCond.classList.remove('invalid');
+  daeChaReturnCond.classList.remove('invalid');
 
   // 출발지/행선지/도착지/시작·종료 시각/종료거리 필수 입력 검증 — 현재 화면에 노출된(단계상 필요한) 필드만 검사
   // 근로 시작/종료는 시작 시각/종료 시각과 항상 동일하게 자동 반영되는 읽기전용 필드이므로 별도 검증이 필요 없다.
@@ -1671,9 +1700,15 @@ async function submitLog(){
   const fuelCost = parseFloat((document.getElementById('fuelCost').value || '').replace(/,/g,'')) || 0;
   const routeNote = document.getElementById('routeNote').value.trim();
   const isSubstituteDriver = document.getElementById('substituteSwitch').classList.contains('on');
-  const substituteDriverReason = document.getElementById('substituteDriverReason').value.trim();
-  const isSubstituteVehicle = document.getElementById('substituteVehicleSwitch').classList.contains('on');
-  const substituteVehicle = document.getElementById('substituteVehicle').value.trim();
+  const isDaeChaPickup = document.getElementById('daeChaPickupSwitch').classList.contains('on');
+  const daeChaPlatePickup = document.getElementById('daeChaPlatePickup').value.trim();
+  const daeChaModelPickup = document.getElementById('daeChaModelPickup').value.trim();
+  const daeChaHipassPickup = document.getElementById('daeChaHipassPickup').checked;
+  const daeChaConditionPickup = document.getElementById('daeChaConditionPickup').value.trim();
+  const isDaeChaReturn = document.getElementById('daeChaReturnSwitch').classList.contains('on');
+  const daeChaPlateReturn = document.getElementById('daeChaPlateReturn').value.trim();
+  const daeChaHipassReturn = document.getElementById('daeChaHipassReturn').checked;
+  const daeChaConditionReturn = document.getElementById('daeChaConditionReturn').value.trim();
 
   submitBtn.disabled = true;
   submitBtn.textContent = '저장 중…';
@@ -1696,7 +1731,9 @@ async function submitLog(){
         driver, startLocation, startTime, startOdo,
         endLocation:'', endTime:'', endOdo:0, distance:0,
         routeNote,
-        isSubstituteDriver, substituteDriverReason, isSubstituteVehicle, substituteVehicle,
+        isSubstituteDriver,
+        isDaeChaPickup, daeChaPlatePickup, daeChaModelPickup, daeChaHipassPickup, daeChaConditionPickup,
+        isDaeChaReturn, daeChaPlateReturn, daeChaHipassReturn, daeChaConditionReturn,
         fuelCost,
         workStart: document.getElementById('workStart').value,
         workEnd:'', waitPeriods: collectPeriods('waitPeriodsList'), restPeriods: collectPeriods('restPeriodsList'),
@@ -1736,7 +1773,9 @@ async function submitLog(){
         ...base,
         endLocation, endTime, endOdo, distance: Math.max(0, endOdo - (base.startOdo||0)),
         routeNote: routeNote || base.routeNote,
-        isSubstituteDriver, substituteDriverReason, isSubstituteVehicle, substituteVehicle,
+        isSubstituteDriver,
+        isDaeChaPickup, daeChaPlatePickup, daeChaModelPickup, daeChaHipassPickup, daeChaConditionPickup,
+        isDaeChaReturn, daeChaPlateReturn, daeChaHipassReturn, daeChaConditionReturn,
         fuelCost: fuelCost || base.fuelCost || 0,
         workStart: document.getElementById('workStart').value || base.workStart,
         workEnd: document.getElementById('workEnd').value,
@@ -1793,7 +1832,9 @@ async function submitLog(){
         endTime: effChairman ? document.getElementById('endTime').value : '',
         startOdo, endOdo, distance: Math.max(0, endOdo - startOdo),
         routeNote,
-        isSubstituteDriver, substituteDriverReason, isSubstituteVehicle, substituteVehicle,
+        isSubstituteDriver,
+        isDaeChaPickup, daeChaPlatePickup, daeChaModelPickup, daeChaHipassPickup, daeChaConditionPickup,
+        isDaeChaReturn, daeChaPlateReturn, daeChaHipassReturn, daeChaConditionReturn,
         fuelCost,
         plate: v.plate, vehicleKey: currentVehicleKey, status:'complete',
         accidentReported: accidentCompleted, accidentId: accidentCompleted ? accidentId : '',
@@ -1845,9 +1886,14 @@ async function submitLog(){
 }
 
 function resetFormAfterSubmit(carryStartOdo){
-  ['startOdo','endOdo','routeNote','substituteVehicle','substituteDriverReason','fuelCost','startLocation','endLocation','startTime','endTime','workStart','workEnd'].forEach(id=>{
+  ['startOdo','endOdo','routeNote','fuelCost','startLocation','endLocation','startTime','endTime','workStart','workEnd',
+   'daeChaPlatePickup','daeChaModelPickup','daeChaConditionPickup','daeChaPlateReturn','daeChaConditionReturn'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.value = '';
+  });
+  ['daeChaHipassPickup','daeChaHipassReturn'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.checked = false;
   });
   // 이전에 입력한 종료거리를 다음 운행의 시작거리로 자동 반영
   if(carryStartOdo !== undefined && carryStartOdo !== null){
@@ -1862,7 +1908,7 @@ function resetFormAfterSubmit(carryStartOdo){
   document.getElementById('restPeriodsList').innerHTML = '';
   document.getElementById('overtimePeriodsList').innerHTML = '';
   addDefaultRestPeriodIfEmpty(); // 휴게시간(점심시간) 기본값 12:00~13:00 재적용
-  ['substituteSwitch','substituteVehicleSwitch'].forEach(id=>{
+  ['substituteSwitch','daeChaPickupSwitch','daeChaReturnSwitch'].forEach(id=>{
     const sw = document.getElementById(id);
     if(sw && sw.classList.contains('on')) sw.click();
   });
@@ -1972,11 +2018,19 @@ function startEditRecord(idx){
 
   const subSw = document.getElementById('substituteSwitch');
   if(!!t.isSubstituteDriver !== subSw.classList.contains('on')) subSw.click();
-  document.getElementById('substituteDriverReason').value = t.substituteDriverReason || '';
 
-  const vehSw = document.getElementById('substituteVehicleSwitch');
-  if(!!t.isSubstituteVehicle !== vehSw.classList.contains('on')) vehSw.click();
-  document.getElementById('substituteVehicle').value = t.substituteVehicle || '';
+  const daeChaPickupSw = document.getElementById('daeChaPickupSwitch');
+  if(!!t.isDaeChaPickup !== daeChaPickupSw.classList.contains('on')) daeChaPickupSw.click();
+  document.getElementById('daeChaPlatePickup').value = t.daeChaPlatePickup || '';
+  document.getElementById('daeChaModelPickup').value = t.daeChaModelPickup || '';
+  document.getElementById('daeChaHipassPickup').checked = !!t.daeChaHipassPickup;
+  document.getElementById('daeChaConditionPickup').value = t.daeChaConditionPickup || '';
+
+  const daeChaReturnSw = document.getElementById('daeChaReturnSwitch');
+  if(!!t.isDaeChaReturn !== daeChaReturnSw.classList.contains('on')) daeChaReturnSw.click();
+  document.getElementById('daeChaPlateReturn').value = t.daeChaPlateReturn || '';
+  document.getElementById('daeChaHipassReturn').checked = !!t.daeChaHipassReturn;
+  document.getElementById('daeChaConditionReturn').value = t.daeChaConditionReturn || '';
 
   if(v.chairman){
     // 근로 시작/종료는 시작 시각/종료 시각과 항상 동일해야 하므로 그 값을 그대로 사용한다(과거 데이터 불일치 자동 보정)
