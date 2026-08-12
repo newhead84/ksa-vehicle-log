@@ -35,6 +35,11 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-13] 차량 선택 시 뜨는 "최근 점검요청·사고접수 이력" 패널 개편. 패널 제목에서
+  "(중복 접수 주의)" 문구 삭제. 항목별 표시를 1줄(유형·날짜) + 1줄(내용·운행자) 구조로 변경해
+  점검요청/사고 내용을 바로 확인 가능하게 함. 날짜는 YY-MM-DD로 축약 표기, 점검요청은 운행기록
+  비고(note)를, 사고접수는 사고 설명(description)을 "점검요청내용:"/"사고접수내용:" 라벨로 노출 |
+  변경: renderVehicleAlertPanel() 항목 렌더링, vehicleAlertPanel 제목 텍스트
   [2026-08-12] 임시저장 "불러오기" 시 날짜/시작거리 불일치 경고 추가. 사용자가 과거에 저장된
   초안을 오늘 것으로 착각하고 불러와 제출하는 사고를 막기 위해, 복원 직전 ① 초안의 운행일자가
   오늘과 다른 경우 ② 저장 당시 시작거리(baseOdo)가 현재 실제 이전 종료거리와 다른 경우(그 사이
@@ -66,11 +71,6 @@
   1~7월 수기기록과 8월 이후 실제 데이터의 연간 총 주행거리 연속성을 검증할 수 있게 함. 미입력
   시 기존과 동일하게 동작(대조 UI만 생략) | 신규: manualOdoCheck() | 변경:
   downloadManualMonthlyTemplate(), handleManualMonthlyUpload(), openVehicle() 모달
-  [2026-08-12] 신규 운행기록 입력 폼에서 대차인수/대차반납 항목은 평소 잘 안 쓰는 메뉴이므로,
-  출퇴근(출근/퇴근 버튼) 아래에 "🚗 대차 인수/반납" 토글 버튼을 추가하고 클릭 시에만 두 항목이
-  펼쳐지도록 기본 숨김 처리. 임시저장 복원으로 체크박스가 코드로 체크되는 경우에도 섹션이 자동
-  펼쳐지도록 처리하여 값 누락 방지 | 신규: toggleDaeChaSection(), openDaeChaSection() | 변경:
-  addTripRow() HTML 구조, toggleDaeChaPickup(), toggleDaeChaReturn()
 -->
 
 <head>
@@ -1013,7 +1013,7 @@
       <div class="last-odo-hint" id="lastOdoHint">이전 종료거리: <b>–</b> km</div>
       <div id="daechaActiveBanner" style="display:none;margin-top:10px;padding:10px 12px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:10px;font-size:12.5px;color:var(--accent);font-weight:700;line-height:1.6;word-break:keep-all;overflow-wrap:break-word;"></div>
       <div id="vehicleAlertPanel" style="display:none;margin-top:10px;padding:12px 14px;background:var(--bad-soft);border:1px solid var(--bad);border-radius:10px;">
-        <div style="font-size:12px;font-weight:700;color:var(--bad);margin-bottom:6px;">⚠ 이 차량의 최근 점검요청·사고접수 이력 (중복 접수 주의)</div>
+        <div style="font-size:12px;font-weight:700;color:var(--bad);margin-bottom:6px;">⚠ 이 차량의 최근 점검요청·사고접수 이력</div>
         <div id="vehicleAlertList" style="font-size:12.5px;color:var(--ink);line-height:1.7;word-break:keep-all;overflow-wrap:break-word;"></div>
       </div>
     </div>
@@ -5892,21 +5892,26 @@ function renderVehicleAlertPanel(plate){
   const items=[];
   (data.vehicles[plate]?.trips||[]).forEach(t=>{
     if(t.status==='점검요망'){
-      items.push({type:'점검요청', icon:'⚠', user:t.user||'', date:t.isoDate||'', ts:t.submittedAt||t.isoDate||''});
+      items.push({type:'점검요청', icon:'⚠', label:'점검요청내용', content:t.note||'', user:t.user||'', date:t.isoDate||'', ts:t.submittedAt||t.isoDate||''});
     }
   });
   Object.keys(data.accidents||{}).forEach(id=>{
     const a=data.accidents[id];
     if((a.ourVehicle?.plate||'')===plate){
-      items.push({type:'사고접수', icon:'🚨', user:a.reportedBy?.name||'', date:(a.occurredAt||a.createdAt||'').slice(0,10), ts:a.createdAt||a.occurredAt||''});
+      items.push({type:'사고접수', icon:'🚨', label:'사고접수내용', content:a.description||'', user:a.reportedBy?.name||'', date:(a.occurredAt||a.createdAt||'').slice(0,10), ts:a.createdAt||a.occurredAt||''});
     }
   });
   items.sort((a,b)=>String(b.ts).localeCompare(String(a.ts)));
   const top3 = items.slice(0,3);
 
   if(!top3.length){ panel.style.display='none'; list.innerHTML=''; return; }
+  // YYYY-MM-DD → YY-MM-DD 축약 표기
+  const toYYMMDD = d => /^\d{4}-\d{2}-\d{2}/.test(d||'') ? d.slice(2,10) : (d||'-');
   list.innerHTML = top3.map(it=>
-    `<div>${it.icon} <b>${it.type}</b> · 운행자: ${escapeHtml(it.user||'미기재')} · ${escapeHtml(it.date||'-')}</div>`
+    `<div style="margin-bottom:6px;">`+
+      `<div>${it.icon} <b>${it.type}</b> · ${escapeHtml(toYYMMDD(it.date))}</div>`+
+      `<div>${escapeHtml(it.label)}: ${escapeHtml(it.content||'미기재')} 운행자: ${escapeHtml(it.user||'미기재')}</div>`+
+    `</div>`
   ).join('');
   panel.style.display='block';
 }
