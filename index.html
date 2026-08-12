@@ -35,27 +35,6 @@
 <!--
 =================================================================
   CHANGELOG
-  [2026-08-11] 개인사용(주말·공휴일) 주유영수증 OCR 검증 기능 신규 구현
-  (RECEIPT_OCR_DESIGN.md 기반). ① 개인사용 체크 시 운행입력 카드에 영수증 첨부 UI([📷 지금 첨부]/
-  [⏳ 나중에 첨부]) 노출, 파일 선택 즉시 Google Cloud Vision OCR로 금액·일자를 함께 인식해 입력
-  주유비 및 운행일과 대조(배지로 즉시 안내, 불일치/부적격/인식실패여도 입력·제출 자체는 차단하지
-  않음). ② 일자 검증 신규: 영수증 승인일자/발행일이 운행일 기준 ±10일(RECEIPT_DATE_TOLERANCE_DAYS)을
-  벗어나면 "증빙 부적격"으로 별도 판정(금액 판정과 완전히 독립적으로 저장). ③ 제출(doSubmit) 시점에
-  캔버스 리사이즈(가로 1200px)+JPEG 75% 압축 후 Firebase Storage REST API로 업로드, trip에
-  receiptPath/receiptOcrAmount/receiptOcrMatched/receiptOcrDate/receiptDateValid/receiptUploadedAt
-  필드 신규 저장(업로드 실패 시에도 receiptPath=null로 폴백해 제출은 정상 진행). ④ 관리자
-  "주말·공휴일 개인사용 현황" 표에 증빙상태 컬럼 추가(금액일치/금액상이/금액확인필요 +
-  일자적격/일자부적격/일자확인필요 배지, 대기중(D-N)/기한초과 상태 포함) 및 원본 이미지 열람 버튼
-  추가 | 변경: firebaseConfig 하단 GOOGLE_VISION_API_KEY/FIREBASE_STORAGE_BUCKET/
-  RECEIPT_DATE_TOLERANCE_DAYS 신규 상수, fbSet() 뒤 fileToBase64()/callVisionOcr()/
-  parseReceiptAmount()/parseReceiptDate()/matchReceiptAmount()/validateReceiptDate()/
-  compressReceiptImage()/buildReceiptFileName()/uploadReceiptToStorage()/fetchReceiptImageUrl()
-  신규, addTripRow() 영수증 첨부 UI 마크업 추가, togglePersonalUse()/resetReceiptState()/
-  onReceiptAttachNow()/onReceiptAttachLater()/onReceiptFileSelected() 신규 연동,
-  collectRows()/doSubmit() 영수증 필드 수집·업로드·저장 로직 반영(doSubmit forEach→for..of 전환),
-  renderPersonalUseList()/receiptStatusBadgeHtml()/viewReceiptImage() 신규(관리자 증빙상태 노출).
-  ※ "내 제출 기록 수정" 화면에서의 사후 첨부(설계 1-B)와 openWeekendModal() 문구 갱신은 이번
-  범위에서 아직 미구현 — 후속 작업 필요
   [2026-08-11] 사고접수/점검요망 관련 3건 개선. ① 사고보고서 접수완료 안내문구 수정: "관리부서에
   알림이 전송되었습니다" → "운행 기록을 최종 제출하면 관리부서로 자동 통보됩니다"(실제 발송 시점은
   index.html 최종 제출 시이므로 문구 오해 소지 제거). ② "내 제출 기록 수정" 위(이전종료거리 안내
@@ -118,6 +97,15 @@
   fetchDaeChaFuelPhotoUrl()/viewDaeChaFuelPhoto() 신규, doSubmit() 사진 압축·업로드 반영,
   collectRows()/restoreDraft() 사진 필드 처리(File 객체 미복원 시 재촬영 안내), exportToExcel()
   대차주유게이지 컬럼을 "사진 첨부" 표기로 변경
+  [2026-08-12] 대차인수/반납 관련 3건 개선. ① 대차인수만 하고 그날 운행하지 않은 경우, 종료거리를
+  입력하지 않아도(0) 시작거리와 동일하게(주행 0km) 자동 처리되어 운행제출이 가능하도록 검증 로직
+  완화(단, 대차반납이 함께 체크되었거나 실제 종료거리<시작거리인 오타는 기존대로 차단). ② 주유게이지
+  촬영 UI에 [📷 촬영] 외 [🖼 앨범에서 선택] 버튼 추가(카메라 강제 실행(capture="environment") 없는
+  별도 file input 연결, 인수/반납 공통). ③ 대차반납 체크 시 해당 차량의 인수 당시 촬영해 둔 주유게이지
+  사진을 반납 화면에서도 바로 확인할 수 있도록 [📷 인수 시 촬영한 주유게이지 사진 확인] 버튼 노출 |
+  변경: collectRows()(endOdo 자동보정), submitDirectInput() 검증조건 수정, addTripRow()(앨범 선택
+  input 2종 추가, daechaPickupPhotoWrap-${id} 신규), getActiveDaeChaInfo()(fuelGauge 필드 추가),
+  applyDaeChaReturnPrefill()(인수 사진 확인 버튼 표시/경로 연결)
 -->
 
 <head>
@@ -5764,7 +5752,8 @@ function getActiveDaeChaInfo(plate){
         preDaeChaOdo: prev ? (Number(prev.endOdo)||0) : null,
         plate: t.daeChaPate||'',
         model: t.daeChaModel||'',
-        condition: t.daeChaPickupCondition||''
+        condition: t.daeChaPickupCondition||'',
+        fuelGauge: t.daeChaPickupFuelGauge||''
       };
     }
     if(t.isDaeChaReturn) active = null;
@@ -6116,8 +6105,12 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
             </label>
             <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">주유게이지 확인 사진 <span style="font-size:11px;color:var(--muted);font-weight:400;">(계기판을 촬영해 남겨주세요 · 반납 시 동일 수준으로 주유해야 합니다)</span></div>
             <input type="hidden" class="tr-daecha-fuel-pickup" value="">
-            <button type="button" onclick="document.getElementById('daechaFuelFile-pickup-${id}').click()" style="width:100%;padding:10px 12px;border-radius:7px;border:1.5px dashed var(--accent);background:#fff;color:var(--accent);font-size:13px;font-weight:700;cursor:pointer;">📷 주유게이지 촬영</button>
+            <div style="display:flex;gap:8px;">
+              <button type="button" onclick="document.getElementById('daechaFuelFile-pickup-${id}').click()" style="flex:1;padding:10px 8px;border-radius:7px;border:1.5px dashed var(--accent);background:#fff;color:var(--accent);font-size:13px;font-weight:700;cursor:pointer;">📷 촬영</button>
+              <button type="button" onclick="document.getElementById('daechaFuelFileAlbum-pickup-${id}').click()" style="flex:1;padding:10px 8px;border-radius:7px;border:1.5px dashed var(--accent);background:#fff;color:var(--accent);font-size:13px;font-weight:700;cursor:pointer;">🖼 앨범에서 선택</button>
+            </div>
             <input type="file" id="daechaFuelFile-pickup-${id}" accept="image/*" capture="environment" style="display:none;" onchange="onDaeChaFuelPhotoSelected(this,'${id}','pickup')">
+            <input type="file" id="daechaFuelFileAlbum-pickup-${id}" accept="image/*" style="display:none;" onchange="onDaeChaFuelPhotoSelected(this,'${id}','pickup')">
             <div id="daechaFuelThumbWrap-pickup-${id}" style="display:none;margin-top:8px;align-items:center;gap:8px;">
               <img id="daechaFuelThumb-pickup-${id}" src="" alt="주유게이지 사진" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--accent);flex-shrink:0;">
               <span style="font-size:11.5px;color:var(--good);font-weight:700;">✓ 촬영 완료</span>
@@ -6125,7 +6118,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
             </div>
             <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">차량 이상여부</div>
             <input type="text" class="tr-daecha-condition-pickup" placeholder="예: 앞범퍼 스크래치 (없으면 비워두세요)" style="border:1.5px solid var(--accent);border-radius:7px;padding:10px 12px;font-family:'Paperlogy';font-size:14px;width:100%;background:#fff;box-sizing:border-box;" oninput="scheduleDraft()">
-            <div style="font-size:11px;color:var(--accent);margin-top:8px;line-height:1.5;">💡 원 차량 기준으로 가동일이 반영됩니다. 거리 불연속은 정상입니다. 이 운행기록의 <b>시작거리</b>가 인수 당시 계기판 거리로 사용됩니다. 인수만 하고 운행하지 않았다면 시작거리·종료거리를 동일하게 입력해 주세요.</div>
+            <div style="font-size:11px;color:var(--accent);margin-top:8px;line-height:1.5;">💡 원 차량 기준으로 가동일이 반영됩니다. 거리 불연속은 정상입니다. 이 운행기록의 <b>시작거리</b>가 인수 당시 계기판 거리로 사용됩니다. 인수만 하고 그날 운행하지 않았다면 <b>종료거리는 비워두셔도</b> 시작거리와 동일하게(주행 0km) 자동 처리되어 제출됩니다.</div>
           </div>
         </div>
       </div>
@@ -6144,10 +6137,17 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
               <span class="check-icon"></span>
               <span class="check-text" style="font-size:12.5px;">기존 차량 하이패스카드를 원상복구함</span>
             </label>
+            <div id="daechaPickupPhotoWrap-${id}" style="display:none;margin-bottom:10px;">
+              <button type="button" class="btn-ghost" style="width:100%;padding:9px 12px;border-radius:7px;font-size:12.5px;font-weight:700;" onclick="viewDaeChaFuelPhoto(this.dataset.path)">📷 인수 시 촬영한 주유게이지 사진 확인</button>
+            </div>
             <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">주유게이지 원복 확인 사진</div>
             <input type="hidden" class="tr-daecha-fuel-return" value="">
-            <button type="button" onclick="document.getElementById('daechaFuelFile-return-${id}').click()" style="width:100%;padding:10px 12px;border-radius:7px;border:1.5px dashed var(--accent);background:#fff;color:var(--accent);font-size:13px;font-weight:700;cursor:pointer;">📷 주유게이지 촬영</button>
+            <div style="display:flex;gap:8px;">
+              <button type="button" onclick="document.getElementById('daechaFuelFile-return-${id}').click()" style="flex:1;padding:10px 8px;border-radius:7px;border:1.5px dashed var(--accent);background:#fff;color:var(--accent);font-size:13px;font-weight:700;cursor:pointer;">📷 촬영</button>
+              <button type="button" onclick="document.getElementById('daechaFuelFileAlbum-return-${id}').click()" style="flex:1;padding:10px 8px;border-radius:7px;border:1.5px dashed var(--accent);background:#fff;color:var(--accent);font-size:13px;font-weight:700;cursor:pointer;">🖼 앨범에서 선택</button>
+            </div>
             <input type="file" id="daechaFuelFile-return-${id}" accept="image/*" capture="environment" style="display:none;" onchange="onDaeChaFuelPhotoSelected(this,'${id}','return')">
+            <input type="file" id="daechaFuelFileAlbum-return-${id}" accept="image/*" style="display:none;" onchange="onDaeChaFuelPhotoSelected(this,'${id}','return')">
             <div id="daechaFuelThumbWrap-return-${id}" style="display:none;margin-top:8px;align-items:center;gap:8px;">
               <img id="daechaFuelThumb-return-${id}" src="" alt="주유게이지 사진" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--accent);flex-shrink:0;">
               <span style="font-size:11.5px;color:var(--good);font-weight:700;">✓ 촬영 완료</span>
@@ -6479,10 +6479,21 @@ function applyDaeChaReturnPrefill(id, checked){
   const card = document.getElementById(id);
   if(!card) return;
   const relinkNote = document.getElementById('daechaReturnRelinkNote-'+id);
-  if(!checked){ if(relinkNote) relinkNote.style.display='none'; return; }
+  const photoWrap = document.getElementById('daechaPickupPhotoWrap-'+id);
+  if(!checked){ if(relinkNote) relinkNote.style.display='none'; if(photoWrap) photoWrap.style.display='none'; return; }
   const plate = document.getElementById('userPlateSelect')?.value || '';
   const info = plate ? getActiveDaeChaInfo(plate) : null;
-  if(!info){ if(relinkNote) relinkNote.style.display='none'; return; }
+  if(!info){ if(relinkNote) relinkNote.style.display='none'; if(photoWrap) photoWrap.style.display='none'; return; }
+  // 대차 인수 시 촬영해둔 주유게이지 사진이 있으면, 반납 화면에서도 바로 확인할 수 있도록 버튼 노출
+  if(photoWrap){
+    if(info.fuelGauge){
+      const photoBtn = photoWrap.querySelector('button');
+      if(photoBtn) photoBtn.dataset.path = info.fuelGauge;
+      photoWrap.style.display = 'block';
+    } else {
+      photoWrap.style.display = 'none';
+    }
+  }
   const plateInp = card.querySelector('.tr-daecha-plate-return');
   if(plateInp && !plateInp.value) plateInp.value = info.plate || '';
   const condInp = card.querySelector('.tr-daecha-condition-return');
@@ -6869,7 +6880,12 @@ function collectRows(){
     const dateFrom = card.querySelector('.tr-date-from')?.value || '';
     const dateTo = card.querySelector('.tr-date-to')?.value || dateFrom;
     const startOdo = Number((card.querySelector('.tr-start').value||'').replace(/,/g,''))||0;
-    const endOdo = Number((card.querySelector('.tr-end').value||'').replace(/,/g,''))||0;
+    const endOdoRaw = Number((card.querySelector('.tr-end').value||'').replace(/,/g,''))||0;
+    const isDaeChaPickup = card.querySelector('.tr-daecha-pickup-chk')?.checked || false;
+    const isDaeChaReturn = card.querySelector('.tr-daecha-return-chk')?.checked || false;
+    // 대차인수만 하고(반납은 아님) 그날 운행하지 않아 종료거리를 입력하지 않은 경우,
+    // 시작거리(인수 당시 계기판 거리)와 동일하게 처리해 주행거리 0km로 제출 가능하게 함.
+    const endOdo = (isDaeChaPickup && !isDaeChaReturn && !endOdoRaw) ? startOdo : endOdoRaw;
     const dest = card.querySelector('.tr-dest').value.trim();
     const user = card.querySelector('.tr-user').value.trim();
     const isPersonal = card.querySelector('.tr-personal-chk')?.checked || false;
@@ -6879,8 +6895,6 @@ function collectRows(){
     const statusBtn = card.querySelector('.status-btn.active-good, .status-btn.active-bad');
     const status = statusBtn ? statusBtn.dataset.val : '정상';
     const note = card.querySelector('.tr-note').value.trim();
-    const isDaeChaPickup = card.querySelector('.tr-daecha-pickup-chk')?.checked || false;
-    const isDaeChaReturn = card.querySelector('.tr-daecha-return-chk')?.checked || false;
     const isDaeCha = isDaeChaPickup || isDaeChaReturn;
     const daeChaPate = isDaeChaPickup
       ? (card.querySelector('.tr-daecha-plate-pickup')?.value.trim()||'')
@@ -7052,8 +7066,10 @@ async function submitDirectInput(){
     const r = rows[i];
     if(!r.dateFrom){ showUserFormErr(`${i+1}번 운행기록: 운행기간 시작일을 입력해 주세요.`); return; }
     if(!r.user){ showUserFormErr(`${i+1}번 운행기록: 운행자 이름을 입력해 주세요.`); return; }
+    // 대차인수만 하고(반납 아님) 그날 운행하지 않은 건은 종료거리=시작거리(주행 0km)로 자동 처리되어 제출 가능
+    const isDaeChaPickupOnly = r.isDaeChaPickup && !r.isDaeChaReturn;
     if(!r.endOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리를 입력해 주세요.`); return; }
-    if(r.endOdo <= r.startOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리가 시작거리보다 작습니다.`); return; }
+    if(r.endOdo <= r.startOdo && !(isDaeChaPickupOnly && r.endOdo === r.startOdo)){ showUserFormErr(`${i+1}번 운행기록: 종료거리가 시작거리보다 작습니다.`); return; }
     if(!r.dest){ showUserFormErr(`${i+1}번 운행기록: 행선지를 입력해 주세요.`); return; }
     if(r.isDaeCha && !r.daeChaPate){ showUserFormErr(`${i+1}번 운행기록: 대차인수/대차반납 체크 시 대차 차량번호를 반드시 입력해 주세요.`); return; }
     if(r.isPersonal && !r.fuel){ showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유비를 입력해 주세요.`); return; }
