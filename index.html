@@ -35,12 +35,13 @@
 <!--
 =================================================================
   CHANGELOG
-  [2026-08-12] 대차반납 체크 시 시작거리 자동변경 안내문구 개선. 기존에는 대차인수/반납 공통으로
-  "대차 차량은 원 차량과 주행거리가 이어지지 않습니다" 문구만 표시되어, 대차반납 체크 시 시작거리가
-  실제로 자동 변경된다는 점이 명확히 전달되지 않던 문제 수정. 대차반납 체크 시에는 "대차반납
-  체크로 시작거리가 자동 변경되었습니다. / 정비 완료된 본래 차량의 종료거리를 확인하여 입력."
-  2줄 문구로 전환(대차인수만 체크된 경우는 기존 문구 유지), 대차반납 체크/해제에 따라 표시 여부도
-  함께 전환 | 변경: applyDaeChaActiveState()
+  [2026-08-12] QR 잠금(?plate=) 진입 시 오래된 임시저장 초안이 조용히 자동복원되어 방금 계산된
+  시작거리(이전 종료거리·진행중인 대차 반영값)를 덮어쓰던 버그 수정. "카메라 앱 전환 후 새로고침
+  대비" 자동복원은 원래 촬영 왕복 수 분 이내 상황을 위한 것인데 기간 제한이 없어, 대차 상태가
+  이미 바뀐 뒤에도 며칠 전 초안의 시작거리로 계속 덮어써지던 문제(새로고침해도 재현). 초안
+  저장시각(savedAt) 기준 30분 이내인 경우에만 자동복원하고, 그보다 오래된 초안은 기존처럼
+  배너로만 안내(사용자가 직접 "불러오기" 클릭 시에만 반영) | 변경: proceedEnterUserMode() QR
+  자동복원 분기
   [2026-08-12] 관리자 대시보드 월별 운행현황(전체 표 + 차량상세 모달)에 1~7월 수기기록 월 표시
   추가. 수기기록이 반영된 월 셀에 보라색 점선 테두리를 표시하고(m-manual), 마우스오버 시 "수기
   운행일지 기록 월: 운행거리·가동율만 확인 가능(세부 운행기록 없음)" 툴팁 안내. 전체 표 상단에는
@@ -2350,17 +2351,23 @@ function proceedEnterUserMode(){
         lockVehicleSelectionForQr(plate);
       }
     }
-    // 잠금 여부가 확정된 이후에 임시저장 확인. QR로 진입한 차량과 일치하는 임시저장본이 있으면
+    // 잠금 여부가 확정된 이후에 임시저장 확인. QR로 진입한 차량과 일치하는 "최근" 임시저장본이 있으면
     // (주유게이지 사진 촬영을 위해 카메라 앱으로 전환했다가 돌아올 때 저사양 기기에서 브라우저가
     // 페이지를 새로고침해 초기화면으로 돌아가는 경우가 있음 — 이때 입력값을 잃지 않도록) 배너 클릭 없이
     // 바로 복원한다. QR 진입이 아니거나 일치하는 초안이 없으면 기존과 같이 배너로 안내한다.
+    // 단, 대차 상태 등 차량 상태는 시간에 따라 바뀔 수 있으므로, 오래된(30분 초과) 초안은 자동복원 대상에서
+    // 제외하고 기존처럼 배너로만 안내한다(사용자가 직접 "불러오기"를 눌러야 반영 — 방금 계산된 최신
+    // 시작거리·대차 정보가 오래된 초안 값으로 조용히 덮어써지는 것을 방지).
+    const AUTO_RESTORE_MAX_AGE_MS = 30 * 60 * 1000; // 30분
     if(qrLockedPlate){
       let autoRestored = false;
       try{
         const raw = localStorage.getItem(DRAFT_KEY);
         if(raw){
           const draft = JSON.parse(raw);
-          if(draft.plate === qrLockedPlate && draft.rows?.length){
+          const savedAtMs = draft.savedAt ? new Date(draft.savedAt).getTime() : NaN;
+          const isRecent = !isNaN(savedAtMs) && (Date.now() - savedAtMs) <= AUTO_RESTORE_MAX_AGE_MS;
+          if(draft.plate === qrLockedPlate && draft.rows?.length && isRecent){
             autoRestored = true;
             restoreDraft().then(()=>{
               const hint = document.getElementById('draftSavedHint');
