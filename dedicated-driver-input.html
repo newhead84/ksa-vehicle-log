@@ -355,6 +355,18 @@
   .ded-conditional.invalid input{border-bottom-color:var(--ded-red);}
   .ded-conditional.invalid .err{display:block;}
 
+  /* ── 대차 인수/반납: 평소 잘 안 쓰는 메뉴라 버튼을 눌러야만 펼쳐지도록 숨김 처리 ── */
+  .ded-daecha-toggle-btn{
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    width:100%; margin:2px 0 4px; padding:12px; border-radius:2px;
+    background:none; border:1px dashed var(--ded-line); color:var(--ded-muted);
+    font-family:'Pretendard',sans-serif; font-size:14px; font-weight:500; cursor:pointer;
+  }
+  .ded-daecha-toggle-btn:hover{border-color:var(--ded-beige); color:var(--ded-beige);}
+  .ded-daecha-toggle-btn .sub-inline{font-size:12px; font-weight:400; color:var(--ded-muted-2);}
+  /* 대차인수/반납은 상호 배타적으로 동작(한 쪽이 켜지면 반대쪽은 선택 불가) */
+  .ded-switch.ded-switch-disabled{opacity:.35; pointer-events:none; cursor:not-allowed;}
+
   /* ── 근태 반복 섹션 (회장차 전용) ── */
   .ded-period-list{display:flex; flex-direction:column; gap:10px; margin:10px 0 12px;}
   .ded-period-row{
@@ -803,52 +815,59 @@
       <div class="ded-switch" id="substituteSwitch" onclick="this.classList.toggle('on')"><div class="knob"></div></div>
     </div>
 
-    <div class="ded-toggle-row">
-      <div class="lbl">🚗 대차인수
-        <span class="sub">렌트 차량 정비 등으로 대차 차량을 인수한 날 켜주세요</span>
-      </div>
-      <div class="ded-switch" id="daeChaPickupSwitch" onclick="toggleSwitch('daeChaPickupSwitch','daeChaPickupCond')"><div class="knob"></div></div>
-    </div>
-    <div class="ded-conditional daecha-cond" id="daeChaPickupCond">
-      <div class="ded-line-field">
-        <label>대차 차량번호<span class="req">*</span></label>
-        <div class="in-wrap"><input type="text" id="daeChaPlatePickup" placeholder="대차 차량번호 입력(필수)"></div>
-      </div>
-      <div class="ded-line-field">
-        <label>차종</label>
-        <div class="in-wrap"><input type="text" id="daeChaModelPickup" placeholder="예: 아반떼"></div>
-      </div>
-      <label class="daecha-chk-row">
-        <input type="checkbox" id="daeChaHipassPickup">
-        <span>기존 차량 하이패스카드를 대차로 이동 장착함</span>
-      </label>
-      <div class="ded-line-field">
-        <label>차량 이상여부</label>
-        <div class="in-wrap"><input type="text" id="daeChaConditionPickup" placeholder="예: 앞범퍼 스크래치 (없으면 비워두세요)"></div>
-      </div>
-      <div class="err" id="daeChaPickupErr">대차 차량번호 입력은 필수입니다.</div>
-    </div>
+    <button type="button" class="ded-daecha-toggle-btn" id="daeChaSectionToggleBtn" onclick="toggleDaeChaSection()">
+      🚗 대차 인수/반납 <span class="sub-inline">(대차 이용 시에만 클릭)</span> <span id="daeChaSectionArrow">▾</span>
+    </button>
 
-    <div class="ded-toggle-row">
-      <div class="lbl">↩ 대차반납
-        <span class="sub">대차 차량을 반납하는 날 켜주세요</span>
+    <div id="daeChaSection" style="display:none;">
+      <div class="ded-toggle-row">
+        <div class="lbl">🚗 대차인수
+          <span class="sub">렌트 차량 정비 등으로 대차 차량을 인수한 날 켜주세요</span>
+        </div>
+        <div class="ded-switch" id="daeChaPickupSwitch" onclick="toggleDaeChaPickupSwitch()"><div class="knob"></div></div>
       </div>
-      <div class="ded-switch" id="daeChaReturnSwitch" onclick="toggleSwitch('daeChaReturnSwitch','daeChaReturnCond')"><div class="knob"></div></div>
-    </div>
-    <div class="ded-conditional daecha-cond" id="daeChaReturnCond">
-      <div class="ded-line-field">
-        <label>대차 차량번호<span class="req">*</span></label>
-        <div class="in-wrap"><input type="text" id="daeChaPlateReturn" placeholder="대차 차량번호 입력(필수)"></div>
+      <div class="ded-conditional daecha-cond" id="daeChaPickupCond">
+        <div class="ded-line-field">
+          <label>대차 차량번호<span class="req">*</span></label>
+          <div class="in-wrap"><input type="text" id="daeChaPlatePickup" placeholder="대차 차량번호 입력(필수)"></div>
+        </div>
+        <div class="ded-line-field">
+          <label>차종</label>
+          <div class="in-wrap"><input type="text" id="daeChaModelPickup" placeholder="예: 아반떼"></div>
+        </div>
+        <label class="daecha-chk-row">
+          <input type="checkbox" id="daeChaHipassPickup">
+          <span>기존 차량 하이패스카드를 대차로 이동 장착함</span>
+        </label>
+        <div class="ded-line-field">
+          <label>차량 이상여부</label>
+          <div class="in-wrap"><input type="text" id="daeChaConditionPickup" placeholder="예: 앞범퍼 스크래치 (없으면 비워두세요)"></div>
+        </div>
+        <div class="err" id="daeChaPickupErr">대차 차량번호 입력은 필수입니다.</div>
       </div>
-      <label class="daecha-chk-row">
-        <input type="checkbox" id="daeChaHipassReturn">
-        <span>기존 차량 하이패스카드를 원상복구함</span>
-      </label>
-      <div class="ded-line-field">
-        <label>차량 이상여부</label>
-        <div class="in-wrap"><input type="text" id="daeChaConditionReturn" placeholder="예: 이상없음"></div>
+
+      <div class="ded-toggle-row">
+        <div class="lbl">↩ 대차반납
+          <span class="sub">대차 차량을 반납하는 날 켜주세요</span>
+        </div>
+        <div class="ded-switch" id="daeChaReturnSwitch" onclick="toggleDaeChaReturnSwitch()"><div class="knob"></div></div>
       </div>
-      <div class="err" id="daeChaReturnErr">대차 차량번호 입력은 필수입니다.</div>
+      <div class="ded-conditional daecha-cond" id="daeChaReturnCond">
+        <div class="ded-line-field">
+          <label>대차 차량번호<span class="req">*</span></label>
+          <div class="in-wrap"><input type="text" id="daeChaPlateReturn" placeholder="대차 차량번호 입력(필수)"></div>
+        </div>
+        <label class="daecha-chk-row">
+          <input type="checkbox" id="daeChaHipassReturn">
+          <span>기존 차량 하이패스카드를 원상복구함</span>
+        </label>
+        <div class="ded-line-field">
+          <label>차량 이상여부</label>
+          <div class="in-wrap"><input type="text" id="daeChaConditionReturn" placeholder="예: 이상없음"></div>
+        </div>
+        <div class="err" id="daeChaReturnErr">대차 차량번호 입력은 필수입니다.</div>
+        <div class="ded-field-note" id="daeChaReturnRelinkNote" style="display:none;"></div>
+      </div>
     </div>
   </div>
 
@@ -1408,6 +1427,161 @@ function toggleSwitch(swId, condId){
   if(!isOn) cond.classList.remove('invalid');
 }
 
+// ============================================================
+// ★ 대차 인수/반납 (전용차량) ★
+// 대차 인수/반납은 평소 잘 쓰지 않는 메뉴라 "🚗 대차 인수/반납" 버튼을 눌러야만 두 항목이
+// 펼쳐지도록 숨김 처리한다(공용차량 index.html의 daecha 토글 버튼과 동일한 UX).
+// 인수/반납은 상호 배타적으로 동작(동시에 켤 수 없음 — 인수와 반납은 각각 별도 운행기록에 입력).
+// ============================================================
+function toggleDaeChaSection(){
+  const section = document.getElementById('daeChaSection');
+  if(!section) return;
+  const willOpen = section.style.display === 'none';
+  if(willOpen) openDaeChaSection();
+  else { section.style.display = 'none'; const arrow = document.getElementById('daeChaSectionArrow'); if(arrow) arrow.textContent = '▾'; }
+}
+
+function openDaeChaSection(){
+  const section = document.getElementById('daeChaSection');
+  const arrow = document.getElementById('daeChaSectionArrow');
+  if(section) section.style.display = 'block';
+  if(arrow) arrow.textContent = '▴';
+}
+
+function setDaeChaSwitchDisabled(swId, disabled){
+  const sw = document.getElementById(swId);
+  if(sw) sw.classList.toggle('ded-switch-disabled', disabled);
+}
+
+function toggleDaeChaPickupSwitch(){
+  const sw = document.getElementById('daeChaPickupSwitch');
+  if(!sw || sw.classList.contains('ded-switch-disabled')) return;
+  toggleSwitch('daeChaPickupSwitch', 'daeChaPickupCond');
+  const isOn = sw.classList.contains('on');
+  if(isOn) openDaeChaSection(); // 임시저장 복원·수정모드 등으로 체크만 되고 섹션이 닫혀있는 경우 대비
+  setDaeChaSwitchDisabled('daeChaReturnSwitch', isOn); // 인수/반납 동시 선택 방지
+  applyDaeChaDestAutofill();
+  applyDaeChaPickupStartOdo(isOn);
+}
+
+function toggleDaeChaReturnSwitch(){
+  const sw = document.getElementById('daeChaReturnSwitch');
+  if(!sw || sw.classList.contains('ded-switch-disabled')) return;
+  toggleSwitch('daeChaReturnSwitch', 'daeChaReturnCond');
+  const isOn = sw.classList.contains('on');
+  if(isOn) openDaeChaSection();
+  setDaeChaSwitchDisabled('daeChaPickupSwitch', isOn); // 인수/반납 동시 선택 방지
+  applyDaeChaDestAutofill();
+  applyDaeChaReturnStartOdo(isOn);
+}
+
+// 대차인수/대차반납 스위치 상태에 따라 행선지를 자동으로 "대차인수"/"대차반납"으로 표기.
+// 해제 시에는 자동표기 이전에 사용자가 입력해 두었던 값으로 복원한다.
+// (기존 운행기록 수정 화면에서는 저장된 원본 행선지를 그대로 보존하기 위해 적용하지 않음)
+function applyDaeChaDestAutofill(){
+  if(editingIndex !== null) return;
+  const destInp = document.getElementById('routeNote');
+  if(!destInp) return;
+  const pickup = document.getElementById('daeChaPickupSwitch')?.classList.contains('on') || false;
+  const ret = document.getElementById('daeChaReturnSwitch')?.classList.contains('on') || false;
+  const label = pickup ? '대차인수' : ret ? '대차반납' : '';
+  if(label){
+    if(destInp.dataset.daechaAutoFilled !== 'true') destInp.dataset.beforeDaecha = destInp.value;
+    destInp.value = label;
+    destInp.dataset.daechaAutoFilled = 'true';
+  } else if(destInp.dataset.daechaAutoFilled === 'true'){
+    destInp.value = destInp.dataset.beforeDaecha || '';
+    destInp.dataset.daechaAutoFilled = 'false';
+  }
+}
+
+// 대차인수 시: 대차 차량은 원 차량과 계기판이 이어지지 않으므로, 자동 반영되어 있던 시작거리를
+// 비우고 사용자가 대차 차량 계기판을 보고 새로 직접 입력하도록 한다.
+// 해제 시에는 대차인수 켜기 직전 값(원 차량 기준 자동반영값 등)으로 복원한다.
+function applyDaeChaPickupStartOdo(isOn){
+  if(editingIndex !== null) return;
+  if(isOn) saveStartOdoBeforeDaecha();
+  else restoreStartOdoBeforeDaecha();
+  const startInp = document.getElementById('startOdo');
+  if(isOn && startInp){
+    startInp.value = '';
+    setStartOdoAutoFilled(false);
+    calcDistance();
+  }
+}
+
+// 대차반납 스위치 on 시, 현재 진행중인(아직 반납되지 않은) 대차 인수 정보를 조회하여
+// 대차 차량번호·차량 이상여부를 채우고, 시작거리를 "대차 인수 직전 원 차량 종료거리"로
+// 재연동한다(원 차량 계기판 기준 복귀 — 공용차량 index.html의 대차반납 재연동 로직과 동일).
+async function applyDaeChaReturnStartOdo(isOn){
+  const relinkNote = document.getElementById('daeChaReturnRelinkNote');
+  if(!isOn){
+    restoreStartOdoBeforeDaecha();
+    if(relinkNote) relinkNote.style.display = 'none';
+    return;
+  }
+  if(editingIndex !== null) return;
+  saveStartOdoBeforeDaecha();
+  const myKey = currentVehicleKey;
+  const v = VEHICLES[myKey];
+  try{
+    const existing = await fbGet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`);
+    // 조회 중 차량이 바뀌었거나 대차반납 스위치가 다시 꺼졌으면 낡은 응답은 버린다
+    if(myKey !== currentVehicleKey) return;
+    if(!document.getElementById('daeChaReturnSwitch')?.classList.contains('on')) return;
+    const trips = Array.isArray(existing) ? existing.filter(t=>t) : (existing && typeof existing==='object' ? Object.values(existing) : []);
+    const sorted = trips.slice().sort((a,b)=>(a.submittedAt||'').localeCompare(b.submittedAt||''));
+    let active = null;
+    sorted.forEach((t, i)=>{
+      if(t.isDaeChaPickup && !active){
+        const prev = sorted[i-1];
+        active = {
+          plate: t.daeChaPlatePickup || '',
+          condition: t.daeChaConditionPickup || '',
+          preOdo: prev ? (Number(prev.endOdo) || 0) : null
+        };
+      }
+      if(t.isDaeChaReturn) active = null;
+    });
+    const plateInp = document.getElementById('daeChaPlateReturn');
+    if(plateInp && !plateInp.value && active?.plate) plateInp.value = active.plate;
+    const startInp = document.getElementById('startOdo');
+    if(active && active.preOdo !== null && startInp){
+      startInp.value = Number(active.preOdo).toLocaleString();
+      setStartOdoAutoFilled(true);
+      calcDistance();
+      if(relinkNote){
+        relinkNote.textContent = `🔗 대차 인수 직전 종료거리(${Number(active.preOdo).toLocaleString()}km)로 시작거리가 재연동되었습니다. 원 차량 계기판과 다르면 직접 수정해 주세요.`;
+        relinkNote.style.display = 'block';
+      }
+    } else if(relinkNote){
+      relinkNote.textContent = '';
+      relinkNote.style.display = 'none';
+    }
+  }catch(e){
+    console.error('[전용차량] 진행중인 대차 정보 조회 실패:', e);
+  }
+}
+
+// 대차인수/반납을 켜기 직전의 시작거리 값을 보관(최초 1회만 — 이미 보관된 값이 있으면 덮어쓰지 않음)
+function saveStartOdoBeforeDaecha(){
+  const startInp = document.getElementById('startOdo');
+  if(!startInp || startInp.dataset.savedBeforeDaecha !== undefined) return;
+  startInp.dataset.savedBeforeDaecha = startInp.value;
+  startInp.dataset.savedBeforeDaechaAuto = startInp.classList.contains('ded-odo-autofilled') ? '1' : '0';
+}
+
+// 대차인수/반납을 끌 때, 켜기 직전 시작거리 값으로 복원
+function restoreStartOdoBeforeDaecha(){
+  const startInp = document.getElementById('startOdo');
+  if(!startInp || startInp.dataset.savedBeforeDaecha === undefined) return;
+  startInp.value = startInp.dataset.savedBeforeDaecha;
+  setStartOdoAutoFilled(startInp.dataset.savedBeforeDaechaAuto === '1');
+  delete startInp.dataset.savedBeforeDaecha;
+  delete startInp.dataset.savedBeforeDaechaAuto;
+  calcDistance();
+}
+
 // 주유금액 입력 시 천 단위 콤마 표시 (저장 시에는 콤마 제거 후 숫자로 파싱)
 function formatFuelCostInput(){
   const el = document.getElementById('fuelCost');
@@ -1886,6 +2060,23 @@ async function submitLog(){
 }
 
 function resetFormAfterSubmit(carryStartOdo){
+  // 대차인수/반납 스위치와 관련 상태를 먼저 직접 초기화한다(click()으로 끄면 반납 조회용
+  // 비동기 fetch 등 부수효과가 발생해 아래 carryStartOdo 반영과 순서가 꼬일 수 있어 회피).
+  ['substituteSwitch','daeChaPickupSwitch','daeChaReturnSwitch'].forEach(id=>{
+    const sw = document.getElementById(id);
+    if(sw) sw.classList.remove('on');
+  });
+  document.getElementById('daeChaPickupCond')?.classList.remove('open','invalid');
+  document.getElementById('daeChaReturnCond')?.classList.remove('open','invalid');
+  setDaeChaSwitchDisabled('daeChaPickupSwitch', false);
+  setDaeChaSwitchDisabled('daeChaReturnSwitch', false);
+  const daeChaSection = document.getElementById('daeChaSection');
+  if(daeChaSection) daeChaSection.style.display = 'none';
+  const daeChaArrow = document.getElementById('daeChaSectionArrow');
+  if(daeChaArrow) daeChaArrow.textContent = '▾';
+  const daeChaRelinkNote = document.getElementById('daeChaReturnRelinkNote');
+  if(daeChaRelinkNote){ daeChaRelinkNote.textContent = ''; daeChaRelinkNote.style.display = 'none'; }
+
   ['startOdo','endOdo','routeNote','fuelCost','startLocation','endLocation','startTime','endTime','workStart','workEnd',
    'daeChaPlatePickup','daeChaModelPickup','daeChaConditionPickup','daeChaPlateReturn','daeChaConditionReturn'].forEach(id=>{
     const el = document.getElementById(id);
@@ -1895,6 +2086,11 @@ function resetFormAfterSubmit(carryStartOdo){
     const el = document.getElementById(id);
     if(el) el.checked = false;
   });
+  const startInp = document.getElementById('startOdo');
+  if(startInp){ delete startInp.dataset.savedBeforeDaecha; delete startInp.dataset.savedBeforeDaechaAuto; }
+  const routeInp = document.getElementById('routeNote');
+  if(routeInp){ delete routeInp.dataset.daechaAutoFilled; delete routeInp.dataset.beforeDaecha; }
+
   // 이전에 입력한 종료거리를 다음 운행의 시작거리로 자동 반영
   if(carryStartOdo !== undefined && carryStartOdo !== null){
     document.getElementById('startOdo').value = Number(carryStartOdo).toLocaleString();
@@ -1908,10 +2104,6 @@ function resetFormAfterSubmit(carryStartOdo){
   document.getElementById('restPeriodsList').innerHTML = '';
   document.getElementById('overtimePeriodsList').innerHTML = '';
   addDefaultRestPeriodIfEmpty(); // 휴게시간(점심시간) 기본값 12:00~13:00 재적용
-  ['substituteSwitch','daeChaPickupSwitch','daeChaReturnSwitch'].forEach(id=>{
-    const sw = document.getElementById(id);
-    if(sw && sw.classList.contains('on')) sw.click();
-  });
   initDates();
 }
 
