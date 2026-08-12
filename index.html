@@ -35,14 +35,6 @@
 <!--
 =================================================================
   CHANGELOG
-  [2026-08-11] 개인사용 영수증 OCR 검증 2건 개선. ① 금액/일자 자동 인식 실패 안내 문구를
-  "관리자가 육안 확인합니다" → "관리자 확인 예정"으로 통일(사용자 화면 배지 2곳). ② 첨부된
-  영수증이 주유영수증이 아닌 것으로 판단되면(식당/마트 등 무관한 영수증 오첨부 방지) 경고 배지
-  표시 — OCR 텍스트에서 주유소/주유기/무연/경유/리터/유종 등 키워드 존재 여부로 판정, 금액·일자
-  판정과 동일하게 제출 자체는 막지 않고 관리자 육안 확인 대상으로만 표시 | 변경:
-  isFuelReceiptText() 신규, onReceiptFileSelected()(typeBadge 추가·문구 수정), resetReceiptState()/
-  collectRows()/doSubmit()/applyTripRecordImport() receiptTypeValid 필드 반영,
-  receiptStatusBadgeHtml() 관리자 화면 유형 배지(주유영수증/유형상이/유형확인필요) 추가
   [2026-08-11] 개인사용 영수증 첨부 UI 6건 개선. ① 버튼 구성 변경: 기존 [📷 지금 첨부]/
   [⏳ 나중에 첨부] 2개 → [📷 영수증 촬영]/[🖼️ 앨범에서 선택]/[⏳ 나중에 첨부] 3개로 확장(앨범
   선택용 capture 속성 없는 별도 file input #receiptFileAlbum-${id} 신규 추가). ② "나중에 첨부"
@@ -98,6 +90,25 @@
   "확인" 시 입력한 점검요청 내용이 해당 운행기록의 비고란(.tr-note)에 자동 기재됨 | 변경:
   addTripRow()(startHint-${id} DOM 위치 이동, 주유비/출퇴근 블록 순서 교체), openMaintenancePopup()
   신규(점검요망 버튼 onclick 교체, 내부에서 setStatus() 재사용), confirmMaintenanceNote() 신규
+  [2026-08-12] 점검요청/대차인수·반납 2건 개선. ① "점검요망" 표기를 사용자 화면 전체(공용·전용
+  동일)에서 "점검요청"으로 변경 — 버튼·팝업 제목·이력 라벨 텍스트 수정, 안내문구 1줄 축약("긴급
+  정비·점검은 아래 대표번호로 접수해주세요"), "점검요청 접수 내용" 라벨로 통일, 비고란 예시 문구를
+  팝업 예시와 연동(MAINT_NOTE_EXAMPLE 상수화). 내부 저장값(status:'점검요망')은 기존 데이터
+  호환을 위해 변경하지 않음. ② 기존 "대차 운행" 체크박스 1개를 "🚗 대차인수"/"↩ 대차반납" 2개로
+  분리 — 대차인수 시 대차 차량번호(필수)·차종·기존차량 하이패스카드 이동장착 여부·주유게이지
+  확인·차량 이상여부를 입력(시작거리를 인수 당시 계기판 거리로 사용), 대차반납 시 하이패스카드
+  원상복구 여부·주유게이지 원복 확인·차량 이상여부를 입력(종료거리를 반납 당시 계기판 거리로
+  사용). 대차만 인수하고 그날 운행하지 않은 경우에도 운행기록 1건을 생성해 인수 정보만 등록 가능.
+  기존 계기판 연속성 경고 로직(이전 대차 이력 안내 등)은 그대로 재사용 | 변경: index.html(신규
+  필드 isDaeChaPickup/isDaeChaReturn/daeChaModel/daeChaPickupHipass/daeChaPickupFuelGauge/
+  daeChaPickupCondition/daeChaReturnHipass/daeChaReturnFuelGauge/daeChaReturnCondition 추가,
+  isDaeCha/daeChaPate 필드명은 유지, addTripRow() 대차 UI 재구성, toggleDaeChaPickup()/
+  toggleDaeChaReturn()/applyDaeChaActiveState()/isRowDaeChaActive() 신규(기존 toggleDaeCha()
+  대체), collectRows()/newTrip 저장 객체/saveDraft·restoreDraft/제출 검증/이력 배지 표시 반영,
+  관리자 대시보드 편집·"내 제출기록 수정" 화면 호환 유지(세부 필드는 최초 제출값 유지),
+  exportToExcel() 전체운행기록 시트에 대차구분/대차차량번호/대차차종/대차하이패스/대차주유게이지/
+  대차이상여부 컬럼 추가, applyTripRecordImport() 신규 컬럼 파싱 반영),
+  dedicated-driver-input.html(점검요청 텍스트만 동일 반영, 대차 기능 없음)
 -->
 
 <head>
@@ -1033,7 +1044,7 @@
       <div id="qrLockNote" style="display:none;font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5;word-break:keep-all;overflow-wrap:break-word;">🔒 QR 스캔으로 연동된 사업장·차량입니다. 다른 차량으로 변경이 필요하면 관리자에게 문의해주세요.</div>
       <div class="last-odo-hint" id="lastOdoHint">이전 종료거리: <b>–</b> km</div>
       <div id="vehicleAlertPanel" style="display:none;margin-top:10px;padding:12px 14px;background:var(--bad-soft);border:1px solid var(--bad);border-radius:10px;">
-        <div style="font-size:12px;font-weight:700;color:var(--bad);margin-bottom:6px;">⚠ 이 차량의 최근 점검요망·사고접수 이력 (중복 접수 주의)</div>
+        <div style="font-size:12px;font-weight:700;color:var(--bad);margin-bottom:6px;">⚠ 이 차량의 최근 점검요청·사고접수 이력 (중복 접수 주의)</div>
         <div id="vehicleAlertList" style="font-size:12.5px;color:var(--ink);line-height:1.7;word-break:keep-all;overflow-wrap:break-word;"></div>
       </div>
     </div>
@@ -4123,7 +4134,7 @@ function openVehicle(plate){
           <td class="mono" data-label="주유비"><span class="view-val mono">${t.fuel?Number(t.fuel).toLocaleString():''}</span><input class="edit-inp mono" value="${t.fuel?Number(t.fuel).toLocaleString():''}" data-f="fuel" oninput="formatFuelInput(this)" style="display:none;width:65px;"></td>
           <td class="${t.status&&t.status!=='정상'?'flag-bad-status':''}" data-label="상태"><span class="view-val">${escapeHtml(t.status||'')}</span><input class="edit-inp" value="${escapeHtml(t.status||'')}" data-f="status" style="display:none;width:60px;"></td>
           <td class="trip-usage-cell" data-label="구분">
-            <span class="view-val">${t.isPersonal?'개인사용(주말)':t.isCommute?(t.commuteDir||'출퇴근')+' 사용':t.isDaeCha?'대차 운행':'업무용'}</span>
+            <span class="view-val">${t.isPersonal?'개인사용(주말)':t.isCommute?(t.commuteDir||'출퇴근')+' 사용':t.isDaeChaReturn?'대차반납':t.isDaeCha?'대차인수':'업무용'}</span>
             <span class="edit-inp" style="display:none;">
               <div class="trip-split-chks">
                 <label class="check-label">
@@ -4134,7 +4145,7 @@ function openVehicle(plate){
                 <label class="check-label">
                   <input type="checkbox" class="native-chk adm-daecha-chk" ${t.isDaeCha?'checked':''}>
                   <span class="check-icon" style="width:16px;height:16px;"></span>
-                  <span class="check-text">대차 운행</span>
+                  <span class="check-text">대차 사용${t.isDaeCha?(t.isDaeChaReturn?' (반납)':' (인수)'):''}</span>
                 </label>
               </div>
               <div class="status-toggle trip-split-btns">
@@ -4619,7 +4630,7 @@ async function saveTripEdits(plate){
     const daechaChk=tr.querySelector('.adm-daecha-chk');
     const daechaPateInp=tr.querySelector('[data-f="daeChaPate"]');
     if(daechaChk?.checked && !(daechaPateInp?.value||'').trim()){
-      showAdminToast('저장 실패: 대차 운행으로 체크된 건은 대차 차량번호를 반드시 입력해야 합니다. (과태료·범칙금 발생 시 운행자 확인용)','bad');
+      showAdminToast('저장 실패: 대차 사용으로 체크된 건은 대차 차량번호를 반드시 입력해야 합니다. (과태료·범칙금 발생 시 운행자 확인용)','bad');
       return;
     }
     const s=Number((startInp?.value||'').replace(/,/g,''))||0;
@@ -4682,8 +4693,13 @@ async function saveTripEdits(plate){
     const personalChk=tr.querySelector('.adm-personal-chk');
     if(personalChk) target.isPersonal = personalChk.checked;
     const daechaChk=tr.querySelector('.adm-daecha-chk');
-    if(daechaChk) target.isDaeCha = daechaChk.checked;
-    if(!target.isDaeCha) target.daeChaPate='';
+    if(daechaChk){
+      const wasDaeCha = target.isDaeCha;
+      target.isDaeCha = daechaChk.checked;
+      // 관리자가 새로 켠 경우 세부 유형이 없으므로 기본값은 대차인수로 설정(필요 시 실제 제출 기록에서 인수/반납 여부를 직접 확인)
+      if(!wasDaeCha && target.isDaeCha) target.isDaeChaPickup = true;
+    }
+    if(!target.isDaeCha){ target.daeChaPate=''; target.isDaeChaPickup=false; target.isDaeChaReturn=false; }
     // 출퇴근 출근/퇴근 구분 반영 (가동율 미반영 대상)
     const activeCommuteBtn=tr.querySelector('.adm-commute-btn.active-commute');
     target.commuteDir = activeCommuteBtn ? activeCommuteBtn.dataset.dir : '';
@@ -5042,9 +5058,15 @@ function exportToExcel(){
   ws1['!cols']=[{wch:12},{wch:28},{wch:16},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10},{wch:12},{wch:12},{wch:12}];
   applyCellFormats(ws1,{4:XLSX_NUM_FMT,5:XLSX_NUM_FMT,6:XLSX_NUM_FMT,8:XLSX_NUM_FMT,9:XLSX_DATE_FMT,10:XLSX_DATE_FMT});
   const tripRows=[];
-  plates.forEach(p=>(data.vehicles[p].trips||[]).slice().sort(tripChronoCompare).forEach(t=>{tripRows.push({'차량번호':p,'지역구분':data.vehicles[p].branch||'','시작일자':excelDateCell(t.isoDate),'종료일자':excelDateCell(t.dateTo||t.isoDate),'시작거리':t.startOdo,'종료거리':t.endOdo,'주행거리(km)':t.distance,'제출자':t.submitter||'','운행자':t.user||'','행선지':t.dest||'','주유비(원)':t.fuel||0,'개인사용여부':t.isPersonal?'개인사용':'','출퇴근사용여부':t.isCommute?(t.commuteDir||'출퇴근사용'):'','출퇴근거리(km)':t.isCommute?(t.distance||0):'','차량상태':t.status||'','비고':t.note||'','입력일시':t.submittedAt?new Date(t.submittedAt).toLocaleString('ko-KR'):'','최종수정일시':t.lastEditedAt?new Date(t.lastEditedAt).toLocaleString('ko-KR'):''});}));
+  plates.forEach(p=>(data.vehicles[p].trips||[]).slice().sort(tripChronoCompare).forEach(t=>{
+    const daeChaGubun = t.isDaeChaPickup?'대차인수':t.isDaeChaReturn?'대차반납':'';
+    const daeChaHipass = t.isDaeChaPickup?(t.daeChaPickupHipass?'이동장착':''):t.isDaeChaReturn?(t.daeChaReturnHipass?'원상복구':''):'';
+    const daeChaFuelGauge = t.isDaeChaPickup?(t.daeChaPickupFuelGauge||''):t.isDaeChaReturn?(t.daeChaReturnFuelGauge||''):'';
+    const daeChaCondition = t.isDaeChaPickup?(t.daeChaPickupCondition||''):t.isDaeChaReturn?(t.daeChaReturnCondition||''):'';
+    tripRows.push({'차량번호':p,'지역구분':data.vehicles[p].branch||'','시작일자':excelDateCell(t.isoDate),'종료일자':excelDateCell(t.dateTo||t.isoDate),'시작거리':t.startOdo,'종료거리':t.endOdo,'주행거리(km)':t.distance,'제출자':t.submitter||'','운행자':t.user||'','행선지':t.dest||'','주유비(원)':t.fuel||0,'개인사용여부':t.isPersonal?'개인사용':'','출퇴근사용여부':t.isCommute?(t.commuteDir||'출퇴근사용'):'','출퇴근거리(km)':t.isCommute?(t.distance||0):'','차량상태':t.status||'','대차구분':daeChaGubun,'대차차량번호':t.daeChaPate||'','대차차종':t.daeChaModel||'','대차하이패스':daeChaHipass,'대차주유게이지':daeChaFuelGauge,'대차이상여부':daeChaCondition,'비고':t.note||'','입력일시':t.submittedAt?new Date(t.submittedAt).toLocaleString('ko-KR'):'','최종수정일시':t.lastEditedAt?new Date(t.lastEditedAt).toLocaleString('ko-KR'):''});
+  }));
   const ws2=XLSX.utils.json_to_sheet(tripRows);
-  ws2['!cols']=[{wch:12},{wch:16},{wch:10},{wch:10},{wch:10},{wch:10},{wch:12},{wch:10},{wch:10},{wch:20},{wch:10},{wch:10},{wch:12},{wch:14},{wch:10},{wch:20},{wch:18},{wch:18}];
+  ws2['!cols']=[{wch:12},{wch:16},{wch:10},{wch:10},{wch:10},{wch:10},{wch:12},{wch:10},{wch:10},{wch:20},{wch:10},{wch:10},{wch:12},{wch:14},{wch:10},{wch:10},{wch:12},{wch:10},{wch:10},{wch:12},{wch:20},{wch:20},{wch:18},{wch:18}];
   applyCellFormats(ws2,{2:XLSX_DATE_FMT,3:XLSX_DATE_FMT,6:XLSX_NUM_FMT,10:XLSX_NUM_FMT,13:XLSX_NUM_FMT});
   const year=monthlyYear||new Date().getFullYear();
   const monthlyRows=plates.map(p=>{
@@ -5236,6 +5258,14 @@ async function applyTripRecordImport(rows,resultEl){
     const isPersonal=personalRaw==='개인사용';
     const isCommute=!isPersonal && commuteRaw!=='';
     const commuteDir=(isCommute && commuteRaw!=='출퇴근사용')?commuteRaw:'';
+    const daeChaGubunRaw=String(r['대차구분']||'').trim();
+    const isDaeChaPickup=daeChaGubunRaw==='대차인수';
+    const isDaeChaReturn=daeChaGubunRaw==='대차반납';
+    const daeChaPate=String(r['대차차량번호']||'').trim();
+    const daeChaModel=String(r['대차차종']||'').trim();
+    const daeChaHipassRaw=String(r['대차하이패스']||'').trim();
+    const daeChaFuelGauge=String(r['대차주유게이지']||'').trim();
+    const daeChaCondition=String(r['대차이상여부']||'').trim();
 
     plan.push({
       plate,
@@ -5247,7 +5277,15 @@ async function applyTripRecordImport(rows,resultEl){
       fuel:parseFuelAmount(r['주유비(원)']),
       status:String(r['차량상태']||'').trim()||'정상',
       note:String(r['비고']||'').trim(),
-      isPersonal, isCommute, commuteDir
+      isPersonal, isCommute, commuteDir,
+      isDaeChaPickup, isDaeChaReturn, daeChaPate,
+      daeChaModel,
+      daeChaPickupHipass: isDaeChaPickup && daeChaHipassRaw==='이동장착',
+      daeChaPickupFuelGauge: isDaeChaPickup ? daeChaFuelGauge : '',
+      daeChaPickupCondition: isDaeChaPickup ? daeChaCondition : '',
+      daeChaReturnHipass: isDaeChaReturn && daeChaHipassRaw==='원상복구',
+      daeChaReturnFuelGauge: isDaeChaReturn ? daeChaFuelGauge : '',
+      daeChaReturnCondition: isDaeChaReturn ? daeChaCondition : ''
     });
   });
 
@@ -5278,7 +5316,13 @@ async function applyTripRecordImport(rows,resultEl){
       startOdo:p.startOdo, endOdo:p.endOdo, distance:p.distance,
       user:p.user, dest:p.dest, fuel:p.fuel, status:p.status, note:p.note,
       submitter:p.submitter||'(엑셀업로드)', branchAtTime:v.branch,
-      imgKey:null, isPersonal:p.isPersonal, isDaeCha:false, daeChaPate:'',
+      imgKey:null, isPersonal:p.isPersonal,
+      isDaeCha:!!(p.isDaeChaPickup||p.isDaeChaReturn), daeChaPate:p.daeChaPate||'',
+      isDaeChaPickup:p.isDaeChaPickup||false, isDaeChaReturn:p.isDaeChaReturn||false,
+      daeChaModel:p.daeChaModel||'', daeChaPickupHipass:p.daeChaPickupHipass||false,
+      daeChaPickupFuelGauge:p.daeChaPickupFuelGauge||'', daeChaPickupCondition:p.daeChaPickupCondition||'',
+      daeChaReturnHipass:p.daeChaReturnHipass||false, daeChaReturnFuelGauge:p.daeChaReturnFuelGauge||'',
+      daeChaReturnCondition:p.daeChaReturnCondition||'',
       isCommute:p.isCommute, commuteDir:p.commuteDir,
       submittedAt:new Date().toISOString(),
       receiptPath:null, receiptOcrAmount:null, receiptOcrMatched:null,
@@ -5621,7 +5665,7 @@ function renderVehicleAlertPanel(plate){
   const items=[];
   (data.vehicles[plate]?.trips||[]).forEach(t=>{
     if(t.status==='점검요망'){
-      items.push({type:'점검요망', icon:'⚠', user:t.user||'', date:t.isoDate||'', ts:t.submittedAt||t.isoDate||''});
+      items.push({type:'점검요청', icon:'⚠', user:t.user||'', date:t.isoDate||'', ts:t.submittedAt||t.isoDate||''});
     }
   });
   Object.keys(data.accidents||{}).forEach(id=>{
@@ -5788,8 +5832,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
     const lastCard = rows[rows.length-1];
     const lastEnd = lastCard.querySelector('.tr-end');
     prefillStart = lastEnd && lastEnd.value ? Number(lastEnd.value.replace(/,/g,'')) : null;
-    const lastDaechaChk = lastCard.querySelector('.tr-daecha-chk');
-    prefillWasDaeCha = !!(lastDaechaChk && lastDaechaChk.checked);
+    prefillWasDaeCha = isRowDaeChaActive(lastCard);
   }
 
   const card = document.createElement('div');
@@ -5860,7 +5903,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
         <label>차량 상태</label>
         <div class="status-toggle status-toggle-3">
           <button class="status-btn active-good" onclick="setStatus(this,'정상')" data-val="정상">✓ 정상</button>
-          <button class="status-btn" onclick="openMaintenancePopup(this)" data-val="점검요망">⚠ 점검요망</button>
+          <button class="status-btn" onclick="openMaintenancePopup(this)" data-val="점검요망">⚠ 점검요청</button>
           <button type="button" class="status-btn accident-btn" onclick="openAccidentPopup(this)">🚨 사고접수</button>
         </div>
         <div class="accident-flow-notice" id="accidentNotice-${id}"></div>
@@ -5923,15 +5966,63 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
       </div>
       <div class="check-field">
         <label class="check-label">
-          <input type="checkbox" class="tr-daecha-chk native-chk" onchange="toggleDaeCha(this,'${id}')">
+          <input type="checkbox" class="tr-daecha-pickup-chk native-chk" onchange="toggleDaeChaPickup(this,'${id}')">
           <span class="check-icon"></span>
-          <span class="check-text">대차 운행 <span style="font-size:12px;color:var(--muted);font-weight:400;">(수리 중 대차 사용 시)</span></span>
+          <span class="check-text">🚗 대차인수 <span style="font-size:12px;color:var(--muted);font-weight:400;">(대차 차량을 받은 날 체크 · 운행 없이 인수만 한 경우도 체크)</span></span>
         </label>
-        <div class="daecha-field" id="daecha-${id}" style="display:none;margin-top:8px;">
+        <div class="daecha-pickup-field" id="daechaPickup-${id}" style="display:none;margin-top:8px;">
           <div style="background:var(--accent-soft);border:1px solid var(--accent);border-radius:9px;padding:10px 12px;">
             <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px;">대차 차량번호 <span style="color:var(--bad);">*필수</span></div>
-            <input type="text" class="tr-daecha-plate" placeholder="대차 차량번호 입력(필수)" style="border:1.5px solid var(--accent);border-radius:7px;padding:10px 12px;font-family:'Paperlogy';font-size:14px;width:100%;background:#fff;" oninput="scheduleDraft()">
-            <div style="font-size:11px;color:var(--accent);margin-top:6px;">💡 원 차량 기준으로 가동일이 반영됩니다. 거리 불연속은 정상입니다.</div>
+            <input type="text" class="tr-daecha-plate-pickup" placeholder="대차 차량번호 입력(필수)" style="border:1.5px solid var(--accent);border-radius:7px;padding:10px 12px;font-family:'Paperlogy';font-size:14px;width:100%;background:#fff;box-sizing:border-box;" oninput="scheduleDraft()">
+            <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">차종</div>
+            <input type="text" class="tr-daecha-model" placeholder="예: 아반떼" style="border:1.5px solid var(--accent);border-radius:7px;padding:10px 12px;font-family:'Paperlogy';font-size:14px;width:100%;background:#fff;box-sizing:border-box;" oninput="scheduleDraft()">
+            <label class="check-label" style="margin-top:10px;">
+              <input type="checkbox" class="tr-daecha-hipass-pickup native-chk" onchange="scheduleDraft()">
+              <span class="check-icon"></span>
+              <span class="check-text" style="font-size:12.5px;">기존 차량 하이패스카드를 대차로 이동 장착함</span>
+            </label>
+            <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">주유게이지 확인 <span style="font-size:11px;color:var(--muted);font-weight:400;">(반납 시 동일 수준으로 주유해야 합니다)</span></div>
+            <select class="tr-daecha-fuel-pickup" style="width:100%;border:1.5px solid var(--accent);border-radius:7px;padding:9px 10px;font-family:'Paperlogy';font-size:14px;background:#fff;box-sizing:border-box;" onchange="scheduleDraft()">
+              <option value="">선택</option>
+              <option value="F">가득참(F)</option>
+              <option value="3/4">3/4</option>
+              <option value="1/2">1/2(중간)</option>
+              <option value="1/4">1/4</option>
+              <option value="E">부족(E)</option>
+            </select>
+            <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">차량 이상여부</div>
+            <input type="text" class="tr-daecha-condition-pickup" placeholder="예: 앞범퍼 스크래치 (없으면 비워두세요)" style="border:1.5px solid var(--accent);border-radius:7px;padding:10px 12px;font-family:'Paperlogy';font-size:14px;width:100%;background:#fff;box-sizing:border-box;" oninput="scheduleDraft()">
+            <div style="font-size:11px;color:var(--accent);margin-top:8px;line-height:1.5;">💡 원 차량 기준으로 가동일이 반영됩니다. 거리 불연속은 정상입니다. 이 운행기록의 <b>시작거리</b>가 인수 당시 계기판 거리로 사용됩니다. 인수만 하고 운행하지 않았다면 시작거리·종료거리를 동일하게 입력해 주세요.</div>
+          </div>
+        </div>
+      </div>
+      <div class="check-field">
+        <label class="check-label">
+          <input type="checkbox" class="tr-daecha-return-chk native-chk" onchange="toggleDaeChaReturn(this,'${id}')">
+          <span class="check-icon"></span>
+          <span class="check-text">↩ 대차반납 <span style="font-size:12px;color:var(--muted);font-weight:400;">(대차 차량을 반납하는 날 체크)</span></span>
+        </label>
+        <div class="daecha-return-field" id="daechaReturn-${id}" style="display:none;margin-top:8px;">
+          <div style="background:var(--accent-soft);border:1px solid var(--accent);border-radius:9px;padding:10px 12px;">
+            <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px;">대차 차량번호 <span style="color:var(--bad);">*필수</span></div>
+            <input type="text" class="tr-daecha-plate-return" placeholder="대차 차량번호 입력(필수)" style="border:1.5px solid var(--accent);border-radius:7px;padding:10px 12px;font-family:'Paperlogy';font-size:14px;width:100%;background:#fff;box-sizing:border-box;" oninput="scheduleDraft()">
+            <label class="check-label" style="margin-top:10px;">
+              <input type="checkbox" class="tr-daecha-hipass-return native-chk" onchange="scheduleDraft()">
+              <span class="check-icon"></span>
+              <span class="check-text" style="font-size:12.5px;">기존 차량 하이패스카드를 원상복구함</span>
+            </label>
+            <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">주유게이지 원복 확인</div>
+            <select class="tr-daecha-fuel-return" style="width:100%;border:1.5px solid var(--accent);border-radius:7px;padding:9px 10px;font-family:'Paperlogy';font-size:14px;background:#fff;box-sizing:border-box;" onchange="scheduleDraft()">
+              <option value="">선택</option>
+              <option value="F">가득참(F)</option>
+              <option value="3/4">3/4</option>
+              <option value="1/2">1/2(중간)</option>
+              <option value="1/4">1/4</option>
+              <option value="E">부족(E)</option>
+            </select>
+            <div style="font-size:11px;font-weight:700;color:var(--accent);margin:10px 0 6px;">차량 이상여부</div>
+            <input type="text" class="tr-daecha-condition-return" placeholder="예: 이상없음" style="border:1.5px solid var(--accent);border-radius:7px;padding:10px 12px;font-family:'Paperlogy';font-size:14px;width:100%;background:#fff;box-sizing:border-box;" oninput="scheduleDraft()">
+            <div style="font-size:11px;color:var(--accent);margin-top:8px;line-height:1.5;">💡 이 운행기록의 <b>종료거리</b>가 반납 당시 계기판 거리로 사용됩니다.</div>
           </div>
         </div>
       </div>
@@ -5939,7 +6030,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
         <label style="display:flex;align-items:center;justify-content:space-between;">
           <span>비고</span>
           <span class="tr-note-optional" style="font-size:11px;color:var(--muted);font-weight:400;">(선택)</span>
-          <span class="tr-note-required" style="display:none;color:var(--bad);font-size:12px;font-weight:600;">* 필수 (점검요망 사유)</span>
+          <span class="tr-note-required" style="display:none;color:var(--bad);font-size:12px;font-weight:600;">* 필수 (점검요청 사유)</span>
         </label>
         <input type="text" class="tr-note" placeholder="특이사항" oninput="scheduleDraft()">
       </div>
@@ -6006,6 +6097,8 @@ function autoFillNextRow(id){
   }
 }
 
+// 점검요청 비고란 예시 문구 — 아래 openMaintenancePopup() 팝업 내 입력창 예시와 동일하게 연동됨(하나만 수정하면 됨)
+const MAINT_NOTE_EXAMPLE = '예: 타이어 마모, 엔진 경고등 점등 등';
 function setStatus(btn, val){
   const toggle = btn.closest('.status-toggle');
   toggle.querySelectorAll('.status-btn[data-val]').forEach(b=>{b.className='status-btn';});
@@ -6019,12 +6112,12 @@ function setStatus(btn, val){
     const noteInp = card.querySelector('.tr-note');
     if(reqSpan) reqSpan.style.display = isBad ? 'inline' : 'none';
     if(optSpan) optSpan.style.display = isBad ? 'none' : 'inline';
-    if(noteInp) noteInp.placeholder = isBad ? '점검요망 사유를 입력해 주세요' : '특이사항';
+    if(noteInp) noteInp.placeholder = isBad ? MAINT_NOTE_EXAMPLE : '특이사항';
   }
   scheduleDraft();
 }
 
-// "⚠ 점검요망" 버튼 — 차량상태를 점검요망으로 표시(setStatus 재사용)하고, 정비·점검은 롯데렌터카에
+// "⚠ 점검요청" 버튼 — 차량상태를 점검요망으로 표시(setStatus 재사용)하고, 정비·점검은 롯데렌터카에
 // 직접 접수하도록 안내하는 팝업(사고접수 팝업과 동일한 톤)을 띄운다. 팝업 내 입력창에 점검요청 내용을
 // 적고 "확인"을 누르면 해당 내용이 운행기록의 비고란(.tr-note)에 그대로 기재된다(비고는 setStatus에
 // 의해 이미 필수 표시됨). 비고란은 팝업 종료 후에도 자유롭게 추가 수정 가능.
@@ -6036,15 +6129,15 @@ function openMaintenancePopup(btn){
   const existing = noteInp?.value || '';
   document.getElementById('modalBody').innerHTML = `
     <div class="modal-head">
-      <div><div class="plate-big" style="font-size:18px;">⚠ 점검요망 안내</div><div class="muted" style="font-size:12px;word-break:keep-all;overflow-wrap:break-word;">차량 점검·정비는 아래 번호로 롯데렌터카에 직접 접수해 주세요.</div></div>
+      <div><div class="plate-big" style="font-size:18px;">⚠ 점검요청 안내</div><div class="muted" style="font-size:12px;word-break:keep-all;overflow-wrap:break-word;">긴급 정비·점검은 아래 대표번호로 접수해주세요.</div></div>
       <button class="close-x" onclick="closeModal()">✕</button>
     </div>
     <a href="tel:1588-1230" style="display:block;text-align:center;background:var(--bad);color:#fff;text-decoration:none;border-radius:12px;padding:16px;font-size:19px;font-weight:700;margin-top:14px;">
       1588-1230 전화 걸기
       <div style="font-size:11.5px;font-weight:500;opacity:.85;margin-top:2px;">롯데렌터카 대표번호</div>
     </a>
-    <div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-top:16px;margin-bottom:6px;">점검요청 내용 <span style="color:var(--bad);">*필수</span></div>
-    <textarea id="maintNoteInput" placeholder="예: 타이어 마모, 엔진 경고등 점등 등" style="width:100%;min-height:70px;border:1.5px solid var(--line);border-radius:12px;padding:12px;font-size:14px;font-family:'Paperlogy',sans-serif;box-sizing:border-box;resize:vertical;">${escapeHtml(existing)}</textarea>
+    <div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-top:16px;margin-bottom:6px;">점검요청 접수 내용 <span style="color:var(--bad);">*필수</span></div>
+    <textarea id="maintNoteInput" placeholder="${MAINT_NOTE_EXAMPLE}" style="width:100%;min-height:70px;border:1.5px solid var(--line);border-radius:12px;padding:12px;font-size:14px;font-family:'Paperlogy',sans-serif;box-sizing:border-box;resize:vertical;">${escapeHtml(existing)}</textarea>
     <button type="button" onclick="confirmMaintenanceNote('${id}')" style="display:block;width:100%;text-align:center;background:var(--navy);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;margin-top:12px;cursor:pointer;">
       확인 (비고에 기재)
     </button>
@@ -6204,34 +6297,54 @@ window.addEventListener('message', (e)=>{
   if(document.getElementById('modalOverlay')?.classList.contains('show')) closeModal();
 });
 
-function toggleDaeCha(chk, id){
-  const field = document.getElementById('daecha-'+id);
-  if(!field) return;
-  field.style.display = chk.checked ? 'block' : 'none';
+// 대차인수·대차반납 체크박스 중 하나라도 켜져 있으면 이 운행기록은 "대차 사용 중"으로 취급한다
+// (계기판 연속성 경고·시작거리 자동채움 해제 등 기존 대차 운행 로직과 동일하게 동작).
+function isRowDaeChaActive(card){
+  return !!(card?.querySelector('.tr-daecha-pickup-chk')?.checked || card?.querySelector('.tr-daecha-return-chk')?.checked);
+}
+
+function toggleDaeChaPickup(chk, id){
+  const field = document.getElementById('daechaPickup-'+id);
+  if(field) field.style.display = chk.checked ? 'block' : 'none';
+  applyDaeChaActiveState(id);
+}
+
+function toggleDaeChaReturn(chk, id){
+  const field = document.getElementById('daechaReturn-'+id);
+  if(field) field.style.display = chk.checked ? 'block' : 'none';
+  applyDaeChaActiveState(id);
+}
+
+// 대차인수/대차반납 체크 상태 변경 시 공통으로 반영되는 부분(계기판 연속성 경고, 시작거리 자동채움 해제 등).
+function applyDaeChaActiveState(id){
   const card = document.getElementById(id);
-  const prevWarn = card?.querySelector('[id^="prevDaechaWarn-"]');
-  const daechaNotice = card?.querySelector('[id^="daechaNotice-"]');
-  const startInp = card?.querySelector('.tr-start');
+  if(!card) return;
+  const active = isRowDaeChaActive(card);
+  const prevWarn = card.querySelector('[id^="prevDaechaWarn-"]');
+  const daechaNotice = card.querySelector('[id^="daechaNotice-"]');
+  const startInp = card.querySelector('.tr-start');
   // 대차 시 시작거리 자동채움 해제 (다른 차량이므로) + 사용자가 직접 재입력하도록 강조 표시
-  if(chk.checked){
-    const hint = card?.querySelector('[id^="startHint-"]');
-    if(startInp){
-      // 대차 체크 해제 시 원래 자동채움 값으로 되돌릴 수 있도록 보관
-      card.dataset.savedStart = startInp.value;
-      card.dataset.savedStartAuto = startInp.classList.contains('auto-filled') ? '1' : '0';
-      startInp.value='';
-      startInp.classList.remove('auto-filled');
-      startInp.classList.add('needs-recheck');
+  if(active){
+    if(card.dataset.savedStart === undefined){
+      const hint = card.querySelector('[id^="startHint-"]');
+      if(startInp){
+        // 대차 체크 해제 시 원래 자동채움 값으로 되돌릴 수 있도록 보관
+        card.dataset.savedStart = startInp.value;
+        card.dataset.savedStartAuto = startInp.classList.contains('auto-filled') ? '1' : '0';
+        startInp.value='';
+        startInp.classList.remove('auto-filled');
+        startInp.classList.add('needs-recheck');
+      }
+      if(hint) hint.style.display='none';
     }
-    if(hint) hint.style.display='none';
     // 이번 건 자체를 대차로 표시했으므로, 위쪽의 '이전 운행이 대차였다' 경고는 중복이라 숨김 (아래 대차 안내로 대체)
     if(prevWarn) prevWarn.style.display='none';
     if(daechaNotice) daechaNotice.style.display='block';
     calcRowDist(id);
   } else {
     if(daechaNotice) daechaNotice.style.display='none';
-    // 대차 체크를 해제하면 체크 이전에 자동으로 채워져 있던 시작거리를 원상복구
-    if(startInp && card?.dataset.savedStart !== undefined){
+    // 대차 체크를 모두 해제하면 체크 이전에 자동으로 채워져 있던 시작거리를 원상복구
+    if(startInp && card.dataset.savedStart !== undefined){
       startInp.value = card.dataset.savedStart;
       startInp.classList.remove('needs-recheck');
       if(card.dataset.savedStartAuto === '1') startInp.classList.add('auto-filled');
@@ -6239,7 +6352,7 @@ function toggleDaeCha(chk, id){
       delete card.dataset.savedStartAuto;
       calcRowDist(id);
     }
-    if(card?.dataset.prevDaecha === '1'){
+    if(card.dataset.prevDaecha === '1'){
       // 대차 체크를 다시 해제했는데 이전 운행이 대차였던 경우라면 재확인 경고를 다시 표시
       if(prevWarn) prevWarn.style.display='block';
     }
@@ -6571,8 +6684,19 @@ function collectRows(){
     const statusBtn = card.querySelector('.status-btn.active-good, .status-btn.active-bad');
     const status = statusBtn ? statusBtn.dataset.val : '정상';
     const note = card.querySelector('.tr-note').value.trim();
-    const isDaeCha = card.querySelector('.tr-daecha-chk')?.checked || false;
-    const daeChaPate = isDaeCha ? (card.querySelector('.tr-daecha-plate')?.value.trim()||'') : '';
+    const isDaeChaPickup = card.querySelector('.tr-daecha-pickup-chk')?.checked || false;
+    const isDaeChaReturn = card.querySelector('.tr-daecha-return-chk')?.checked || false;
+    const isDaeCha = isDaeChaPickup || isDaeChaReturn;
+    const daeChaPate = isDaeChaPickup
+      ? (card.querySelector('.tr-daecha-plate-pickup')?.value.trim()||'')
+      : (isDaeChaReturn ? (card.querySelector('.tr-daecha-plate-return')?.value.trim()||'') : '');
+    const daeChaModel = isDaeChaPickup ? (card.querySelector('.tr-daecha-model')?.value.trim()||'') : '';
+    const daeChaPickupHipass = isDaeChaPickup ? (card.querySelector('.tr-daecha-hipass-pickup')?.checked || false) : false;
+    const daeChaPickupFuelGauge = isDaeChaPickup ? (card.querySelector('.tr-daecha-fuel-pickup')?.value||'') : '';
+    const daeChaPickupCondition = isDaeChaPickup ? (card.querySelector('.tr-daecha-condition-pickup')?.value.trim()||'') : '';
+    const daeChaReturnHipass = isDaeChaReturn ? (card.querySelector('.tr-daecha-hipass-return')?.checked || false) : false;
+    const daeChaReturnFuelGauge = isDaeChaReturn ? (card.querySelector('.tr-daecha-fuel-return')?.value||'') : '';
+    const daeChaReturnCondition = isDaeChaReturn ? (card.querySelector('.tr-daecha-condition-return')?.value.trim()||'') : '';
     const commuteBtn = card.querySelector('.commute-btn.active-commute');
     const commuteDir = commuteBtn ? commuteBtn.dataset.dir : '';
     const isCommute = !!commuteDir;
@@ -6588,7 +6712,7 @@ function collectRows(){
     const receiptOcrDate = card.dataset.receiptOcrDate || null;
     const receiptDateValid = card.dataset.receiptDateValid==='' || card.dataset.receiptDateValid===undefined ? null : (card.dataset.receiptDateValid==='true');
     const receiptTypeValid = card.dataset.receiptTypeValid==='' || card.dataset.receiptTypeValid===undefined ? null : (card.dataset.receiptTypeValid==='true');
-    return {id:card.id, dateFrom, dateTo, startOdo, endOdo, distance: Math.max(0, endOdo-startOdo), dest, user, fuel, status, note, isDaeCha, daeChaPate, isPersonal, isCommute, commuteDir, accidentReported, accidentId, accidentPending, accidentReqId, receiptDeferred, receiptOcrAmount, receiptOcrMatched, receiptOcrDate, receiptDateValid, receiptTypeValid};
+    return {id:card.id, dateFrom, dateTo, startOdo, endOdo, distance: Math.max(0, endOdo-startOdo), dest, user, fuel, status, note, isDaeCha, daeChaPate, isDaeChaPickup, isDaeChaReturn, daeChaModel, daeChaPickupHipass, daeChaPickupFuelGauge, daeChaPickupCondition, daeChaReturnHipass, daeChaReturnFuelGauge, daeChaReturnCondition, isPersonal, isCommute, commuteDir, accidentReported, accidentId, accidentPending, accidentReqId, receiptDeferred, receiptOcrAmount, receiptOcrMatched, receiptOcrDate, receiptDateValid, receiptTypeValid};
   });
 }
 
@@ -6681,7 +6805,7 @@ function showSubmitConfirm(submitter, plate, rows){
         ${r.fuel?`<div><span style="color:var(--muted);">주유비</span> <b>${Number(r.fuel).toLocaleString()}원</b></div>`:''}
       </div>
       ${r.isPersonal?'<div style="margin-top:4px;"><span style="background:#EFF6FF;color:#1D4ED8;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">개인사용</span></div>':''}
-      ${r.isDaeCha?`<div style="margin-top:4px;"><span style="background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">대차 ${escapeHtml(r.daeChaPate)}</span></div>`:''}
+      ${r.isDaeCha?`<div style="margin-top:4px;"><span style="background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">${r.isDaeChaPickup?'대차인수':''}${r.isDaeChaPickup&&r.isDaeChaReturn?' / ':''}${r.isDaeChaReturn?'대차반납':''} ${escapeHtml(r.daeChaPate)}</span></div>`:''}
       ${r.isCommute?`<div style="margin-top:4px;"><span style="background:#F5F3FF;color:#7C3AED;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">${r.commuteDir||'출퇴근'}사용 ${dist.toLocaleString()}km</span></div>`:''}
     </div>`;
   });
@@ -6736,9 +6860,9 @@ async function submitDirectInput(){
     if(!r.endOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리를 입력해 주세요.`); return; }
     if(r.endOdo <= r.startOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리가 시작거리보다 작습니다.`); return; }
     if(!r.dest){ showUserFormErr(`${i+1}번 운행기록: 행선지를 입력해 주세요.`); return; }
-    if(r.isDaeCha && !r.daeChaPate){ showUserFormErr(`${i+1}번 운행기록: 대차 운행 체크 시 대차 차량번호를 반드시 입력해 주세요.`); return; }
+    if(r.isDaeCha && !r.daeChaPate){ showUserFormErr(`${i+1}번 운행기록: 대차인수/대차반납 체크 시 대차 차량번호를 반드시 입력해 주세요.`); return; }
     if(r.isPersonal && !r.fuel){ showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유비를 입력해 주세요.`); return; }
-    if(r.status==='점검요망' && !r.note){ showUserFormErr(`${i+1}번 운행기록: 점검요망 선택 시 비고(사유)를 입력해 주세요.`); return; }
+    if(r.status==='점검요망' && !r.note){ showUserFormErr(`${i+1}번 운행기록: 점검요청 선택 시 비고(사유)를 입력해 주세요.`); return; }
     if(r.distance >= MAX_TRIP_DISTANCE_KM){ showUserFormErr(`${i+1}번 운행기록: 주행거리가 ${r.distance.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`); return; }
     if(r.fuel >= MAX_FUEL_AMOUNT){ showUserFormErr(`${i+1}번 운행기록: 주유비가 ${Number(r.fuel).toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`); return; }
   }
@@ -6940,6 +7064,11 @@ async function doSubmit(submitter, plate, rows){
       user:r.user, dest:r.dest, fuel:r.fuel, status:r.status, note:r.note,
       submitter:r.user, branchAtTime, imgKey:null, isPersonal:r.isPersonal||false,
       isDaeCha:r.isDaeCha||false, daeChaPate:r.daeChaPate||'',
+      isDaeChaPickup:r.isDaeChaPickup||false, isDaeChaReturn:r.isDaeChaReturn||false,
+      daeChaModel:r.daeChaModel||'', daeChaPickupHipass:r.daeChaPickupHipass||false,
+      daeChaPickupFuelGauge:r.daeChaPickupFuelGauge||'', daeChaPickupCondition:r.daeChaPickupCondition||'',
+      daeChaReturnHipass:r.daeChaReturnHipass||false, daeChaReturnFuelGauge:r.daeChaReturnFuelGauge||'',
+      daeChaReturnCondition:r.daeChaReturnCondition||'',
       isCommute:r.isCommute||false, commuteDir:r.commuteDir||'',
       submittedAt: new Date().toISOString(),
       editToken: getDeviceEditToken(), // 이 트립을 제출한 기기 식별용(본인수정화면 접근 제어에 사용)
@@ -7073,11 +7202,37 @@ async function restoreDraft(){
         if(badBtn) setStatus(badBtn,'점검요망');
       }
       card.querySelector('.tr-note').value = r.note||'';
-      if(r.isDaeCha){
-        const chk=card.querySelector('.tr-daecha-chk');
-        if(chk){chk.checked=true;toggleDaeCha(chk,card.id);}
-        const dp=card.querySelector('.tr-daecha-plate');
+      if(r.isDaeChaPickup){
+        const chk=card.querySelector('.tr-daecha-pickup-chk');
+        if(chk){chk.checked=true;toggleDaeChaPickup(chk,card.id);}
+        const dp=card.querySelector('.tr-daecha-plate-pickup');
         if(dp) dp.value=r.daeChaPate||'';
+        const model=card.querySelector('.tr-daecha-model');
+        if(model) model.value=r.daeChaModel||'';
+        const hipass=card.querySelector('.tr-daecha-hipass-pickup');
+        if(hipass) hipass.checked=!!r.daeChaPickupHipass;
+        const fuel=card.querySelector('.tr-daecha-fuel-pickup');
+        if(fuel) fuel.value=r.daeChaPickupFuelGauge||'';
+        const cond=card.querySelector('.tr-daecha-condition-pickup');
+        if(cond) cond.value=r.daeChaPickupCondition||'';
+      } else if(r.isDaeCha && !r.isDaeChaReturn){
+        // 구버전 임시저장 호환: isDaeChaPickup/Return 없이 isDaeCha만 있던 예전 초안은 인수로 간주해 복원
+        const chk=card.querySelector('.tr-daecha-pickup-chk');
+        if(chk){chk.checked=true;toggleDaeChaPickup(chk,card.id);}
+        const dp=card.querySelector('.tr-daecha-plate-pickup');
+        if(dp) dp.value=r.daeChaPate||'';
+      }
+      if(r.isDaeChaReturn){
+        const chk=card.querySelector('.tr-daecha-return-chk');
+        if(chk){chk.checked=true;toggleDaeChaReturn(chk,card.id);}
+        const dp=card.querySelector('.tr-daecha-plate-return');
+        if(dp) dp.value=r.daeChaPate||'';
+        const hipass=card.querySelector('.tr-daecha-hipass-return');
+        if(hipass) hipass.checked=!!r.daeChaReturnHipass;
+        const fuel=card.querySelector('.tr-daecha-fuel-return');
+        if(fuel) fuel.value=r.daeChaReturnFuelGauge||'';
+        const cond=card.querySelector('.tr-daecha-condition-return');
+        if(cond) cond.value=r.daeChaReturnCondition||'';
       }
       if(r.isCommute && r.commuteDir){
         const cBtn=card.querySelector(`.commute-btn[data-dir="${r.commuteDir}"]`);
@@ -7341,11 +7496,12 @@ function loadUserEditable(){
             <label class="check-label" style="padding:2px 0;gap:6px;">
               <input type="checkbox" class="ue-chk ue-daecha-chk native-chk" data-f="isDaeCha" ${f.trip.isDaeCha?'checked':''} onchange="toggleUeDaeCha(this)">
               <span class="check-icon" style="width:20px;height:20px;"></span>
-              <span class="check-text" style="font-size:12.5px;font-weight:600;">대차 운행</span>
+              <span class="check-text" style="font-size:12.5px;font-weight:600;">대차 사용${f.trip.isDaeCha?(f.trip.isDaeChaReturn?' (반납)':' (인수)'):''}</span>
             </label>
           </div>
           <div class="ue-daecha-field" style="${f.trip.isDaeCha?'':'display:none;'}margin-top:8px;">
             <input class="ue-inp" data-f="daeChaPate" value="${escapeHtml(f.trip.daeChaPate||'')}" placeholder="대차 차량번호(필수)" style="width:100%;font-size:13px;border:1px solid var(--accent);border-radius:8px;padding:8px 6px;">
+            <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5;">인수·반납 상세정보(차종·하이패스·주유게이지·이상여부)는 이 화면에서 수정할 수 없습니다. 최초 제출한 운행기록의 인수/반납 여부는 그대로 유지됩니다.</div>
           </div>
           <div style="margin-top:10px;">
             <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">출퇴근 사용 <span style="font-weight:400;">(단신부임자 급여공제 승인자)</span></div>
@@ -7518,7 +7674,7 @@ async function saveUserEdits(name){
     const daechaChkV=tr.querySelector('[data-f="isDaeCha"].ue-chk');
     const daechaPateInpV=tr.querySelector('[data-f="daeChaPate"]');
     if(daechaChkV?.checked && !(daechaPateInpV?.value||'').trim()){
-      if(err){ err.textContent='저장 실패: 대차 운행 체크 시 대차 차량번호를 반드시 입력해 주세요. (과태료·범칙금 발생 시 운행자 확인용)'; err.style.display='block'; }
+      if(err){ err.textContent='저장 실패: 대차 사용 체크 시 대차 차량번호를 반드시 입력해 주세요. (과태료·범칙금 발생 시 운행자 확인용)'; err.style.display='block'; }
       return;
     }
   }
@@ -7553,8 +7709,13 @@ async function saveUserEdits(name){
     const personalChk=tr.querySelector('[data-f="isPersonal"].ue-chk');
     if(personalChk) t.isPersonal = personalChk.checked;
     const daechaChk=tr.querySelector('[data-f="isDaeCha"].ue-chk');
-    if(daechaChk) t.isDaeCha = daechaChk.checked;
-    if(!t.isDaeCha) t.daeChaPate='';
+    if(daechaChk){
+      const wasDaeCha = t.isDaeCha;
+      t.isDaeCha = daechaChk.checked;
+      // 새로 켠 경우 세부 유형이 없으므로 기본값은 대차인수로 설정(기존 제출 기록의 인수/반납 여부는 그대로 유지됨)
+      if(!wasDaeCha && t.isDaeCha) t.isDaeChaPickup = true;
+    }
+    if(!t.isDaeCha){ t.daeChaPate=''; t.isDaeChaPickup=false; t.isDaeChaReturn=false; }
     // 출퇴근 출근/퇴근 구분 반영 (가동율 미반영 대상)
     const activeCommuteBtn=tr.querySelector('.ue-commute-btn.active-commute');
     t.commuteDir = activeCommuteBtn ? activeCommuteBtn.dataset.dir : '';

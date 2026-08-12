@@ -1591,7 +1591,7 @@ async function submitLog(){
   // 점검요망으로 표시되었는데 사유(비고)가 비어있으면 최종 제출을 막는다
   // (공용차량 index.html의 "r.status==='점검요망' && !r.note" 검증과 동일한 시점·조건)
   if(maintNeeded && !maintNote){
-    showToast('⚠ 점검요망 선택 시 비고(사유)를 입력해 주세요.', true);
+    showToast('⚠ 점검요청 선택 시 비고(사유)를 입력해 주세요.', true);
     openMaintenancePopup();
     return;
   }
@@ -2251,13 +2251,13 @@ function openMaintenancePopup(){
   body.innerHTML = `
     <div class="ded-accident-head">
       <div>
-        <div class="ded-accident-title">⚠ 점검요망 안내</div>
-        <div class="ded-accident-sub">차량 점검·정비는 아래 번호로 롯데렌터카에 직접 접수해 주세요.</div>
+        <div class="ded-accident-title">⚠ 점검요청 안내</div>
+        <div class="ded-accident-sub">긴급 정비·점검은 아래 대표번호로 접수해주세요.</div>
       </div>
       <button type="button" class="ded-accident-close-x" onclick="closeMaintenancePopup()">✕</button>
     </div>
     <a href="tel:1588-1230" class="ded-accident-call">1588-1230 전화 걸기<span class="sub">롯데렌터카 대표번호</span></a>
-    <div class="ded-accident-label">점검요청 내용 <span class="req">*필수</span></div>
+    <div class="ded-accident-label">점검요청 접수 내용 <span class="req">*필수</span></div>
     <textarea id="maintNoteInput" class="ded-accident-textarea" placeholder="예: 타이어 마모, 엔진 경고등 점등 등">${escapeHtmlDed(maintNote)}</textarea>
     <button type="button" class="ded-accident-confirm" onclick="confirmMaintenanceNote()">확인 (비고에 기재)</button>
     <div class="ded-accident-hint">확인을 누르면 위 내용이 이 운행기록의 비고로 저장됩니다.</div>
@@ -2293,7 +2293,7 @@ function renderMaintenanceNotice(){
   if(!notice) return;
   if(maintNeeded){
     notice.className = 'ded-accident-notice pending';
-    notice.innerHTML = `⚠ 점검요망으로 표시됨${maintNote ? ' — '+escapeHtmlDed(maintNote) : ' — 위 "점검요청" 버튼을 눌러 사유를 입력해 주세요.'}<br><span class="cancel-link" onclick="cancelMaintenanceRequest()">점검요청 표시 취소</span>`;
+    notice.innerHTML = `⚠ 점검요청으로 표시됨${maintNote ? ' — '+escapeHtmlDed(maintNote) : ' — 위 "점검요청" 버튼을 눌러 사유를 입력해 주세요.'}<br><span class="cancel-link" onclick="cancelMaintenanceRequest()">점검요청 표시 취소</span>`;
   }else{
     notice.className = 'ded-accident-notice';
     notice.innerHTML = '';
