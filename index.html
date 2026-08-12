@@ -35,14 +35,6 @@
 <!--
 =================================================================
   CHANGELOG
-  [2026-08-12] 탭을 켜둔 채 날짜가 바뀐 경우 새로고침 안내 배너 추가. QR 재스캔 없이 같은 탭/URL을
-  계속 쓰는 경우가 많은데, 모바일 브라우저가 앱 전환 복귀 시 페이지를 완전히 새로고침하지 않고
-  그대로 복원(bfcache 등)하면 날짜 기본값·이전 종료거리 세팅 스크립트가 재실행되지 않아 자정을
-  넘겨도 화면이 어제 상태로 남는 문제 대응. visibilitychange(포그라운드 복귀)·pageshow(bfcache
-  복원) 시점에 페이지 로드 당시 날짜와 현재 날짜를 비교, 다르면 상단에 새로고침 안내 배너 표시
-  (입력 중인 내용 보존을 위해 강제 새로고침은 하지 않고 배너로만 안내, "새로고침"/"✕" 선택 가능) |
-  신규: PAGE_LOAD_DATE, checkDateChangedOnResume(), showDateChangedBanner(), visibilitychange/
-  pageshow 리스너
   [2026-08-12] 임시저장 "불러오기" 시 날짜/시작거리 불일치 경고 추가. 사용자가 과거에 저장된
   초안을 오늘 것으로 착각하고 불러와 제출하는 사고를 막기 위해, 복원 직전 ① 초안의 운행일자가
   오늘과 다른 경우 ② 저장 당시 시작거리(baseOdo)가 현재 실제 이전 종료거리와 다른 경우(그 사이
@@ -74,6 +66,11 @@
   1~7월 수기기록과 8월 이후 실제 데이터의 연간 총 주행거리 연속성을 검증할 수 있게 함. 미입력
   시 기존과 동일하게 동작(대조 UI만 생략) | 신규: manualOdoCheck() | 변경:
   downloadManualMonthlyTemplate(), handleManualMonthlyUpload(), openVehicle() 모달
+  [2026-08-12] 신규 운행기록 입력 폼에서 대차인수/대차반납 항목은 평소 잘 안 쓰는 메뉴이므로,
+  출퇴근(출근/퇴근 버튼) 아래에 "🚗 대차 인수/반납" 토글 버튼을 추가하고 클릭 시에만 두 항목이
+  펼쳐지도록 기본 숨김 처리. 임시저장 복원으로 체크박스가 코드로 체크되는 경우에도 섹션이 자동
+  펼쳐지도록 처리하여 값 누락 방지 | 신규: toggleDaeChaSection(), openDaeChaSection() | 변경:
+  addTripRow() HTML 구조, toggleDaeChaPickup(), toggleDaeChaReturn()
 -->
 
 <head>
@@ -6207,6 +6204,12 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
         </div>
       </div>
       <div class="check-field">
+        <button type="button" class="btn-ghost daecha-toggle-btn" id="daechaToggleBtn-${id}" onclick="toggleDaeChaSection('${id}')" style="width:100%;padding:9px 12px;border-radius:8px;font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;">
+          🚗 대차 인수/반납 <span style="font-weight:400;color:var(--muted);font-size:11.5px;">(대차 이용 시에만 클릭)</span> <span id="daechaToggleArrow-${id}">▾</span>
+        </button>
+      </div>
+      <div id="daechaSection-${id}" style="display:none;">
+      <div class="check-field">
         <label class="check-label">
           <input type="checkbox" class="tr-daecha-pickup-chk native-chk" onchange="toggleDaeChaPickup(this,'${id}')">
           <span class="check-icon"></span>
@@ -6287,6 +6290,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
             <div style="font-size:11px;color:var(--accent);margin-top:8px;line-height:1.5;">💡 위 <b>시작거리</b>는 원 차량 기준으로 자동 재연동됩니다. <b>종료거리</b>는 원 차량을 직접 인수한 후 계기판을 확인해 입력해 주세요(대차로 인해 정비소까지 운행한 거리 개념).</div>
           </div>
         </div>
+      </div>
       </div>
       <div class="form-field">
         <label style="display:flex;align-items:center;justify-content:space-between;">
@@ -6574,9 +6578,28 @@ function setDaeChaCheckboxDisabled(chk, disabled){
   if(label) label.classList.toggle('chk-disabled', disabled);
 }
 
+// 대차 인수/반납은 평소 잘 쓰지 않는 메뉴라 출퇴근 버튼 아래 토글 버튼을 눌러야만 펼쳐지도록 숨김 처리.
+// 이미 체크(인수/반납)되어 있는 상태에서 접히지 않도록, 펼친 뒤에는 다시 접지 않고 열린 채로 둔다
+// (혹시 모를 값 손실 방지 — 접었다 펼쳐도 입력값 자체는 유지되지만 UX상 혼란 방지 목적).
+function toggleDaeChaSection(id){
+  const section = document.getElementById('daechaSection-'+id);
+  if(!section) return;
+  const willOpen = section.style.display === 'none';
+  if(willOpen) openDaeChaSection(id); else { section.style.display='none'; const arrow=document.getElementById('daechaToggleArrow-'+id); if(arrow) arrow.textContent='▾'; }
+}
+
+// 임시저장 복원 시 대차인수/반납 체크박스가 코드로 체크되는 경우에도 섹션이 열려있도록 보장
+function openDaeChaSection(id){
+  const section = document.getElementById('daechaSection-'+id);
+  const arrow = document.getElementById('daechaToggleArrow-'+id);
+  if(section) section.style.display = 'block';
+  if(arrow) arrow.textContent = '▴';
+}
+
 function toggleDaeChaPickup(chk, id){
   const field = document.getElementById('daechaPickup-'+id);
   if(field) field.style.display = chk.checked ? 'block' : 'none';
+  if(chk.checked) openDaeChaSection(id); // 임시저장 복원 등으로 체크만 되고 섹션이 닫혀있는 경우 대비
   const card = document.getElementById(id);
   setDaeChaCheckboxDisabled(card?.querySelector('.tr-daecha-return-chk'), chk.checked);
   applyDaeChaActiveState(id);
@@ -6586,6 +6609,7 @@ function toggleDaeChaPickup(chk, id){
 function toggleDaeChaReturn(chk, id){
   const field = document.getElementById('daechaReturn-'+id);
   if(field) field.style.display = chk.checked ? 'block' : 'none';
+  if(chk.checked) openDaeChaSection(id); // 임시저장 복원 등으로 체크만 되고 섹션이 닫혀있는 경우 대비
   const card = document.getElementById(id);
   setDaeChaCheckboxDisabled(card?.querySelector('.tr-daecha-pickup-chk'), chk.checked);
   applyDaeChaActiveState(id);
