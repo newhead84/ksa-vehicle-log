@@ -35,6 +35,12 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-12] 대차반납 체크 시 시작거리 자동변경 안내문구 개선. 기존에는 대차인수/반납 공통으로
+  "대차 차량은 원 차량과 주행거리가 이어지지 않습니다" 문구만 표시되어, 대차반납 체크 시 시작거리가
+  실제로 자동 변경된다는 점이 명확히 전달되지 않던 문제 수정. 대차반납 체크 시에는 "대차반납
+  체크로 시작거리가 자동 변경되었습니다. / 정비 완료된 본래 차량의 종료거리를 확인하여 입력."
+  2줄 문구로 전환(대차인수만 체크된 경우는 기존 문구 유지), 대차반납 체크/해제에 따라 표시 여부도
+  함께 전환 | 변경: applyDaeChaActiveState()
   [2026-08-12] 관리자 대시보드 월별 운행현황(전체 표 + 차량상세 모달)에 1~7월 수기기록 월 표시
   추가. 수기기록이 반영된 월 셀에 보라색 점선 테두리를 표시하고(m-manual), 마우스오버 시 "수기
   운행일지 기록 월: 운행거리·가동율만 확인 가능(세부 운행기록 없음)" 툴팁 안내. 전체 표 상단에는
@@ -74,15 +80,6 @@
   fetchDaeChaFuelPhotoUrl()/viewDaeChaFuelPhoto() 신규, doSubmit() 사진 압축·업로드 반영,
   collectRows()/restoreDraft() 사진 필드 처리(File 객체 미복원 시 재촬영 안내), exportToExcel()
   대차주유게이지 컬럼을 "사진 첨부" 표기로 변경
-  [2026-08-12] 대차인수/반납 관련 3건 개선. ① 대차인수만 하고 그날 운행하지 않은 경우, 종료거리를
-  입력하지 않아도(0) 시작거리와 동일하게(주행 0km) 자동 처리되어 운행제출이 가능하도록 검증 로직
-  완화(단, 대차반납이 함께 체크되었거나 실제 종료거리<시작거리인 오타는 기존대로 차단). ② 주유게이지
-  촬영 UI에 [📷 촬영] 외 [🖼 앨범에서 선택] 버튼 추가(카메라 강제 실행(capture="environment") 없는
-  별도 file input 연결, 인수/반납 공통). ③ 대차반납 체크 시 해당 차량의 인수 당시 촬영해 둔 주유게이지
-  사진을 반납 화면에서도 바로 확인할 수 있도록 [📷 인수 시 촬영한 주유게이지 사진 확인] 버튼 노출 |
-  변경: collectRows()(endOdo 자동보정), submitDirectInput() 검증조건 수정, addTripRow()(앨범 선택
-  input 2종 추가, daechaPickupPhotoWrap-${id} 신규), getActiveDaeChaInfo()(fuelGauge 필드 추가),
-  applyDaeChaReturnPrefill()(인수 사진 확인 버튼 표시/경로 연결)
 -->
 
 <head>
@@ -6650,6 +6647,7 @@ function applyDaeChaActiveState(id){
   const card = document.getElementById(id);
   if(!card) return;
   const active = isRowDaeChaActive(card);
+  const isReturn = card.querySelector('.tr-daecha-return-chk')?.checked || false;
   const daechaNotice = card.querySelector('[id^="daechaNotice-"]');
   const startInp = card.querySelector('.tr-start');
   // 대차 시 시작거리 자동채움 해제 (다른 차량이므로) + 사용자가 직접 재입력하도록 강조 표시
@@ -6666,7 +6664,14 @@ function applyDaeChaActiveState(id){
       }
       if(hint) hint.style.display='none';
     }
-    if(daechaNotice) daechaNotice.style.display='block';
+    if(daechaNotice){
+      // 대차반납 체크 시: 시작거리가 원차량 종료거리로 자동 변경됨을 안내(2줄)
+      // 대차인수만 체크 시: 기존 일반 안내(주행거리 불연속 경고) 유지
+      daechaNotice.innerHTML = isReturn
+        ? '⚠️ 대차반납 체크로 시작거리가 자동 변경되었습니다.<br>정비 완료된 본래 차량의 종료거리를 확인하여 입력.'
+        : '⚠️ 대차 차량은 원 차량과 주행거리가 이어지지 않습니다. 위 <b>시작거리</b>를 반드시 확인해주세요.';
+      daechaNotice.style.display='block';
+    }
     calcRowDist(id);
   } else {
     if(daechaNotice) daechaNotice.style.display='none';
