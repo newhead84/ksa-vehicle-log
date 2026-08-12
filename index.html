@@ -35,11 +35,12 @@
 <!--
 =================================================================
   CHANGELOG
-  [2026-08-13] 차량 선택 시 뜨는 "최근 점검요청·사고접수 이력" 패널 개편. 패널 제목에서
-  "(중복 접수 주의)" 문구 삭제. 항목별 표시를 1줄(유형·날짜) + 1줄(내용·운행자) 구조로 변경해
-  점검요청/사고 내용을 바로 확인 가능하게 함. 날짜는 YY-MM-DD로 축약 표기, 점검요청은 운행기록
-  비고(note)를, 사고접수는 사고 설명(description)을 "점검요청내용:"/"사고접수내용:" 라벨로 노출 |
-  변경: renderVehicleAlertPanel() 항목 렌더링, vehicleAlertPanel 제목 텍스트
+  [2026-08-13] 차량 선택 시 뜨는 "최근 점검요청·사고접수 이력" 패널 개편. 항목이 여러 건이어도
+  구분되도록, 항목별로 "이 차량의 최근 점검요청·사고접수 이력 YY-MM-DD"(날짜 포함 제목) 줄 +
+  "점검요청내용: (내용), 운행자: 이름" 줄의 2줄 구조로 표시. 패널 상단 고정 제목(및 "(중복 접수
+  주의)" 문구)은 제거하고 항목별 제목으로 대체. 점검요청은 운행기록 비고(note), 사고접수는 사고
+  설명(description)을 각각 "점검요청내용:"/"사고접수내용:" 라벨로 노출 | 변경:
+  renderVehicleAlertPanel() 항목 렌더링, vehicleAlertPanel 상단 고정 제목 div 제거
   [2026-08-12] 임시저장 "불러오기" 시 날짜/시작거리 불일치 경고 추가. 사용자가 과거에 저장된
   초안을 오늘 것으로 착각하고 불러와 제출하는 사고를 막기 위해, 복원 직전 ① 초안의 운행일자가
   오늘과 다른 경우 ② 저장 당시 시작거리(baseOdo)가 현재 실제 이전 종료거리와 다른 경우(그 사이
@@ -1013,7 +1014,6 @@
       <div class="last-odo-hint" id="lastOdoHint">이전 종료거리: <b>–</b> km</div>
       <div id="daechaActiveBanner" style="display:none;margin-top:10px;padding:10px 12px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:10px;font-size:12.5px;color:var(--accent);font-weight:700;line-height:1.6;word-break:keep-all;overflow-wrap:break-word;"></div>
       <div id="vehicleAlertPanel" style="display:none;margin-top:10px;padding:12px 14px;background:var(--bad-soft);border:1px solid var(--bad);border-radius:10px;">
-        <div style="font-size:12px;font-weight:700;color:var(--bad);margin-bottom:6px;">⚠ 이 차량의 최근 점검요청·사고접수 이력</div>
         <div id="vehicleAlertList" style="font-size:12.5px;color:var(--ink);line-height:1.7;word-break:keep-all;overflow-wrap:break-word;"></div>
       </div>
     </div>
@@ -5909,8 +5909,8 @@ function renderVehicleAlertPanel(plate){
   const toYYMMDD = d => /^\d{4}-\d{2}-\d{2}/.test(d||'') ? d.slice(2,10) : (d||'-');
   list.innerHTML = top3.map(it=>
     `<div style="margin-bottom:6px;">`+
-      `<div>${it.icon} <b>${it.type}</b> · ${escapeHtml(toYYMMDD(it.date))}</div>`+
-      `<div>${escapeHtml(it.label)}: ${escapeHtml(it.content||'미기재')} 운행자: ${escapeHtml(it.user||'미기재')}</div>`+
+      `<div style="font-weight:700;color:var(--bad);">이 차량의 최근 점검요청·사고접수 이력 ${escapeHtml(toYYMMDD(it.date))}</div>`+
+      `<div>${escapeHtml(it.label)}: ${escapeHtml(it.content||'미기재')}, 운행자: ${escapeHtml(it.user||'미기재')}</div>`+
     `</div>`
   ).join('');
   panel.style.display='block';
