@@ -241,6 +241,14 @@
   .ded-odo-split.compact input[type=text],
   .ded-odo-split.compact input[type=number]{flex:1 1 auto; min-width:0; padding:9px 6px;}
   .ded-odo-split.compact .ded-unit{flex:0 0 auto; font-size:12px;}
+  /* 수행기사(회장차) 출발/도착 단계에서는 시작거리 필드 자체의 밑줄을 없애 안내문구 위 라인을 제거
+     (종료거리 필드가 숨겨져 있어도 DOM상 마지막 자식이 아니므로 기본 밑줄이 남던 문제) */
+  #startOdoRow{border-bottom:none;}
+  /* KSA직원·전무이사 페이지(odoSplitRow가 compact)에서는 시작거리 위 밑줄 대신
+     안내문구 아래쪽에 밑줄이 오도록 위치만 이동 */
+  #odoSplitRow.compact ~ #startOdoNote{border-bottom:1px solid var(--ded-line);}
+  /* 근로 시작/종료 안내문구 위 밑줄(workTimeSplitRow의 compact 기본 밑줄) 제거 */
+  #workTimeSplitRow{border-bottom:none;}
 
   /* ── 섹션 (여백 최소화) ── */
   .ded-section{
@@ -1406,6 +1414,9 @@ function renderDriverPhaseUI(openTrip){
   document.getElementById('distanceRow').style.display = driverPhase==='end' ? 'flex' : 'none';
   // 출발 등록은 단순 출발 기록이므로 주유금액 입력이 필요 없음 — 도착 등록 단계에서만 노출
   document.getElementById('fuelCostRow').style.display = driverPhase==='end' ? 'flex' : 'none';
+  // 출발 등록 단계에서는 주행거리·주유금액 필드가 모두 비어 컨테이너 밑줄만 남는 문제가 있어
+  // 컨테이너 자체를 숨김(시작거리 안내문구 아래 불필요한 라인 제거)
+  document.getElementById('distanceFuelRow').style.display = driverPhase==='end' ? 'flex' : 'none';
 
   // 출발 등록 단계에서는 입력할 수 없는 항목(행선지·근로종료·대기시간·휴게시간·오버타임)은
   // 도착 등록 단계에서만 노출한다. 근로시작은 출발 등록 시 입력한 값을 읽기전용으로 이어받아 표시.
