@@ -1700,8 +1700,8 @@ function addDefaultRestPeriodIfEmpty(){
 }
 
 // 대기시간/휴게시간 구간 삭제 시 실수로 지우는 것을 방지하기 위한 확인 팝업
-function confirmRemovePeriod(btn){
-  if(!confirm('이 구간을 삭제하시겠습니까?')) return;
+async function confirmRemovePeriod(btn){
+  if(!await appConfirm('이 구간을 삭제하시겠습니까?')) return;
   const row = btn.closest('.ded-period-row');
   if(row) row.remove();
   calcWorkTotal();
@@ -2285,7 +2285,7 @@ function cancelEditMode(){
 // 기록을 잘못 지우지 않도록) 한 뒤 해당 인덱스만 제거하고 다시 저장한다.
 async function deleteCurrentRecord(){
   if(editingIndex === null) return;
-  if(!confirm('이 운행기록을 삭제하시겠습니까? 삭제한 기록은 복구할 수 없습니다.')) return;
+  if(!await appConfirm('이 운행기록을 삭제하시겠습니까? 삭제한 기록은 복구할 수 없습니다.', {danger:true})) return;
 
   const v = VEHICLES[currentVehicleKey];
   const delBtn = document.getElementById('editDeleteBtn');
@@ -2381,6 +2381,38 @@ function escapeHtmlDed(s){
   return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// 앱 내부 커스텀 확인 팝업 (Promise 기반)
+// 브라우저 네이티브 confirm()은 "example.com 내용:" 등 사이트 출처 문구를 자동으로 붙이며
+// 이는 JS로 제거·수정할 수 없으므로(브라우저 보안 정책), 대신 이 커스텀 오버레이를 사용해
+// 타이틀 문구 없이 전용차량 디자인가이드(다크/베이지) 톤으로 표시합니다.
+function appConfirm(message, opts={}){
+  return new Promise(resolve=>{
+    const existing=document.getElementById('appConfirmOverlay');
+    if(existing) existing.remove();
+    const div=document.createElement('div');
+    div.id='appConfirmOverlay';
+    div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+    const title=opts.title||'확인';
+    const okText=opts.okText||'확인';
+    const cancelText=opts.cancelText||'취소';
+    const okColor=opts.danger?'var(--ded-red)':'var(--ded-beige)';
+    const okTextColor=opts.danger?'#fff':'#0A0A0A';
+    div.innerHTML=`
+      <div style="background:var(--ded-bg);border:1px solid var(--ded-line);border-radius:2px;max-width:380px;width:100%;padding:24px 22px 18px;">
+        <div style="font-size:16px;font-weight:700;color:var(--ded-text);margin-bottom:10px;word-break:keep-all;">${escapeHtmlDed(title)}</div>
+        <div style="font-size:13.5px;color:var(--ded-muted);line-height:1.55;margin-bottom:20px;white-space:pre-line;word-break:keep-all;overflow-wrap:break-word;">${escapeHtmlDed(message)}</div>
+        <div style="display:flex;gap:8px;">
+          <button id="appConfirmCancelBtn" style="flex:1;padding:12px;border:1px solid var(--ded-line);border-radius:2px;background:transparent;font-size:13px;font-weight:600;color:var(--ded-muted);cursor:pointer;">${escapeHtmlDed(cancelText)}</button>
+          <button id="appConfirmOkBtn" style="flex:1;padding:12px;border:none;border-radius:2px;background:${okColor};color:${okTextColor};font-size:13px;font-weight:700;cursor:pointer;">${escapeHtmlDed(okText)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(div);
+    const cleanup=(result)=>{ div.remove(); resolve(result); };
+    document.getElementById('appConfirmCancelBtn').onclick=()=>cleanup(false);
+    document.getElementById('appConfirmOkBtn').onclick=()=>cleanup(true);
+  });
+}
+
 function markAccidentPending(){
   if(!accidentReqId){
     accidentReqId = 'accreq_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
@@ -2402,9 +2434,9 @@ function markAccidentCompleted(newAccidentId){
   updateAccidentSubmitGate();
 }
 
-function cancelAccidentReport(){
+async function cancelAccidentReport(){
   if(accidentCompleted){
-    if(!confirm('이미 접수된 사고보고서가 있습니다. 이 운행기록에서 사고접수 표시만 취소하시겠습니까?\n(접수된 사고보고서 자체는 삭제되지 않습니다)')) return;
+    if(!await appConfirm('이미 접수된 사고보고서가 있습니다. 이 운행기록에서 사고접수 표시만 취소하시겠습니까?\n(접수된 사고보고서 자체는 삭제되지 않습니다)')) return;
   }
   resetAccidentState();
   renderAccidentNotice();

@@ -35,6 +35,20 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-13] 관리자·사용자 화면 전반의 브라우저 네이티브 confirm()/alert()/prompt() 팝업을
+  전부 앱 내부 커스텀 모달로 교체(총 32곳: index.html 18, dedicated-admin-dashboard.html 13,
+  dedicated-driver-input.html 4, accident-report.html 2). 네이티브 다이얼로그는 "example.com
+  내용:" 등 사이트 출처 문구가 브라우저 보안 정책상 자동으로 붙어 JS로 제거 불가능했던 문제(예:
+  "점검·정비 완료" 확인창)를 해결. index.html/accident-report.html은 기존 CSS 변수(--navy 등)
+  톤, dedicated-*.html 2종은 전용차량 디자인가이드(다크/베이지, --ded- 변수) 톤으로 각각
+  스타일링. Promise 기반으로 구현되어 결과를 기다려야 하는 호출부는 async 함수로 전환(모두
+  onclick에서만 호출되는 함수라 안전) | 신규: appConfirm(), appAlert(), appPrompt()(index.html),
+  appConfirm()/appAlert()(dedicated-admin-dashboard.html, accident-report.html),
+  appConfirm()(dedicated-driver-input.html) | 변경: deleteVehicleForever(), deleteTrip(),
+  resolveMaintenance(), unresolveMaintenance(), resolveAccidentAsUser(),
+  unresolveAccidentAsUser(), deleteBranchHistoryEntry(), deleteAccidentRecord(),
+  applyTripRecordImport(), applyContractImport(), removeTripRow(), cancelAccidentReport(),
+  submitDirectInput() 등 다수 함수의 confirm/alert 호출부
   [2026-08-13] 점검요청/사고접수 완료 처리를 관리자뿐 아니라 일반 사용자(지역본부 등 현장에서
   직접 차량을 관리하는 담당자)도 처리할 수 있도록 확장. 안내 배너("이전 종료거리" 아래) 각
   미해결 항목 옆에 "🔧 점검·정비 완료" 버튼을 추가해, 로그인 여부와 무관하게 운행기록 입력
@@ -68,16 +82,6 @@
   경로를 통합(기존 baseOdo·30분 조건과 별개로 날짜 불일치도 추가 차단됨) | 신규:
   formatMonthDayKR(), showDraftMismatchWarning(), doRestoreDraft() 분리 | 변경: restoreDraft()가
   게이트키퍼 역할로 전환되어 Promise 반환(경고 시 사용자 확인 후에만 resolve)
-  [2026-08-12] QR 잠금(?plate=) 진입 시 오래된 임시저장 초안이 조용히 자동복원되어 방금 계산된
-  시작거리(이전 종료거리·진행중인 대차 반영값)를 덮어쓰던 버그 수정. "카메라 앱 전환 후 새로고침
-  대비" 자동복원은 원래 촬영 왕복 수 분 이내 상황을 위한 것인데 조건이 없어, 대차 상태가 이미
-  바뀐 뒤에도 낡은 초안의 시작거리로 계속 덮어써지던 문제(새로고침해도 재현). ① 저장시각(savedAt)
-  기준 30분 이내, ② 초안 저장 당시의 "이전 종료거리" 스냅샷(baseOdo)이 지금 다시 계산한 값과
-  동일 — 두 조건을 모두 만족할 때만 자동복원하고, 그렇지 않으면 기존처럼 배너로만 안내(사용자가
-  직접 "불러오기" 클릭 시에만 반영). 시간 조건만으로는 낡은 초안이 자동복원→그 상태로 재저장(savedAt
-  갱신)→다음 새로고침에도 다시 "최근"으로 오판되는 문제가 있어 baseOdo 비교를 병행함(트립 이력이
-  안 바뀌면 재저장돼도 유지, 바뀌면 즉시 달라져 자동복원 차단) | 변경: proceedEnterUserMode() QR
-  자동복원 분기, saveDraft() baseOdo 스냅샷 저장
 -->
 
 <head>
@@ -1872,7 +1876,7 @@ async function viewDaeChaFuelPhoto(path){
     const url = await fetchDaeChaFuelPhotoUrl(path);
     window.open(url, '_blank');
   }catch(e){
-    alert('주유게이지 사진을 불러오지 못했습니다: ' + (e.message||e));
+    appAlert('주유게이지 사진을 불러오지 못했습니다: ' + (e.message||e));
   }
 }
 
@@ -3208,7 +3212,7 @@ async function applyContractImport(rows,resultEl){
     if(p.contractEndDate&&p.contractEndDate!==v.contractEndDate) changes.push(`계약종료일 ${v.contractEndDate||'–'}→${p.contractEndDate}`);
     return changes.length?`🔄 계약 갱신: ${p.plate} (${changes.join(', ')})`:`− 변경 없음: ${p.plate}`;
   });
-  const ok=confirm(`⚠️ 아래 ${plan.length}건을 차량계약정보에 반영합니다.\n\n${summary.join('\n')}\n\n계속 진행하시겠습니까?`);
+  const ok=await appConfirm(`⚠️ 아래 ${plan.length}건을 차량계약정보에 반영합니다.\n\n${summary.join('\n')}\n\n계속 진행하시겠습니까?`);
   if(!ok) return;
   await refreshDataFromStorage();
   const today=todayLocalISO();
@@ -3340,7 +3344,7 @@ function renderAccidentHistory(){
 // 제출자·차량정보·사진·상대차량 정보는 접수 당시 원본 그대로 표시만 하고 편집 대상에서 제외.
 function openAccidentEditModal(id){
   const a = (data.accidents||{})[id];
-  if(!a){ alert('해당 사고 이력을 찾을 수 없습니다.'); return; }
+  if(!a){ appAlert('해당 사고 이력을 찾을 수 없습니다.'); return; }
   document.getElementById('modalBody').innerHTML = `
     <div class="modal-head">
       <div><div class="plate-big" style="font-size:18px;">🚨 사고 이력 수정</div><div class="muted" style="font-size:12px;">${escapeHtml(a.ourVehicle?.plate||'미확인')} · 접수번호 ${escapeHtml(id)}</div></div>
@@ -3413,7 +3417,7 @@ async function saveAccidentEdit(id){
 async function deleteAccidentRecord(id){
   const a = (data.accidents||{})[id];
   const label = a ? `${a.ourVehicle?.plate||'미확인'} · ${formatAccidentDateTime(a.occurredAt)}` : id;
-  if(!confirm(`🚨 사고 이력을 삭제합니다.\n${label}\n첨부 사진을 포함해 완전히 삭제되며 되돌릴 수 없습니다.\n\n계속 진행하시겠습니까?`)) return;
+  if(!await appConfirm(`🚨 사고 이력을 삭제합니다.\n${label}\n첨부 사진을 포함해 완전히 삭제되며 되돌릴 수 없습니다.\n\n계속 진행하시겠습니까?`, {danger:true})) return;
   await refreshDataFromStorage();
   if(!data.accidents || !data.accidents[id]){ renderAccidentHistory(); return; }
   delete data.accidents[id];
@@ -3912,7 +3916,7 @@ async function viewReceiptImage(path){
     const url = await fetchReceiptImageUrl(path);
     window.open(url, '_blank');
   }catch(e){
-    alert('영수증 이미지를 불러오지 못했습니다: ' + (e.message||e));
+    appAlert('영수증 이미지를 불러오지 못했습니다: ' + (e.message||e));
   }
 }
 
@@ -4415,7 +4419,7 @@ function printQr(){
   const plate = document.getElementById('qrModalPlate').textContent;
   const branch = document.getElementById('qrModalBranch').textContent;
   const canvas = document.getElementById('qrCodeContainer').querySelector('canvas');
-  if(!canvas){ alert('QR 이미지가 생성되지 않았습니다.'); return; }
+  if(!canvas){ appAlert('QR 이미지가 생성되지 않았습니다.'); return; }
   const img = canvas.toDataURL('image/png');
   const win = window.open('','_blank');
   // 카드/QR 실측 사이즈는 QR 일괄 PDF(generateBulkQrPdf)의 카드 규격과 동일하게 mm 단위로 맞춤
@@ -4946,7 +4950,7 @@ async function deleteVehicleForever(plate){
   const warnMsg=tripCount>0
     ? `⚠️ '${plate}' 차량을 명단에서 완전히 삭제합니다.\n등록된 운행기록 ${tripCount}건도 함께 삭제되며, 이 작업은 되돌릴 수 없습니다.\n\n계속 진행하시겠습니까?`
     : `⚠️ '${plate}' 차량을 명단에서 완전히 삭제합니다.\n이 작업은 되돌릴 수 없습니다.\n\n계속 진행하시겠습니까?`;
-  if(!confirm(warnMsg)) return;
+  if(!await appConfirm(warnMsg, {danger:true})) return;
   const backup=data.vehicles[plate];
   delete data.vehicles[plate];
   const saved = await saveData();
@@ -5001,7 +5005,7 @@ async function deleteTrip(plate,idx){
   const dateLabel=target.date||target.isoDate||'';
   const distLabel=(target.startOdo!=null&&target.endOdo!=null)?`${target.startOdo}→${target.endOdo}km`:'';
   const warnMsg=`⚠️ '${plate}' 차량의 아래 운행기록을 삭제합니다.\n${dateLabel}${distLabel?' · '+distLabel:''}${target.dest?' · '+target.dest:''}\n이 작업은 되돌릴 수 없습니다.\n\n계속 진행하시겠습니까?`;
-  if(!confirm(warnMsg)) return;
+  if(!await appConfirm(warnMsg, {danger:true})) return;
   const key=`${target.isoDate}|${target.startOdo}|${target.endOdo}|${target.submitter||''}`;
   // 최신 데이터 재조회 후 키 기반 삭제 (동시성 안전)
   await refreshDataFromStorage();
@@ -5035,7 +5039,7 @@ async function resolveMaintenance(plate,idx){
   const trips=data.vehicles[plate].trips.slice().sort(tripChronoCompare);
   const target=trips[idx];
   if(!target) return;
-  if(!confirm(`'${plate}' 차량의 점검요청 건을 점검·정비 완료로 표시합니다.\n비고: ${target.note||'미기재'}\n\n완료로 표시하면 안내 배너에는 완료 문구로 ${MAINTENANCE_RESOLVED_DISPLAY_DAYS}일간만 노출됩니다. 계속하시겠습니까?`)) return;
+  if(!await appConfirm(`'${plate}' 차량의 점검요청 건을 점검·정비 완료로 표시합니다.\n비고: ${target.note||'미기재'}\n\n완료로 표시하면 안내 배너에는 완료 문구로 ${MAINTENANCE_RESOLVED_DISPLAY_DAYS}일간만 노출됩니다. 계속하시겠습니까?`)) return;
   const key=`${target.isoDate}|${target.startOdo}|${target.endOdo}|${target.submitter||''}`;
   await refreshDataFromStorage();
   if(!data.vehicles[plate]) return;
@@ -5055,7 +5059,7 @@ async function unresolveMaintenance(plate,idx){
   const trips=data.vehicles[plate].trips.slice().sort(tripChronoCompare);
   const target=trips[idx];
   if(!target) return;
-  if(!confirm(`'${plate}' 차량의 점검요청 완료 처리를 취소하고 다시 미해결로 되돌립니다.\n계속하시겠습니까?`)) return;
+  if(!await appConfirm(`'${plate}' 차량의 점검요청 완료 처리를 취소하고 다시 미해결로 되돌립니다.\n계속하시겠습니까?`)) return;
   const key=`${target.isoDate}|${target.startOdo}|${target.endOdo}|${target.submitter||''}`;
   await refreshDataFromStorage();
   if(!data.vehicles[plate]) return;
@@ -5076,7 +5080,7 @@ async function resolveAccidentAsUser(id,plate){
   await refreshDataFromStorage();
   const a=(data.accidents||{})[id];
   if(!a){ showAdminToast('⚠ 해당 사고 이력을 찾을 수 없습니다(이미 변경되었을 수 있음).','bad'); refreshAfterResolveAction(plate); return; }
-  if(!confirm(`'${plate}' 차량의 사고접수 건을 점검·정비 완료로 표시합니다.\n사고내용: ${a.description||'미기재'}\n\n완료로 표시하면 안내 배너에는 완료 문구로 ${MAINTENANCE_RESOLVED_DISPLAY_DAYS}일간만 노출됩니다. 계속하시겠습니까?`)) return;
+  if(!await appConfirm(`'${plate}' 차량의 사고접수 건을 점검·정비 완료로 표시합니다.\n사고내용: ${a.description||'미기재'}\n\n완료로 표시하면 안내 배너에는 완료 문구로 ${MAINTENANCE_RESOLVED_DISPLAY_DAYS}일간만 노출됩니다. 계속하시겠습니까?`)) return;
   const prevStatus=a.status||'접수';
   a.status='완료';
   if(prevStatus!=='완료'){
@@ -5093,7 +5097,7 @@ async function unresolveAccidentAsUser(id,plate){
   await refreshDataFromStorage();
   const a=(data.accidents||{})[id];
   if(!a){ showAdminToast('⚠ 해당 사고 이력을 찾을 수 없습니다(이미 변경되었을 수 있음).','bad'); refreshAfterResolveAction(plate); return; }
-  if(!confirm(`'${plate}' 차량의 사고접수 완료 처리를 취소하고 다시 처리중으로 되돌립니다.\n계속하시겠습니까?`)) return;
+  if(!await appConfirm(`'${plate}' 차량의 사고접수 완료 처리를 취소하고 다시 처리중으로 되돌립니다.\n계속하시겠습니까?`)) return;
   a.status='처리중';
   if(!Array.isArray(a.statusHistory)) a.statusHistory=[];
   a.statusHistory.push({status:'완료취소',at:new Date().toISOString(),by:currentRole==='admin'?'관리자':'사용자'});
@@ -5174,7 +5178,7 @@ async function deleteBranchHistoryEntry(plate,idx){
   if(!v||!Array.isArray(v.branchHistory)||!v.branchHistory[idx]) return;
   const h=v.branchHistory[idx];
   const warnMsg=`⚠️ '${plate}' 차량의 아래 재배치 이력을 삭제합니다.\n${h.date||''} : ${h.from||''} → ${h.branch}\n이 작업은 되돌릴 수 없습니다.\n\n계속 진행하시겠습니까?`;
-  if(!confirm(warnMsg)) return;
+  if(!await appConfirm(warnMsg, {danger:true})) return;
   const prevHistory=v.branchHistory;
   v.branchHistory=v.branchHistory.filter((_,i)=>i!==idx);
   const saved=await saveData();
@@ -5284,6 +5288,92 @@ async function confirmRestore(){
   }catch(e){ showAdminToast('복원 오류: '+e.message,'bad'); }
 }
 
+// 앱 내부 커스텀 확인/알림/입력 팝업 (Promise 기반)
+// 브라우저 네이티브 confirm()/alert()/prompt()는 "example.com 내용:" 등 사이트 출처 문구를
+// 자동으로 붙이며 이는 JS로 제거·수정할 수 없으므로(브라우저 보안 정책), 대신 이 커스텀
+// 오버레이를 사용해 타이틀 문구 없이 시스템 디자인에 맞는 확인창을 표시합니다.
+function _appModalEsc(str){
+  return String(str==null?'':str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function appConfirm(message, opts={}){
+  return new Promise(resolve=>{
+    const existing=document.getElementById('appConfirmOverlay');
+    if(existing) existing.remove();
+    const div=document.createElement('div');
+    div.id='appConfirmOverlay';
+    div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;';
+    const title=opts.title||'확인';
+    const okText=opts.okText||'확인';
+    const cancelText=opts.cancelText||'취소';
+    const okColor=opts.danger?'var(--bad)':'var(--navy)';
+    div.innerHTML=`
+      <div style="background:#fff;border-radius:16px;max-width:380px;width:100%;padding:22px 22px 18px;font-family:'Paperlogy',sans-serif;">
+        <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:10px;word-break:keep-all;">${_appModalEsc(title)}</div>
+        <div style="font-size:13.5px;color:var(--ink);line-height:1.55;margin-bottom:18px;white-space:pre-line;word-break:keep-all;overflow-wrap:break-word;">${_appModalEsc(message)}</div>
+        <div style="display:flex;gap:8px;">
+          <button id="appConfirmCancelBtn" style="flex:1;padding:12px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:'Paperlogy',sans-serif;">${_appModalEsc(cancelText)}</button>
+          <button id="appConfirmOkBtn" style="flex:1;padding:12px;border:none;border-radius:10px;background:${okColor};color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Paperlogy',sans-serif;">${_appModalEsc(okText)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(div);
+    const cleanup=(result)=>{ div.remove(); resolve(result); };
+    document.getElementById('appConfirmCancelBtn').onclick=()=>cleanup(false);
+    document.getElementById('appConfirmOkBtn').onclick=()=>cleanup(true);
+  });
+}
+function appAlert(message, opts={}){
+  return new Promise(resolve=>{
+    const existing=document.getElementById('appAlertOverlay');
+    if(existing) existing.remove();
+    const div=document.createElement('div');
+    div.id='appAlertOverlay';
+    div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;';
+    const title=opts.title||'알림';
+    const okText=opts.okText||'확인';
+    const okColor=opts.danger?'var(--bad)':'var(--navy)';
+    div.innerHTML=`
+      <div style="background:#fff;border-radius:16px;max-width:380px;width:100%;padding:22px 22px 18px;font-family:'Paperlogy',sans-serif;">
+        <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:10px;word-break:keep-all;">${_appModalEsc(title)}</div>
+        <div style="font-size:13.5px;color:var(--ink);line-height:1.55;margin-bottom:18px;white-space:pre-line;word-break:keep-all;overflow-wrap:break-word;">${_appModalEsc(message)}</div>
+        <button id="appAlertOkBtn" style="width:100%;padding:12px;border:none;border-radius:10px;background:${okColor};color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Paperlogy',sans-serif;">${_appModalEsc(okText)}</button>
+      </div>`;
+    document.body.appendChild(div);
+    document.getElementById('appAlertOkBtn').onclick=()=>{ div.remove(); resolve(); };
+  });
+}
+function appPrompt(message, opts={}){
+  return new Promise(resolve=>{
+    const existing=document.getElementById('appPromptOverlay');
+    if(existing) existing.remove();
+    const div=document.createElement('div');
+    div.id='appPromptOverlay';
+    div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;';
+    const title=opts.title||'입력';
+    const okText=opts.okText||'확인';
+    const cancelText=opts.cancelText||'취소';
+    const defaultValue=opts.defaultValue!=null?opts.defaultValue:'';
+    div.innerHTML=`
+      <div style="background:#fff;border-radius:16px;max-width:380px;width:100%;padding:22px 22px 18px;font-family:'Paperlogy',sans-serif;">
+        <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:10px;word-break:keep-all;">${_appModalEsc(title)}</div>
+        <div style="font-size:13.5px;color:var(--ink);line-height:1.55;margin-bottom:12px;white-space:pre-line;word-break:keep-all;overflow-wrap:break-word;">${_appModalEsc(message)}</div>
+        <input id="appPromptInput" type="text" value="${_appModalEsc(defaultValue)}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:13.5px;margin-bottom:18px;font-family:'Paperlogy',sans-serif;">
+        <div style="display:flex;gap:8px;">
+          <button id="appPromptCancelBtn" style="flex:1;padding:12px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:'Paperlogy',sans-serif;">${_appModalEsc(cancelText)}</button>
+          <button id="appPromptOkBtn" style="flex:1;padding:12px;border:none;border-radius:10px;background:var(--navy);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Paperlogy',sans-serif;">${_appModalEsc(okText)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(div);
+    const input=document.getElementById('appPromptInput');
+    input.focus(); input.select();
+    const cleanup=(result)=>{ div.remove(); resolve(result); };
+    document.getElementById('appPromptCancelBtn').onclick=()=>cleanup(null);
+    document.getElementById('appPromptOkBtn').onclick=()=>cleanup(input.value);
+    input.addEventListener('keydown', e=>{
+      if(e.key==='Enter'){ cleanup(input.value); }
+      else if(e.key==='Escape'){ cleanup(null); }
+    });
+  });
+}
 function showAdminToast(msg, type='good'){
   const existing=document.getElementById('adminToast');
   if(existing) existing.remove();
@@ -5579,7 +5669,7 @@ async function applyTripRecordImport(rows,resultEl){
   plan.forEach(p=>{ (byPlate[p.plate]=byPlate[p.plate]||[]).push(p); });
   const plateNames=Object.keys(byPlate);
   const summaryLines=plateNames.map(p=>`${p}: ${byPlate[p].length}건 추가`);
-  const ok=confirm(`⚠️ 아래 내용을 전체운행기록에 반영합니다.\n\n신규 추가: 총 ${plan.length}건 (차량 ${plateNames.length}대)\n${summaryLines.slice(0,15).join('\n')}${summaryLines.length>15?`\n... 외 ${summaryLines.length-15}대`:''}\n\n이미 데이터가 있는 일자 ${skippedExisting}건은 자동으로 건너뜁니다.${unmatchedPlates.size?`\n미등록 차량번호 ${unmatchedPlates.size}건은 제외됩니다.`:''}\n\n계속 진행하시겠습니까?`);
+  const ok=await appConfirm(`⚠️ 아래 내용을 전체운행기록에 반영합니다.\n\n신규 추가: 총 ${plan.length}건 (차량 ${plateNames.length}대)\n${summaryLines.slice(0,15).join('\n')}${summaryLines.length>15?`\n... 외 ${summaryLines.length-15}대`:''}\n\n이미 데이터가 있는 일자 ${skippedExisting}건은 자동으로 건너뜁니다.${unmatchedPlates.size?`\n미등록 차량번호 ${unmatchedPlates.size}건은 제외됩니다.`:''}\n\n계속 진행하시겠습니까?`);
   if(!ok) return;
 
   plan.forEach(p=>{
@@ -6450,11 +6540,11 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
   if(rowCounter > 1) card.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
-function removeTripRow(id){
+async function removeTripRow(id){
   const el = document.getElementById(id);
   if(el){
     const hasInput = Array.from(el.querySelectorAll('input[type="text"],input[type="number"]')).some(inp=>inp.value && inp.value.trim()!=='');
-    if(hasInput && !confirm('⚠️ 입력하신 운행 정보가 삭제됩니다.\n계속 진행하시겠습니까?')) return;
+    if(hasInput && !await appConfirm('⚠️ 입력하신 운행 정보가 삭제됩니다.\n계속 진행하시겠습니까?')) return;
     el.remove();
   }
   renumberRows();
@@ -6628,11 +6718,11 @@ function markAccidentCompleted(card, accidentId){
 }
 
 // 실수로 눌렀거나 취소하는 경우: 카드를 사고접수 이전 상태로 완전히 되돌림
-function cancelAccidentReport(cardId){
+async function cancelAccidentReport(cardId){
   const card = document.getElementById(cardId);
   if(!card) return;
   if(card.dataset.accidentCompleted === '1'){
-    if(!confirm('이미 접수된 사고보고서가 있습니다. 이 운행기록에서 사고접수 표시만 취소하시겠습니까?\n(접수된 사고보고서 자체는 삭제되지 않습니다)')) return;
+    if(!await appConfirm('이미 접수된 사고보고서가 있습니다. 이 운행기록에서 사고접수 표시만 취소하시겠습니까?\n(접수된 사고보고서 자체는 삭제되지 않습니다)')) return;
   }
   delete card.dataset.accidentPending;
   delete card.dataset.accidentCompleted;
@@ -7404,7 +7494,7 @@ async function submitDirectInput(){
     const msg = underpaidRows.map(x=>
       `운행 #${x.i+1}: 주행 ${x.dist.toLocaleString()}km → 예상 최소 유류비 약 ${x.minCost.toLocaleString()}원 / 입력액 ${Number(x.r.fuel||0).toLocaleString()}원`
     ).join('\n');
-    if(!confirm(`⚠️ 개인사용 주유비가 주행거리 대비 예상 금액(4등급 연비 휘발유 기준)보다 적게 입력되었습니다.\n\n${msg}\n\n입력하신 주유비가 맞는지 확인해 주세요.\n계속 진행하시겠습니까?`)) return;
+    if(!await appConfirm(`⚠️ 개인사용 주유비가 주행거리 대비 예상 금액(4등급 연비 휘발유 기준)보다 적게 입력되었습니다.\n\n${msg}\n\n입력하신 주유비가 맞는지 확인해 주세요.\n계속 진행하시겠습니까?`)) return;
   }
 
   // 검증 통과 → 팝업 표시 (대표 운행자명: 첫 번째 운행기록의 운행자)

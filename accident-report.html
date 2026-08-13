@@ -319,6 +319,29 @@ function escapeHtml(s){
   return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// 앱 내부 커스텀 알림 팝업 — 브라우저 네이티브 alert()는 "example.com 내용:" 등
+// 사이트 출처 문구를 자동으로 붙이며 JS로 제거할 수 없으므로(브라우저 보안 정책),
+// 대신 이 커스텀 오버레이를 사용해 타이틀 문구 없이 표시합니다.
+function appAlert(message, opts={}){
+  return new Promise(resolve=>{
+    const existing=document.getElementById('appAlertOverlay');
+    if(existing) existing.remove();
+    const div=document.createElement('div');
+    div.id='appAlertOverlay';
+    div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;';
+    const title=opts.title||'알림';
+    const okText=opts.okText||'확인';
+    div.innerHTML=`
+      <div style="background:#fff;border-radius:16px;max-width:380px;width:100%;padding:22px 22px 18px;">
+        <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:10px;word-break:keep-all;">${escapeHtml(title)}</div>
+        <div style="font-size:13.5px;color:var(--ink);line-height:1.55;margin-bottom:18px;white-space:pre-line;word-break:keep-all;overflow-wrap:break-word;">${escapeHtml(message)}</div>
+        <button id="appAlertOkBtn" style="width:100%;padding:12px;border:none;border-radius:10px;background:var(--navy);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">${escapeHtml(okText)}</button>
+      </div>`;
+    document.body.appendChild(div);
+    document.getElementById('appAlertOkBtn').onclick=()=>{ div.remove(); resolve(); };
+  });
+}
+
 // index.html의 '내 제출 기록 수정'과 동일한 기기 식별 토큰(localStorage 키 동일)을 사용해,
 // 이 사고보고서를 제출한 기기에서만 본인이 조회·수정할 수 있도록 한다.
 const EDIT_DEVICE_TOKEN_KEY = 'ksaEditDeviceToken';
@@ -496,7 +519,7 @@ async function addPhotos(evt){
   const files = Array.from(evt.target.files);
   const remaining = MAX_PHOTOS - Object.keys(photoStore).length;
   if(remaining <= 0){
-    alert(`현장 사진은 최대 ${MAX_PHOTOS}장까지 첨부할 수 있습니다.`);
+    appAlert(`현장 사진은 최대 ${MAX_PHOTOS}장까지 첨부할 수 있습니다.`);
     evt.target.value='';
     return;
   }
@@ -512,7 +535,7 @@ async function addPhotos(evt){
     div.title = `원본 ${originalKB}KB → 압축 ${compressedKB}KB`;
     grid.insertBefore(div, addBtn);
   }
-  if(overLimit) alert(`현장 사진은 최대 ${MAX_PHOTOS}장까지 첨부할 수 있어 앞의 ${remaining}장만 추가되었습니다.`);
+  if(overLimit) appAlert(`현장 사진은 최대 ${MAX_PHOTOS}장까지 첨부할 수 있어 앞의 ${remaining}장만 추가되었습니다.`);
   updatePhotoCountUI();
   evt.target.value='';
 }

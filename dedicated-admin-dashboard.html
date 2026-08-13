@@ -484,6 +484,60 @@ firebase.auth().signInAnonymously().catch(e=>{
   console.error('[전용차량 대시보드] 익명 인증 실패:', e);
 });
 
+// 앱 내부 커스텀 확인/알림 팝업 (Promise 기반)
+// 브라우저 네이티브 confirm()/alert()는 "example.com 내용:" 등 사이트 출처 문구를
+// 자동으로 붙이며 이는 JS로 제거·수정할 수 없으므로(브라우저 보안 정책), 대신 이 커스텀
+// 오버레이를 사용해 타이틀 문구 없이 전용차량 디자인가이드(다크/베이지) 톤으로 표시합니다.
+function _appModalEsc(str){
+  return String(str==null?'':str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function appConfirm(message, opts={}){
+  return new Promise(resolve=>{
+    const existing=document.getElementById('appConfirmOverlay');
+    if(existing) existing.remove();
+    const div=document.createElement('div');
+    div.id='appConfirmOverlay';
+    div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+    const title=opts.title||'확인';
+    const okText=opts.okText||'확인';
+    const cancelText=opts.cancelText||'취소';
+    const okColor=opts.danger?'var(--ded-red)':'var(--ded-beige)';
+    const okTextColor=opts.danger?'#fff':'#0A0A0A';
+    div.innerHTML=`
+      <div style="background:var(--ded-bg);border:1px solid var(--ded-line);border-radius:2px;max-width:380px;width:100%;padding:24px 22px 18px;">
+        <div style="font-size:16px;font-weight:700;color:var(--ded-text);margin-bottom:10px;word-break:keep-all;">${_appModalEsc(title)}</div>
+        <div style="font-size:13.5px;color:var(--ded-muted);line-height:1.55;margin-bottom:20px;white-space:pre-line;word-break:keep-all;overflow-wrap:break-word;">${_appModalEsc(message)}</div>
+        <div style="display:flex;gap:8px;">
+          <button id="appConfirmCancelBtn" style="flex:1;padding:12px;border:1px solid var(--ded-line);border-radius:2px;background:transparent;font-size:13px;font-weight:600;color:var(--ded-muted);cursor:pointer;">${_appModalEsc(cancelText)}</button>
+          <button id="appConfirmOkBtn" style="flex:1;padding:12px;border:none;border-radius:2px;background:${okColor};color:${okTextColor};font-size:13px;font-weight:700;cursor:pointer;">${_appModalEsc(okText)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(div);
+    const cleanup=(result)=>{ div.remove(); resolve(result); };
+    document.getElementById('appConfirmCancelBtn').onclick=()=>cleanup(false);
+    document.getElementById('appConfirmOkBtn').onclick=()=>cleanup(true);
+  });
+}
+function appAlert(message, opts={}){
+  return new Promise(resolve=>{
+    const existing=document.getElementById('appAlertOverlay');
+    if(existing) existing.remove();
+    const div=document.createElement('div');
+    div.id='appAlertOverlay';
+    div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+    const title=opts.title||'알림';
+    const okText=opts.okText||'확인';
+    div.innerHTML=`
+      <div style="background:var(--ded-bg);border:1px solid var(--ded-line);border-radius:2px;max-width:380px;width:100%;padding:24px 22px 18px;">
+        <div style="font-size:16px;font-weight:700;color:var(--ded-text);margin-bottom:10px;word-break:keep-all;">${_appModalEsc(title)}</div>
+        <div style="font-size:13.5px;color:var(--ded-muted);line-height:1.55;margin-bottom:20px;white-space:pre-line;word-break:keep-all;overflow-wrap:break-word;">${_appModalEsc(message)}</div>
+        <button id="appAlertOkBtn" style="width:100%;padding:12px;border:none;border-radius:2px;background:var(--ded-beige);color:#0A0A0A;font-size:13px;font-weight:700;cursor:pointer;">${_appModalEsc(okText)}</button>
+      </div>`;
+    document.body.appendChild(div);
+    document.getElementById('appAlertOkBtn').onclick=()=>{ div.remove(); resolve(); };
+  });
+}
+
 async function getAuthToken(){
   await authReadyPromise;
   const user = firebase.auth().currentUser;
@@ -795,7 +849,7 @@ function tripEditFieldLine(label, innerHtml){
 
 function openTripEditModal(uid){
   const t = TRIPS.find(x=>x._uid===uid);
-  if(!t){ alert('운행기록을 찾을 수 없습니다. 새로고침 후 다시 시도해주세요.'); return; }
+  if(!t){ appAlert('운행기록을 찾을 수 없습니다. 새로고침 후 다시 시도해주세요.'); return; }
   const v = VEHICLES.find(x=>x.key===t.v);
   if(!v) return;
   _editingTripUid = uid;
@@ -927,18 +981,18 @@ async function deleteDedicatedTrip(uid){
   if(!v) return;
   const distLabel = t.km ? `${t.km}km` : '';
   const warnMsg = `⚠️ '${v.org} · ${v.plate}' 차량의 아래 운행기록을 삭제합니다.\n${t.date||''}${distLabel?' · '+distLabel:''}${t.driver?' · '+t.driver:''}\n이 작업은 되돌릴 수 없습니다.\n\n계속 진행하시겠습니까?`;
-  if(!confirm(warnMsg)) return;
+  if(!await appConfirm(warnMsg, {danger:true})) return;
   try{
     const key = dedTripKey(t.raw);
     const remoteVal = await fbGet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`);
     const arr = dedTripsToArray(remoteVal);
     const idx = arr.findIndex(x=>dedTripKey(x)===key);
-    if(idx===-1){ alert('원본 기록을 찾을 수 없습니다(이미 변경/삭제됨). 새로고침 후 다시 시도해주세요.'); return; }
+    if(idx===-1){ appAlert('원본 기록을 찾을 수 없습니다(이미 변경/삭제됨). 새로고침 후 다시 시도해주세요.'); return; }
     arr.splice(idx,1);
     await fbPut(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`, arr);
     await refreshDashboard();
   }catch(e){
-    alert('삭제 실패: ' + e.message);
+    appAlert('삭제 실패: ' + e.message);
   }
 }
 
@@ -1076,7 +1130,7 @@ function toggleSwapPanel(key){
   panel.classList.toggle('open');
 }
 
-function applySwap(key){
+async function applySwap(key){
   const v = VEHICLES.find(x=>x.key===key);
   if(!v) return;
   const returnDate = document.getElementById(`swapReturn_${key}`).value || todayIsoStr();
@@ -1085,10 +1139,10 @@ function applySwap(key){
   const newStart = document.getElementById(`swapStart_${key}`).value || returnDate;
   const newFee = moneyValue(document.getElementById(`swapFee_${key}`));
   if(!newPlate || !newModel){
-    alert('신규 차량번호와 차종을 입력해주세요.');
+    appAlert('신규 차량번호와 차종을 입력해주세요.');
     return;
   }
-  if(!confirm(`${v.plate}(${v.model}) 차량을 ${returnDate}자로 반납 처리하고,\n${newPlate}(${newModel}) 차량으로 교체합니다. 계속할까요?`)) return;
+  if(!await appConfirm(`${v.plate}(${v.model}) 차량을 ${returnDate}자로 반납 처리하고,\n${newPlate}(${newModel}) 차량으로 교체합니다. 계속할까요?`)) return;
 
   v.plateHistory = v.plateHistory || [];
   v.plateHistory.push({
@@ -1106,18 +1160,18 @@ function applySwap(key){
   renderContractRows();
 }
 
-function deletePlateHistory(key, idx){
+async function deletePlateHistory(key, idx){
   const v = VEHICLES.find(x=>x.key===key);
   if(!v || !v.plateHistory) return;
-  if(!confirm('이 이력 항목을 삭제할까요?')) return;
+  if(!await appConfirm('이 이력 항목을 삭제할까요?')) return;
   v.plateHistory.splice(idx, 1);
   renderContractRows();
 }
 
-function deleteVehicle(key){
+async function deleteVehicle(key){
   const v = VEHICLES.find(x=>x.key===key);
   if(!v) return;
-  if(!confirm(`${v.org} · ${v.plate} 차량을 목록에서 완전히 삭제할까요?\n(운행기록은 Firebase에 남아있으나 대시보드에서 더 이상 표시되지 않습니다)`)) return;
+  if(!await appConfirm(`${v.org} · ${v.plate} 차량을 목록에서 완전히 삭제할까요?\n(운행기록은 Firebase에 남아있으나 대시보드에서 더 이상 표시되지 않습니다)`, {danger:true})) return;
   const idx = VEHICLES.findIndex(x=>x.key===key);
   if(idx>-1) VEHICLES.splice(idx,1);
   renderContractRows();
@@ -1136,12 +1190,12 @@ function confirmAddVehicle(){
   const start = document.getElementById('newVehStart').value || todayIsoStr();
   const fee = moneyValue(document.getElementById('newVehFee'));
   if(!org || !plate || !model){
-    alert('사업장/부서, 차량번호, 차종은 필수입니다.');
+    appAlert('사업장/부서, 차량번호, 차종은 필수입니다.');
     return;
   }
   const key = 'veh_' + plate.replace(/[^0-9a-zA-Z]/g,'');
   if(VEHICLES.some(v=>v.key===key)){
-    alert('이미 등록된 차량번호입니다.');
+    appAlert('이미 등록된 차량번호입니다.');
     return;
   }
   VEHICLES.push({
@@ -1221,7 +1275,7 @@ function applyThousandsFormat(ws, rows, headerNames){
 // ── 엑셀 내보내기 ──
 // 현재 필터 기준 운행기록 시트 + 차량별 계약/누적 요약 시트 두 개를 하나의 워크북으로 내보낸다.
 function exportTripsExcel(){
-  if(!window.XLSX){ alert('엑셀 라이브러리 로드에 실패했습니다. 새로고침 후 다시 시도해주세요.'); return; }
+  if(!window.XLSX){ appAlert('엑셀 라이브러리 로드에 실패했습니다. 새로고침 후 다시 시도해주세요.'); return; }
   const rows = TRIPS.filter(t => currentFilter==='all' || t.v===currentFilter);
   const tripSheetData = rows.map(t=>{
     const v = VEHICLES.find(x=>x.key===t.v);
@@ -1258,7 +1312,7 @@ async function copyDriverLink(){
     btn.textContent = '✓ 복사됨';
     setTimeout(()=>btn.textContent = orig, 1600);
   }catch(e){
-    alert('클립보드 복사에 실패했습니다. 링크를 직접 선택해 복사해주세요:\n' + url);
+    appAlert('클립보드 복사에 실패했습니다. 링크를 직접 선택해 복사해주세요:\n' + url);
   }
 }
 
@@ -1271,7 +1325,7 @@ function printQrDedicated(){
   const plate = document.getElementById('dedQrPlate').textContent.split('·')[0].trim();
   const org = document.getElementById('dedQrOrg').textContent;
   const canvas = document.getElementById('dedQrContainer').querySelector('canvas');
-  if(!canvas){ alert('QR 이미지가 생성되지 않았습니다.'); return; }
+  if(!canvas){ appAlert('QR 이미지가 생성되지 않았습니다.'); return; }
   const img = canvas.toDataURL('image/png');
   const isChairman = !!(_dedQrCurrentVehicle && _dedQrCurrentVehicle.chairman);
   // 회장차만 "운행 시작 전 QR 스캔 필수" 문구 표시. 전무이사 차량은 해당 문구 생략.
