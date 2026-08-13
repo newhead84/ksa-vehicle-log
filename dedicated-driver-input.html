@@ -244,11 +244,15 @@
   /* 수행기사(회장차) 출발/도착 단계에서는 시작거리 필드 자체의 밑줄을 없애 안내문구 위 라인을 제거
      (종료거리 필드가 숨겨져 있어도 DOM상 마지막 자식이 아니므로 기본 밑줄이 남던 문제) */
   #startOdoRow{border-bottom:none;}
-  /* KSA직원·전무이사 페이지(odoSplitRow가 compact)에서는 시작거리 위 밑줄 대신
-     안내문구 아래쪽에 밑줄이 오도록 위치만 이동 */
+  /* KSA직원·전무이사 페이지: odoSplitRow 자체의 compact 기본 밑줄(안내문구 위 라인)을 제거하고,
+     안내문구 아래쪽에만 밑줄을 부여 */
+  #odoSplitRow.compact{border-bottom:none;}
   #odoSplitRow.compact ~ #startOdoNote{border-bottom:1px solid var(--ded-line);}
   /* 근로 시작/종료 안내문구 위 밑줄(workTimeSplitRow의 compact 기본 밑줄) 제거 */
   #workTimeSplitRow{border-bottom:none;}
+  /* KSA직원·전무이사 페이지: 주행거리/주유금액 행 하단 긴 라인, 대리운전 사용 행 하단 라인 제거 */
+  #odoSplitRow.compact ~ #distanceFuelRow{border-bottom:none;}
+  body.ded-compact-mode #substituteToggleRow{border-bottom:none;}
 
   /* ── 섹션 (여백 최소화) ── */
   .ded-section{
@@ -849,7 +853,7 @@
   <div class="ded-section" id="etcSection">
     <div class="ded-eyebrow">ETC</div>
 
-    <div class="ded-toggle-row">
+    <div class="ded-toggle-row" id="substituteToggleRow">
       <div class="lbl">대리운전 사용</div>
       <div class="ded-switch" id="substituteSwitch" onclick="this.classList.toggle('on')"><div class="knob"></div></div>
     </div>
@@ -1293,6 +1297,7 @@ async function refreshHoegjangLayout(){
     document.getElementById('startOdoRow').style.display = 'flex';
     document.getElementById('endOdoRow').style.display = 'flex';
     document.getElementById('odoSplitRow').classList.add('compact');
+    document.body.classList.add('ded-compact-mode');
     document.getElementById('startOdoNote').style.display = 'block';
     document.getElementById('distanceRow').style.display = 'flex';
     document.getElementById('fuelCostRow').style.display = 'flex';
@@ -1402,6 +1407,7 @@ function renderDriverPhaseUI(openTrip){
   }
   document.getElementById('startOdoNote').style.display = driverPhase==='start' ? 'block' : 'none';
   document.getElementById('odoSplitRow').classList.remove('compact'); // 회장차 수행기사 페이지는 시작/종료거리 1줄 배치 대상이 아님(기존 레이아웃 유지)
+  document.body.classList.remove('ded-compact-mode');
 
   document.getElementById('endLocationRow').style.display = driverPhase==='end' ? 'flex' : 'none';
   document.getElementById('endTimeRow').style.display = driverPhase==='end' ? 'flex' : 'none';
@@ -2224,6 +2230,7 @@ function startEditRecord(idx){
   document.getElementById('startOdoRow').style.display = 'flex';
   document.getElementById('endOdoRow').style.display = 'flex';
   document.getElementById('odoSplitRow').classList.add('compact');
+  document.body.classList.add('ded-compact-mode');
   document.getElementById('startOdoNote').style.display = 'block';
   document.getElementById('distanceRow').style.display = 'flex';
   document.getElementById('fuelCostRow').style.display = 'flex';
