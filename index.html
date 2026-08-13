@@ -35,7 +35,16 @@
 <!--
 =================================================================
   CHANGELOG
-  [2026-08-13] 관리자·사용자 화면 전반의 브라우저 네이티브 confirm()/alert()/prompt() 팝업을
+  [2026-08-13] 모바일 UI/데이터 버그 3건 수정. ① 차량상세 모달 "재배치 일자" input[type=date]가
+  좁은 화면에서 다른 입력칸과 동일한 flex-basis(120px)로 줄어들며 "YYYY. MM. DD." 표기가 잘려
+  보이던 문제 → 날짜 입력만 최소폭(158px) 확보하는 미디어쿼리 추가. ② 점검요망 건을
+  "완료처리"(maintenanceResolved=true)해도 차량카드 "점검필요 N건" 배지가 계속 남아있던 문제 →
+  vehicleStatsOf() issues 집계에서 완료처리된 건 제외. ③ 늦은입력 겹침(⚠ 확인필요) 배지가
+  "어떤 기록과 겹치는지" 정보 없이 일반 안내문구만 떠서 관리자가 원인 파악이 어렵던 문제 → 겹친
+  상대 기록의 일자/운행자/시작~종료거리를 lateEntryConflictWith로 함께 저장해 배지 툴팁에 노출
+  (기존에 이미 저장된 과거 기록은 상대 기록 정보 없이 기존 안내문구만 표시됨) | 변경:
+  vehicleStatsOf(), doSubmit() newTrip 생성부, 차량상세 트립 테이블 확인필요 배지 title
+
   전부 앱 내부 커스텀 모달로 교체(총 32곳: index.html 18, dedicated-admin-dashboard.html 13,
   dedicated-driver-input.html 4, accident-report.html 2). 네이티브 다이얼로그는 "example.com
   내용:" 등 사이트 출처 문구가 브라우저 보안 정책상 자동으로 붙어 JS로 제거 불가능했던 문제(예:
@@ -74,14 +83,6 @@
   주의)" 문구)은 제거하고 항목별 제목으로 대체. 점검요청은 운행기록 비고(note), 사고접수는 사고
   설명(description)을 각각 "점검요청내용:"/"사고접수내용:" 라벨로 노출 | 변경:
   renderVehicleAlertPanel() 항목 렌더링, vehicleAlertPanel 상단 고정 제목 div 제거
-  [2026-08-12] 임시저장 "불러오기" 시 날짜/시작거리 불일치 경고 추가. 사용자가 과거에 저장된
-  초안을 오늘 것으로 착각하고 불러와 제출하는 사고를 막기 위해, 복원 직전 ① 초안의 운행일자가
-  오늘과 다른 경우 ② 저장 당시 시작거리(baseOdo)가 현재 실제 이전 종료거리와 다른 경우(그 사이
-  다른 운행기록 제출) 두 가지를 점검해 하나라도 해당하면 하단 시트로 경고 문구를 보여주고
-  "불러오지 않기"/"그래도 불러오기"를 선택하게 함. QR 자동복원 경로도 동일 게이트를 통과하도록
-  경로를 통합(기존 baseOdo·30분 조건과 별개로 날짜 불일치도 추가 차단됨) | 신규:
-  formatMonthDayKR(), showDraftMismatchWarning(), doRestoreDraft() 분리 | 변경: restoreDraft()가
-  게이트키퍼 역할로 전환되어 Promise 반환(경고 시 사용자 확인 후에만 resolve)
 -->
 
 <head>
@@ -886,6 +887,13 @@
     .mcc-legend-item{font-size:12px;}
     .mcc-metric-btn{padding:4px 9px;font-size:11px;}
     .mcc-groupby-btn{padding:4px 9px;font-size:11px;}
+  }
+
+  /* 차량 상세 모달 "재배치 일자" 입력(input[type=date])이 다른 입력칸과 동일한
+     flex-basis(120px/min-width:0)로 줄어들면 "YYYY. MM. DD." 표기 폭보다 필드가 좁아져
+     뒷부분이 잘려 보이는 문제 수정 — 날짜 입력만 최소 폭을 확보해 항상 전체 표기가 보이게 함 */
+  @media (max-width:640px){
+    .branch-edit input[type="date"]{flex:0 1 158px;min-width:158px;}
   }
 
   /* ===== 개인사용 영수증 첨부 3버튼(촬영/앨범/나중에 첨부) 중 선택된 옵션 표시 ===== */
@@ -3735,7 +3743,10 @@ function vehicleStatsOf(plate, businessOnly){
   const fuelTrips=businessOnly?trips.filter(t=>!t.isPersonal&&!t.isCommute):trips;
   const totalDist=distTrips.reduce((s,t)=>s+(Number(t.distance)||0),0)+manualDist;
   const totalFuel=fuelTrips.reduce((s,t)=>s+(Number(t.fuel)||0),0);
-  const issues=trips.filter(t=>t.status&&t.status!=='정상').length;
+  // 점검요망 건은 관리자가 "완료처리"(maintenanceResolved)한 이후에도 status 필드 자체는
+  // '점검요망'으로 남아있으므로(이력 보존 목적), 완료처리된 건은 차량카드 "점검필요 N건" 배지
+  // 집계에서 제외한다 — 그렇지 않으면 완료처리를 해도 배지가 계속 남는 문제가 있었음.
+  const issues=trips.filter(t=>t.status&&t.status!=='정상'&&!(t.status==='점검요망'&&t.maintenanceResolved)).length;
   const sortedByDate=trips.slice().sort(tripChronoCompare);
   const lastTripSorted=sortedByDate.length?sortedByDate[sortedByDate.length-1]:null;
   const lastDate=lastTripSorted?(lastTripSorted.isoDate?formatTripDateDisplay(lastTripSorted.isoDate,lastTripSorted.dateTo):(lastTripSorted.date||'-')):'-';
@@ -4320,7 +4331,7 @@ function openVehicle(plate){
           </td>
           <td class="mono" data-label="시작거리"><span class="view-val">${t.startOdo!=null&&t.startOdo!==''?Number(t.startOdo).toLocaleString():''}</span><input class="edit-inp mono" value="${t.startOdo!=null&&t.startOdo!==''?Number(t.startOdo).toLocaleString():''}" data-f="startOdo" oninput="formatOdoInput(this)" style="display:none;width:65px;"></td>
           <td class="mono" data-label="종료거리"><span class="view-val">${t.endOdo!=null&&t.endOdo!==''?Number(t.endOdo).toLocaleString():''}</span><input class="edit-inp mono" value="${t.endOdo!=null&&t.endOdo!==''?Number(t.endOdo).toLocaleString():''}" data-f="endOdo" oninput="formatOdoInput(this)" style="display:none;width:65px;"></td>
-          <td class="mono" data-label="거리(누계, 자동계산)"><span class="view-val dist-view">${t.distance!=null&&t.distance!==''?Number(t.distance).toLocaleString():''}</span>${t.lateAdjustedAt?`<span class="lateadjust-badge" title="늦게 입력된 다른 기록으로 인해 시작거리가 자동 보정되었습니다. (보정 전 시작거리 ${t.originalStartOdo!=null?Number(t.originalStartOdo).toLocaleString():'?'}km / 보정 전 주행거리 ${t.originalDistance!=null?Number(t.originalDistance).toLocaleString():'?'}km / 보정일시 ${new Date(t.lateAdjustedAt).toLocaleString('ko-KR')})">🔧 자동보정됨</span>`:''}${t.lateEntryConflict?`<span class="lateconflict-badge" title="같은 시작거리를 가진 다른 기록이 이미 있어 순서가 겹칩니다. 거리 역전 또는 운행일자 순서가 맞지 않아 자동 보정하지 않고 값을 그대로 두었습니다. 관리자가 직접 두 기록을 확인해 주세요.">⚠ 확인필요</span>`:''}<input class="edit-inp mono dist-inp" value="${t.distance!=null&&t.distance!==''?Number(t.distance).toLocaleString():''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1" title="종료거리-시작거리로 자동계산되며 직접 수정할 수 없습니다."></td>
+          <td class="mono" data-label="거리(누계, 자동계산)"><span class="view-val dist-view">${t.distance!=null&&t.distance!==''?Number(t.distance).toLocaleString():''}</span>${t.lateAdjustedAt?`<span class="lateadjust-badge" title="늦게 입력된 다른 기록으로 인해 시작거리가 자동 보정되었습니다. (보정 전 시작거리 ${t.originalStartOdo!=null?Number(t.originalStartOdo).toLocaleString():'?'}km / 보정 전 주행거리 ${t.originalDistance!=null?Number(t.originalDistance).toLocaleString():'?'}km / 보정일시 ${new Date(t.lateAdjustedAt).toLocaleString('ko-KR')})">🔧 자동보정됨</span>`:''}${t.lateEntryConflict?`<span class="lateconflict-badge" title="같은 시작거리(${t.startOdo!=null?Number(t.startOdo).toLocaleString():'?'}km)를 가진 다른 기록이 이미 있어 순서가 겹칩니다. 거리 역전 또는 운행일자 순서가 맞지 않아 자동 보정하지 않고 값을 그대로 두었습니다.${t.lateEntryConflictWith?` 겹친 기록: ${t.lateEntryConflictWith.isoDate||'?'} / ${t.lateEntryConflictWith.submitter||'?'} / ${t.lateEntryConflictWith.startOdo!=null?Number(t.lateEntryConflictWith.startOdo).toLocaleString():'?'}→${t.lateEntryConflictWith.endOdo!=null?Number(t.lateEntryConflictWith.endOdo).toLocaleString():'?'}km`:''} 관리자가 직접 두 기록을 확인해 주세요.">⚠ 확인필요</span>`:''}<input class="edit-inp mono dist-inp" value="${t.distance!=null&&t.distance!==''?Number(t.distance).toLocaleString():''}" data-f="distance" style="display:none;width:55px;background:var(--paper);color:var(--muted);" readonly tabindex="-1" title="종료거리-시작거리로 자동계산되며 직접 수정할 수 없습니다."></td>
           <td data-label="제출자"><span class="view-val" style="color:var(--accent);font-size:11px;">${escapeHtml(t.submitter||'')}</span></td>
           <td data-label="운행자"><span class="view-val">${escapeHtml(t.user||'')}</span><input class="edit-inp" value="${escapeHtml(t.user||'')}" data-f="user" style="display:none;width:60px;"></td>
           <td data-label="행선지"><span class="view-val">${escapeHtml(t.dest||'')}</span><input class="edit-inp" value="${escapeHtml(t.dest||'')}" data-f="dest" style="display:none;width:90px;"></td>
@@ -7736,7 +7747,16 @@ async function doSubmit(submitter, plate, rows){
       receiptTypeValid: r.isPersonal ? (r.receiptTypeValid ?? null) : null,
       receiptUploadedAt
     };
-    if(resolution && resolution.conflict) newTrip.lateEntryConflict = true;
+    // 관리자가 "왜 확인필요인지" 배지 툴팁만으로 바로 판단할 수 있도록, 겹친 상대 기록의
+    // 식별정보(일자·운행자·시작~종료거리)를 함께 저장해 둔다(기존엔 겹침 여부만 저장해
+    // 상대 기록을 직접 찾아야 했음).
+    if(resolution && resolution.conflict){
+      newTrip.lateEntryConflict = true;
+      newTrip.lateEntryConflictWith = {
+        isoDate: resolution.targetTrip.isoDate||'', submitter: resolution.targetTrip.submitter||resolution.targetTrip.user||'',
+        startOdo: resolution.targetTrip.startOdo, endOdo: resolution.targetTrip.endOdo
+      };
+    }
     data.vehicles[plate].trips.push(newTrip);
     if(resolution && resolution.adjusted) lateAdjustments.push({row:r, target:resolution.targetTrip, oldStart:resolution.oldStart, oldDistance:resolution.oldDistance});
     else if(resolution && resolution.conflict) lateConflicts.push({row:r, target:resolution.targetTrip});
