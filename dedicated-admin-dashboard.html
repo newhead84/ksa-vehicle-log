@@ -24,6 +24,31 @@
     --ded-muted:rgba(245,243,239,0.55);
     --ded-muted-2:rgba(245,243,239,0.35);
     --ded-good:#8FBF9F;
+    --ded-card-hover:#111111;
+    --ded-card-active:#141210;
+    --ded-modal-bg:#111111;
+    --ded-input-bg:#0A0A0A;
+    --ded-table-hover:#111111;
+    --ded-btn-text-on-accent:#0A0A0A;
+  }
+  /* ── 화이트골드 테마 (우상단 토글 버튼으로 전환) ── */
+  body.ded-theme-white{
+    --ded-bg:#FBF9F4;
+    --ded-bg-pure:#FFFFFF;
+    --ded-text:#221D14;
+    --ded-line:#E4D9C7;
+    --ded-beige:#9C7A3D;
+    --ded-beige-dark:#C9AF7F;
+    --ded-red:#C23054;
+    --ded-muted:rgba(34,29,20,0.6);
+    --ded-muted-2:rgba(34,29,20,0.4);
+    --ded-good:#3F8259;
+    --ded-card-hover:#F4EDE0;
+    --ded-card-active:#F7F0E3;
+    --ded-modal-bg:#FFFFFF;
+    --ded-input-bg:#FFFFFF;
+    --ded-table-hover:#F4EDE0;
+    --ded-btn-text-on-accent:#FFFFFF;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;background:var(--ded-bg);color:var(--ded-text); overflow-x:hidden; max-width:100%;}
@@ -122,7 +147,7 @@
   }
   .ded-stat-card .val{
     font-family:'Outfit',sans-serif; font-size:32px; font-weight:500; color:var(--ded-beige);
-    display:flex; align-items:baseline; gap:6px; flex-wrap:wrap;
+    display:flex; align-items:baseline; justify-content:flex-end; gap:6px; flex-wrap:wrap; text-align:right;
   }
   .ded-stat-card .val .unit{font-family:'Pretendard',sans-serif; font-size:15px; font-weight:400; color:var(--ded-muted);}
 
@@ -134,35 +159,35 @@
   .ded-card{
     background:var(--ded-bg); padding:32px 30px; cursor:pointer; transition:background .15s ease;
   }
-  .ded-card:hover{background:#111111;}
-  .ded-card.active{background:#141210; border-top:2px solid var(--ded-beige); padding-top:30px;}
+  .ded-card:hover{background:var(--ded-card-hover);}
+  .ded-card.active{background:var(--ded-card-active); border-top:2px solid var(--ded-beige); padding-top:30px;}
 
   /* 상단: 좌측 역할/조직, 우측 차량번호 배지 + 모델명 */
   .ded-card .card-top{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:26px;}
   .ded-card .role{font-size:22px; color:var(--ded-text); margin-bottom:6px; line-height:1.3;}
-  .ded-card .org{font-size:13px; color:var(--ded-muted-2);}
+  .ded-card .org{font-size:19.5px; color:var(--ded-muted-2);}
   .ded-card .card-plate{text-align:right; flex-shrink:0;}
   .ded-card .plate-badge{
     display:inline-block; border:1px solid var(--ded-beige); padding:8px 14px;
     font-family:'Outfit',sans-serif; font-size:19px; font-weight:500; color:var(--ded-beige); white-space:nowrap;
   }
-  .ded-card .model-line{font-size:11.5px; color:var(--ded-muted-2); margin-top:7px;}
+  .ded-card .model-line{font-size:17.5px; color:var(--ded-muted-2); margin-top:7px;}
 
-  /* 세부정보(주행거리/주유비/대여료 등) 2x2 그리드 — 기존 대비 폰트 1.5배 확대 */
+  /* 세부정보(주행거리/주유비/대여료 등) 2x2 그리드 */
   .ded-card .card-stats{
     display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); row-gap:24px; column-gap:16px;
     padding-top:22px; border-top:1px solid var(--ded-line);
   }
   .ded-card .stat-cell{min-width:0;}
   .ded-card .stat-cell .l{font-size:21px; color:var(--ded-muted); margin-bottom:8px; line-height:1.3;}
-  .ded-card .stat-cell .v{font-family:'Outfit',sans-serif; font-size:28.5px; color:var(--ded-beige); font-weight:500; line-height:1.2; text-align:right;}
+  .ded-card .stat-cell .v{font-family:'Outfit',sans-serif; font-size:24px; color:var(--ded-beige); font-weight:500; line-height:1.2; text-align:right;}
 
   .ded-card .qr-btn{
     margin-top:26px; width:100%; padding:13px; background:transparent;
     border:1px solid var(--ded-beige); border-radius:0; color:var(--ded-beige);
     font-family:'Pretendard',sans-serif; font-size:14px; cursor:pointer; transition:background .15s ease,color .15s ease;
   }
-  .ded-card .qr-btn:hover{background:var(--ded-beige); color:#0A0A0A;}
+  .ded-card .qr-btn:hover{background:var(--ded-beige); color:var(--ded-btn-text-on-accent);}
 
   /* QR 모달 */
   .ded-qr-overlay{
@@ -171,7 +196,7 @@
   }
   .ded-qr-overlay.open{display:flex;}
   .ded-qr-card{
-    background:#111111; border:1px solid var(--ded-line); max-width:340px; width:100%;
+    background:var(--ded-modal-bg); border:1px solid var(--ded-line); max-width:340px; width:100%;
     padding:0; overflow:hidden;
   }
   .ded-qr-head{
@@ -186,7 +211,7 @@
   .ded-qr-hint1{font-size:12px; font-weight:700; color:var(--ded-red); margin-top:14px;}
   .ded-qr-hint2{font-size:11px; color:var(--ded-beige); margin-top:3px;}
   .ded-qr-link-row{
-    margin-top:16px; display:flex; align-items:center; gap:6px; background:#0A0A0A;
+    margin-top:16px; display:flex; align-items:center; gap:6px; background:var(--ded-input-bg);
     border:1px solid var(--ded-line); padding:8px 10px; font-family:'Outfit',sans-serif; font-size:11px;
     color:var(--ded-muted); word-break:break-all; overflow-wrap:break-word; text-align:left;
   }
@@ -195,8 +220,8 @@
     flex:1; padding:11px; border:1px solid var(--ded-beige); background:transparent;
     color:var(--ded-beige); font-family:'Pretendard',sans-serif; font-size:12.5px; cursor:pointer;
   }
-  .ded-qr-actions button:hover{background:var(--ded-beige); color:#0A0A0A;}
-  .ded-qr-actions button.primary{background:var(--ded-beige); color:#0A0A0A;}
+  .ded-qr-actions button:hover{background:var(--ded-beige); color:var(--ded-btn-text-on-accent);}
+  .ded-qr-actions button.primary{background:var(--ded-beige); color:var(--ded-btn-text-on-accent);}
   .ded-qr-actions button.primary:hover{opacity:.85;}
 
   /* 계약정보 관리 폼 */
@@ -206,7 +231,7 @@
   .contract-row .field-line{display:flex; align-items:center; gap:10px; margin-bottom:8px;}
   .contract-row label{flex:0 0 84px; font-size:12px; color:var(--ded-muted);}
   .contract-row input{
-    flex:1; background:#0A0A0A; border:1px solid var(--ded-line); color:var(--ded-text);
+    flex:1; background:var(--ded-input-bg); border:1px solid var(--ded-line); color:var(--ded-text);
     padding:8px 10px; font-family:'Pretendard',sans-serif; font-size:13px;
   }
   .contract-row input:focus{outline:none; border-color:var(--ded-beige);}
@@ -267,7 +292,7 @@
     padding:18px 14px; font-size:20.25px; border-bottom:1px solid var(--ded-line);
     vertical-align:top;
   }
-  .ded-table tbody tr:hover{background:#111111;}
+  .ded-table tbody tr:hover{background:var(--ded-table-hover);}
   .ded-table .num{font-family:'Outfit',sans-serif; color:var(--ded-beige);}
   .ded-dot{display:inline-flex; align-items:center; gap:7px; font-size:18.75px; color:var(--ded-muted);}
   .ded-dot::before{content:''; width:9px; height:9px; border-radius:50%; background:var(--ded-muted-2);}
@@ -305,6 +330,7 @@
 </style>
 </head>
 <body>
+<script>(function(){try{if(localStorage.getItem('dedTheme')==='white')document.body.classList.add('ded-theme-white');}catch(e){}})();</script>
 
 <!-- ═══════ 2차 인증 게이트 ═══════ -->
 <div id="gate">
@@ -340,6 +366,7 @@
       <span>EXECUTIVE VEHICLE LOG</span>
     </div>
     <div class="sess">
+      <button class="ded-exit" id="themeToggleBtn" onclick="toggleDedTheme()" style="border-color:var(--ded-line);">☀ 화이트골드 테마</button>
       <button class="ded-exit" id="refreshDataBtn" onclick="refreshDashboard()" style="border-color:var(--ded-beige);color:var(--ded-beige);">⟳ 새로고침</button>
       <button class="ded-exit" onclick="openContractModal()">📋 계약정보 관리</button>
       <button class="ded-exit" onclick="exportTripsExcel()">⬇ 엑셀내보내기</button>
@@ -484,6 +511,21 @@ firebase.auth().signInAnonymously().catch(e=>{
   console.error('[전용차량 대시보드] 익명 인증 실패:', e);
 });
 
+// 전용차량 대시보드 화이트골드 테마 토글 (기본: 다크/베이지, 선택: 화이트/골드)
+// body에 ded-theme-white 클래스를 붙이면 CSS 변수(--ded-*)가 전부 화이트골드 값으로 교체됨
+function applyDedThemeBtnLabel(){
+  const btn = document.getElementById('themeToggleBtn');
+  if(!btn) return;
+  const isWhite = document.body.classList.contains('ded-theme-white');
+  btn.textContent = isWhite ? '🌙 다크 테마' : '☀ 화이트골드 테마';
+}
+function toggleDedTheme(){
+  const next = document.body.classList.contains('ded-theme-white') ? 'dark' : 'white';
+  document.body.classList.toggle('ded-theme-white', next==='white');
+  try{ localStorage.setItem('dedTheme', next); }catch(e){}
+  applyDedThemeBtnLabel();
+}
+
 // 앱 내부 커스텀 확인/알림 팝업 (Promise 기반)
 // 브라우저 네이티브 confirm()/alert()는 "example.com 내용:" 등 사이트 출처 문구를
 // 자동으로 붙이며 이는 JS로 제거·수정할 수 없으므로(브라우저 보안 정책), 대신 이 커스텀
@@ -502,7 +544,7 @@ function appConfirm(message, opts={}){
     const okText=opts.okText||'확인';
     const cancelText=opts.cancelText||'취소';
     const okColor=opts.danger?'var(--ded-red)':'var(--ded-beige)';
-    const okTextColor=opts.danger?'#fff':'#0A0A0A';
+    const okTextColor=opts.danger?'#fff':'var(--ded-btn-text-on-accent)';
     div.innerHTML=`
       <div style="background:var(--ded-bg);border:1px solid var(--ded-line);border-radius:2px;max-width:380px;width:100%;padding:24px 22px 18px;">
         <div style="font-size:16px;font-weight:700;color:var(--ded-text);margin-bottom:10px;word-break:keep-all;">${_appModalEsc(title)}</div>
@@ -531,7 +573,7 @@ function appAlert(message, opts={}){
       <div style="background:var(--ded-bg);border:1px solid var(--ded-line);border-radius:2px;max-width:380px;width:100%;padding:24px 22px 18px;">
         <div style="font-size:16px;font-weight:700;color:var(--ded-text);margin-bottom:10px;word-break:keep-all;">${_appModalEsc(title)}</div>
         <div style="font-size:13.5px;color:var(--ded-muted);line-height:1.55;margin-bottom:20px;white-space:pre-line;word-break:keep-all;overflow-wrap:break-word;">${_appModalEsc(message)}</div>
-        <button id="appAlertOkBtn" style="width:100%;padding:12px;border:none;border-radius:2px;background:var(--ded-beige);color:#0A0A0A;font-size:13px;font-weight:700;cursor:pointer;">${_appModalEsc(okText)}</button>
+        <button id="appAlertOkBtn" style="width:100%;padding:12px;border:none;border-radius:2px;background:var(--ded-beige);color:var(--ded-btn-text-on-accent);font-size:13px;font-weight:700;cursor:pointer;">${_appModalEsc(okText)}</button>
       </div>`;
     document.body.appendChild(div);
     document.getElementById('appAlertOkBtn').onclick=()=>{ div.remove(); resolve(); };
@@ -702,6 +744,7 @@ async function attemptAuth(){
   err.style.display = 'none';
   document.getElementById('gate').style.display = 'none';
   document.getElementById('dash').style.display = 'block';
+  applyDedThemeBtnLabel();
   await refreshDashboard();
 }
 
