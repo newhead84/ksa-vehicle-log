@@ -1436,6 +1436,9 @@ function printQrDedicated(){
         position:absolute;top:80mm;left:4mm;right:4mm;text-align:center;
         font-weight:600;font-size:8pt;line-height:1.45;letter-spacing:.02em;color:#F5F3EF;
       }
+      .hint-caption.single-line{
+        white-space:nowrap;font-size:7pt;letter-spacing:0;
+      }
       .footer-logo{
         position:absolute;bottom:5mm;left:0;right:0;
         display:flex;align-items:center;justify-content:center;
@@ -1450,7 +1453,7 @@ function printQrDedicated(){
       <div class="plate">${plate}</div>
       <div class="org">${org}</div>
       <div class="qr-frame"><img src="${img}"></div>
-      <div class="hint-caption">${captionHtml}</div>
+      <div class="hint-caption${isChairman ? '' : ' single-line'}">${captionHtml}</div>
       <div class="footer-logo"><img src="${KSA_LOGO_WORDMARK_WHITE}" alt="KSA 한국표준협회"></div>
     </div>
     <script>window.onload=()=>window.print();<\/script>
