@@ -254,6 +254,17 @@
     display:block; width:100%; margin:0 0 12px; font-size:12px; color:var(--ded-muted); box-sizing:border-box;
   }
 
+  /* 전용차량 계약정보 관리 모달 — 공용차량 대시보드 모달과 비슷한 가독성으로 확대 */
+  #dedContractOverlay .ded-qr-card{max-width:min(680px,94vw);}
+  #dedContractOverlay .ded-qr-head{padding:22px 26px;}
+  #dedContractOverlay .ded-qr-head .plate{font-size:19px;}
+  #dedContractOverlay .ded-qr-head .org{font-size:13.5px; margin-top:4px;}
+  #dedContractOverlay .ded-qr-body{padding:26px 28px; text-align:left;}
+  #dedContractOverlay .dci-btn{font-size:14px; padding:13px;}
+  #dedContractOverlay .dci-upload-zone{padding:24px;}
+  #dedContractOverlay .dci-upload-zone input[type=file]{font-size:13.5px;}
+  #dedContractImportResult{font-size:13.5px !important; line-height:1.7 !important;}
+
   /* 필터탭 */
   .ded-tabs{display:flex; gap:0; border-bottom:1px solid var(--ded-line); margin-bottom:0;}
   .ded-tab{
@@ -411,16 +422,16 @@
 
 <!-- ═══════ 계약정보 관리 모달 ═══════ -->
 <div class="ded-qr-overlay" id="dedContractOverlay" onclick="if(event.target===this)closeContractModal()">
-  <div class="ded-qr-card" style="max-width:460px;">
+  <div class="ded-qr-card">
     <div class="ded-qr-head">
       <div>
-        <div class="plate" style="font-size:15px;">📋 전용차량 계약정보 관리</div>
+        <div class="plate">📋 전용차량 계약정보 관리</div>
         <div class="org">계약시작일·계약종료일·월대여료를 입력하면 총대여료 누계가 자동 계산됩니다</div>
       </div>
       <button class="ded-qr-close" onclick="closeContractModal()">✕</button>
     </div>
-    <div class="ded-qr-body" style="text-align:left;">
-      <div style="font-size:12.5px;line-height:1.85;color:var(--ded-muted);word-break:keep-all;margin-bottom:18px;">
+    <div class="ded-qr-body">
+      <div style="font-size:14.5px;line-height:1.95;color:var(--ded-muted);word-break:keep-all;margin-bottom:20px;">
         <b style="color:var(--ded-beige);">사용 방법</b><br>
         1. <b style="color:var(--ded-text);">양식 다운로드</b>로 현재 등록 차량이 채워진 엑셀을 받습니다.<br>
         2. <b style="color:var(--ded-text);">계약 연장</b>(단가·계약기간 변경)은 기존 행의 값만 수정하세요. 차량번호는 그대로 둡니다.<br>
@@ -433,7 +444,7 @@
         <input type="file" id="dedContractExcelInput" accept=".xlsx,.xls">
         <button type="button" class="dci-btn primary" onclick="handleDedicatedContractExcelUpload()">엑셀 업로드 및 반영</button>
       </div>
-      <div id="dedContractImportResult" style="margin-top:14px;font-size:12px;line-height:1.6;word-break:keep-all;"></div>
+      <div id="dedContractImportResult" style="margin-top:16px;word-break:keep-all;"></div>
     </div>
   </div>
 </div>
