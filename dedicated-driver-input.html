@@ -347,6 +347,8 @@
     font-size:12px; color:var(--ded-muted-2); padding:0 0 10px;
     word-break:keep-all; overflow-wrap:break-word;
   }
+  /* 대차인수 등, 자동채움이 해제되고 사용자의 직접 확인·입력이 반드시 필요한 상황을 강조하는 경고톤 */
+  .ded-field-note.warn{ color:var(--ded-red); }
 
   /* ── 시작거리 자동반영 입력창: 비활성화된 인풋처럼 보이도록(실제로는 수정 가능) ── */
   .ded-line-field input#startOdo.ded-odo-autofilled{
@@ -409,6 +411,13 @@
   .ded-daecha-toggle-btn .sub-inline{font-size:12px; font-weight:400; color:var(--ded-muted-2);}
   /* 대차인수/반납은 상호 배타적으로 동작(한 쪽이 켜지면 반대쪽은 선택 불가) */
   .ded-switch.ded-switch-disabled{opacity:.35; pointer-events:none; cursor:not-allowed;}
+
+  /* ── 대차 사용중 배너: 인수 등록 시점부터 반납 완료 시점까지 노출(공용차량 index.html과 동일 취지) ── */
+  .ded-daecha-active-banner{
+    display:none; font-size:12.5px; padding:10px 12px; margin:0 0 14px;
+    line-height:1.6; word-break:keep-all; overflow-wrap:break-word;
+    border:1px solid var(--ded-beige); background:rgba(203,178,149,0.08); color:var(--ded-beige); font-weight:600;
+  }
 
   /* ── 근태 반복 섹션 (회장차 전용) ── */
   .ded-period-list{display:flex; flex-direction:column; gap:10px; margin:10px 0 12px;}
@@ -743,6 +752,7 @@
   <!-- 운행정보: TRIP 구분 아래에 운행자를 포함해 한 섹션으로 표시(라인 절약) -->
   <div class="ded-section" id="tripSection">
     <div class="ded-eyebrow">TRIP</div>
+    <div class="ded-daecha-active-banner" id="daeChaActiveBanner"></div>
 
     <div class="ded-line-field" id="driverNameRow">
       <label>운행자</label>
@@ -832,6 +842,7 @@
     </div>
     <div class="ded-inline-err" id="endOdoErr">종료거리를 입력해 주세요.</div>
     <div class="ded-field-note" id="startOdoNote">🔒 시작거리는 이전 운행 종료거리 자동반영 · 필요시 수정가능</div>
+    <div class="ded-field-note" id="endOdoDaeChaNote" style="display:none;">💡 종료거리는 원 차량을 직접 인수한 후 계기판을 확인해 입력해 주세요 (대차로 인해 정비소까지 이동한 거리 개념).</div>
 
     <div class="ded-df-row" id="distanceFuelRow">
       <div class="ded-readout" id="distanceRow">
@@ -1267,6 +1278,7 @@ async function refreshHoegjangLayout(){
   document.getElementById('etcSection').style.display = 'block';
   document.getElementById('submitBtnMain').style.display = '';
   document.getElementById('doneTodayBanner').style.display = 'none';
+  document.getElementById('daeChaActiveBanner').style.display = 'none'; // 차량/모드 전환 중 이전 차량의 배너가 잠깐 남아있지 않도록 즉시 숨김(재조회 후 갱신)
   document.getElementById('chairmanOnlyBlock').style.display = effChairman ? 'block' : 'none';
   document.getElementById('routeNoteRow').style.display = 'flex';
 
@@ -1311,6 +1323,7 @@ async function refreshHoegjangLayout(){
     document.getElementById('submitBtnMain').textContent = editingIndex!==null ? '수정 저장' : '운행기록 제출';
   }
   prefillStartOdoFromHistory(mySeq);
+  refreshDaeChaActiveBanner(mySeq);
 }
 
 // 회장차 · 수행기사 모드 전용: 오늘 날짜에 "출발만 등록되고 도착이 비어있는" 기록이 있는지 확인해
@@ -1544,9 +1557,11 @@ function applyDaeChaDestAutofill(){
 }
 
 // 대차인수 시: 대차 차량은 원 차량과 계기판이 이어지지 않으므로, 자동 반영되어 있던 시작거리를
-// 비우고 사용자가 대차 차량 계기판을 보고 새로 직접 입력하도록 한다.
+// 비우고 사용자가 대차 차량 계기판을 보고 새로 직접 입력하도록 한다(공용차량 index.html의
+// daechaNotice 경고와 동일하게, 시작거리 아래 안내문구도 "직접 확인·입력 필요" 경고로 전환한다).
 // 해제 시에는 대차인수 켜기 직전 값(원 차량 기준 자동반영값 등)으로 복원한다.
 function applyDaeChaPickupStartOdo(isOn){
+  updateStartOdoNoteForDaecha();
   if(editingIndex !== null) return;
   if(isOn) saveStartOdoBeforeDaecha();
   else restoreStartOdoBeforeDaecha();
@@ -1558,39 +1573,76 @@ function applyDaeChaPickupStartOdo(isOn){
   }
 }
 
+// 시작거리 아래 안내문구를, 현재 켜져 있는 대차인수/대차반납 상태에 맞춰 갱신한다.
+// - 대차인수 중: 시작거리가 비워졌으니 대차 차량 계기판을 보고 직접 입력하라는 경고(빨강)
+// - 대차반납 중: 시작거리가 원 차량 기준으로 자동 재연동됨을 안내(상세 km는 daeChaReturnRelinkNote가 별도 표시)
+// - 둘 다 아님: 평소의 기본 자동반영 안내문구로 복원
+function updateStartOdoNoteForDaecha(){
+  const note = document.getElementById('startOdoNote');
+  if(!note) return;
+  const pickupOn = document.getElementById('daeChaPickupSwitch')?.classList.contains('on') || false;
+  const returnOn = document.getElementById('daeChaReturnSwitch')?.classList.contains('on') || false;
+  if(pickupOn){
+    note.textContent = '⚠️ 대차 차량은 원 차량과 주행거리가 이어지지 않습니다. 대차 차량 계기판의 시작거리를 반드시 확인 후 입력해 주세요.';
+    note.classList.add('warn');
+  } else if(returnOn){
+    note.textContent = '🔗 시작거리가 대차 인수 직전 원 차량 종료거리로 자동 재연동됩니다 · 원 차량 계기판과 다르면 직접 수정 가능';
+    note.classList.remove('warn');
+  } else {
+    note.textContent = '🔒 시작거리는 이전 운행 종료거리 자동반영 · 필요시 수정가능';
+    note.classList.remove('warn');
+  }
+}
+
+// 지정 차량번호(plate)에 현재 진행중인(아직 반납되지 않은) 대차가 있는지 조회.
+// 있다면 인수 당시 정보(대차번호/차종/이상여부)와, 대차 인수 직전 원 차량의 마지막 종료거리
+// (반납 시 시작거리 재연동용)를 함께 반환. 없으면 null.
+// (공용차량 index.html의 getActiveDaeChaInfo()와 동일한 판정 로직 — 인수만 있고 반납이 없으면 활성)
+async function getActiveDaeChaInfo(plate){
+  const existing = await fbGet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(plate)}/trips`);
+  const trips = Array.isArray(existing) ? existing.filter(t=>t) : (existing && typeof existing==='object' ? Object.values(existing) : []);
+  if(!trips.length) return null;
+  const sorted = trips.slice().sort((a,b)=>(a.submittedAt||'').localeCompare(b.submittedAt||''));
+  let active = null;
+  sorted.forEach((t, i)=>{
+    if(t.isDaeChaPickup && !active){
+      const prev = sorted[i-1];
+      active = {
+        plate: t.daeChaPlatePickup || '',
+        model: t.daeChaModelPickup || '',
+        condition: t.daeChaConditionPickup || '',
+        preOdo: prev ? (Number(prev.endOdo) || 0) : null
+      };
+    }
+    if(t.isDaeChaReturn) active = null;
+  });
+  return active;
+}
+
 // 대차반납 스위치 on 시, 현재 진행중인(아직 반납되지 않은) 대차 인수 정보를 조회하여
 // 대차 차량번호·차량 이상여부를 채우고, 시작거리를 "대차 인수 직전 원 차량 종료거리"로
 // 재연동한다(원 차량 계기판 기준 복귀 — 공용차량 index.html의 대차반납 재연동 로직과 동일).
 async function applyDaeChaReturnStartOdo(isOn){
   const relinkNote = document.getElementById('daeChaReturnRelinkNote');
+  const endOdoNote = document.getElementById('endOdoDaeChaNote');
   if(!isOn){
     restoreStartOdoBeforeDaecha();
     if(relinkNote) relinkNote.style.display = 'none';
+    if(endOdoNote) endOdoNote.style.display = 'none';
+    updateStartOdoNoteForDaecha();
     return;
   }
+  if(endOdoNote) endOdoNote.style.display = 'block';
+  updateStartOdoNoteForDaecha();
   if(editingIndex !== null) return;
   saveStartOdoBeforeDaecha();
   const myKey = currentVehicleKey;
   const v = VEHICLES[myKey];
   try{
-    const existing = await fbGet(`${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/trips`);
+    const active = await getActiveDaeChaInfo(v.plate);
     // 조회 중 차량이 바뀌었거나 대차반납 스위치가 다시 꺼졌으면 낡은 응답은 버린다
     if(myKey !== currentVehicleKey) return;
     if(!document.getElementById('daeChaReturnSwitch')?.classList.contains('on')) return;
-    const trips = Array.isArray(existing) ? existing.filter(t=>t) : (existing && typeof existing==='object' ? Object.values(existing) : []);
-    const sorted = trips.slice().sort((a,b)=>(a.submittedAt||'').localeCompare(b.submittedAt||''));
-    let active = null;
-    sorted.forEach((t, i)=>{
-      if(t.isDaeChaPickup && !active){
-        const prev = sorted[i-1];
-        active = {
-          plate: t.daeChaPlatePickup || '',
-          condition: t.daeChaConditionPickup || '',
-          preOdo: prev ? (Number(prev.endOdo) || 0) : null
-        };
-      }
-      if(t.isDaeChaReturn) active = null;
-    });
     const plateInp = document.getElementById('daeChaPlateReturn');
     if(plateInp && !plateInp.value && active?.plate) plateInp.value = active.plate;
     const startInp = document.getElementById('startOdo');
@@ -1608,6 +1660,29 @@ async function applyDaeChaReturnStartOdo(isOn){
     }
   }catch(e){
     console.error('[전용차량] 진행중인 대차 정보 조회 실패:', e);
+  }
+}
+
+// 차량 선택/전환 시점(초기 진입 포함)마다, 해당 차량에 현재 진행중인(반납되지 않은) 대차가
+// 있는지 조회하여 상단에 "대차 사용중" 배너를 표시한다(공용차량 index.html의 onVehicleSelect()
+// 내 daechaActiveBanner 로직과 동일 — 대차 인수 등록 시점부터 반납 완료 시점까지 계속 노출).
+async function refreshDaeChaActiveBanner(mySeq){
+  const banner = document.getElementById('daeChaActiveBanner');
+  if(!banner) return;
+  const myKey = currentVehicleKey;
+  const v = VEHICLES[myKey];
+  try{
+    const active = await getActiveDaeChaInfo(v.plate);
+    // 조회 중 다른 차량/모드로 전환되었으면 낡은 응답은 버린다
+    if(mySeq !== layoutRequestSeq || myKey !== currentVehicleKey) return;
+    if(active){
+      banner.innerHTML = `🚗 현재 <b>대차 차량(${escapeHtmlDed(active.plate||'번호 미기재')}${active.model?' · '+escapeHtmlDed(active.model):''})</b> 운행중입니다. 반납 시 아래에서 <b>↩ 대차반납</b>을 켜서 입력해주세요.`;
+      banner.style.display = 'block';
+    } else {
+      banner.style.display = 'none';
+    }
+  }catch(e){
+    console.error('[전용차량] 대차 사용중 배너 조회 실패:', e);
   }
 }
 
@@ -2124,6 +2199,9 @@ function resetFormAfterSubmit(carryStartOdo){
   if(daeChaArrow) daeChaArrow.textContent = '▾';
   const daeChaRelinkNote = document.getElementById('daeChaReturnRelinkNote');
   if(daeChaRelinkNote){ daeChaRelinkNote.textContent = ''; daeChaRelinkNote.style.display = 'none'; }
+  const endOdoDaeChaNote = document.getElementById('endOdoDaeChaNote');
+  if(endOdoDaeChaNote) endOdoDaeChaNote.style.display = 'none';
+  updateStartOdoNoteForDaecha();
 
   ['startOdo','endOdo','routeNote','fuelCost','startLocation','endLocation','startTime','endTime','workStart','workEnd',
    'daeChaPlatePickup','daeChaModelPickup','daeChaConditionPickup','daeChaPlateReturn','daeChaConditionReturn'].forEach(id=>{
