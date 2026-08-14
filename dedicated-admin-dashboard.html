@@ -144,7 +144,7 @@
   }
   .ded-stat-card{background:var(--ded-bg); padding:28px 26px 30px;}
   .ded-stat-card .label{
-    font-family:'Outfit',sans-serif; font-size:13px; letter-spacing:.1em;
+    font-family:'Outfit',sans-serif; font-size:21px; letter-spacing:.1em;
     text-transform:uppercase; color:var(--ded-muted); margin-bottom:16px;
   }
   .ded-stat-card .val{
@@ -318,6 +318,7 @@
     .ded-cards{grid-template-columns:1fr;}
     .ded-card{padding:26px 20px;}
     .ded-card .card-stats{grid-template-columns:1fr; row-gap:18px; column-gap:0;}
+    .ded-stat-card .label{font-size:16px;}
     .ded-card .stat-cell .l{font-size:16px;}
     .ded-card .stat-cell .v{font-size:23px;}
     .ded-main{padding:28px 16px 60px;}
@@ -437,6 +438,18 @@
       <button class="ded-qr-close" onclick="closeContractModal()">✕</button>
     </div>
     <div class="ded-qr-body" style="text-align:left;">
+      <div style="margin:0 0 18px;padding:14px;border:1px dashed var(--ded-line);">
+        <div style="font-size:12px;color:var(--ded-muted);margin-bottom:10px;line-height:1.7;word-break:keep-all;">
+          📥 <b style="color:var(--ded-beige);">엑셀 일괄 반영</b> — 계약 연장(단가·기간 변경)이나 차량 교체를 엑셀로 한 번에 처리할 수 있습니다.<br>
+          1) 양식 다운로드(현재 차량 포함) → 2) 값 수정(차량 교체 시 '이전차량번호'란에 반납될 차량번호 입력) → 3) 업로드 후 반영
+        </div>
+        <button type="button" class="swap-btn" onclick="downloadDedicatedContractTemplate()">📥 양식 다운로드(현재 차량 포함)</button>
+        <div style="margin-top:10px;">
+          <input type="file" id="dedContractExcelInput" accept=".xlsx,.xls" style="width:100%;font-size:12px;color:var(--ded-muted);">
+        </div>
+        <button type="button" class="swap-apply" style="margin-top:10px;" onclick="handleDedicatedContractExcelUpload()">엑셀 업로드 및 반영</button>
+        <div id="dedContractImportResult" style="margin-top:10px;font-size:11.5px;line-height:1.6;word-break:keep-all;"></div>
+      </div>
       <div id="contractFormRows"></div>
       <button class="swap-btn" onclick="toggleAddVehiclePanel()" style="margin-top:10px;">＋ 신규 차량 추가</button>
       <div class="swap-panel" id="addVehiclePanel">
@@ -1137,6 +1150,10 @@ function openContractModal(){
   renderContractRows();
   document.getElementById('addVehiclePanel').classList.remove('open');
   document.getElementById('contractSaveMsg').textContent = '';
+  const excelInput = document.getElementById('dedContractExcelInput');
+  if(excelInput) excelInput.value = '';
+  const importResult = document.getElementById('dedContractImportResult');
+  if(importResult) importResult.innerHTML = '';
   document.getElementById('dedContractOverlay').classList.add('open');
 }
 
@@ -1321,6 +1338,173 @@ async function saveContracts(){
   }
 }
 
+// ============================================================
+// 계약정보 엑셀 일괄 반영 (공용차량 대시보드 '차량계약정보 관리'와 동일한 방식)
+// - 계약 연장(같은 차량번호, 단가/기간만 변경): 기존 행 갱신 + plateHistory에는 남기지 않음(연장은 이력 대상 아님)
+// - 차량 교체(반납 후 신차 투입): 새 차량번호로 행을 갱신하고, '이전차량번호' 열에 반납되는 차량번호를 적으면
+//   기존 계약 정보를 plateHistory에 보관한 뒤 신규 차량번호/차종/계약시작일/월대여료로 교체합니다 (applySwap과 동일 로직)
+// - 신규 차량 추가(사업장/부서·직책/구분·차량번호·차종 필수)도 함께 처리됩니다
+// ============================================================
+const DED_CONTRACT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function downloadDedicatedContractTemplate(){
+  if(!window.XLSX){ appAlert('엑셀 라이브러리 로드에 실패했습니다. 새로고침 후 다시 시도해주세요.'); return; }
+  const rows = VEHICLES.map(v => ({
+    '사업장/부서': v.org || '',
+    '직책/구분': v.role || '',
+    '운행자명': v.driver || '',
+    '차량번호': v.plate,
+    '차종': v.model || '',
+    '계약시작일': v.contractStartDate || '',
+    '계약종료일': v.contractEndDate || '',
+    '월대여료(원)': v.monthlyFee != null ? Number(v.monthlyFee) : '',
+    '이전차량번호': ''
+  }));
+  rows.push({
+    '사업장/부서': '(예시)경영기획실', '직책/구분': '(예시)상임이사', '운행자명': '(예시)홍길동',
+    '차량번호': '(예시)신규차량번호', '차종': 'G80 (G)2.5T 18"/SDS1 4WD AT',
+    '계약시작일': '2029-09-01', '계약종료일': '2033-09-01', '월대여료(원)': 1350000,
+    '이전차량번호': '(교체되는 경우만) 기존 차량번호'
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:16},{wch:14},{wch:12},{wch:16},{wch:30},{wch:12},{wch:12},{wch:12},{wch:20}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '전용차량계약정보');
+  XLSX.writeFile(wb, `KSA전용차량계약정보_${todayIsoStr()}.xlsx`);
+}
+
+function handleDedicatedContractExcelUpload(){
+  const input = document.getElementById('dedContractExcelInput');
+  const resultEl = document.getElementById('dedContractImportResult');
+  const file = input?.files?.[0];
+  if(!file){ resultEl.innerHTML = '<span style="color:var(--ded-red);">⚠ 업로드할 엑셀 파일을 선택해주세요.</span>'; return; }
+  const reader = new FileReader();
+  reader.onload = async function(e){
+    let rows;
+    try{
+      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+    }catch(err){
+      resultEl.innerHTML = `<span style="color:var(--ded-red);">⚠ 엑셀 파일을 읽을 수 없습니다: ${_appModalEsc(err.message)}</span>`;
+      return;
+    }
+    await applyDedicatedContractImport(rows, resultEl);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function applyDedicatedContractImport(rows, resultEl){
+  const errors = [];
+  const plan = [];
+  const seen = new Set();
+  rows.forEach((r, i) => {
+    const rowNum = i + 2; // 1행은 헤더
+    const plate = String(r['차량번호'] || '').trim();
+    if(!plate || plate.startsWith('(예시)')) return;
+    if(seen.has(plate)){ errors.push(`${rowNum}행: 차량번호 '${plate}'가 중복됩니다.`); return; }
+    seen.add(plate);
+    const org = String(r['사업장/부서'] || '').trim();
+    const role = String(r['직책/구분'] || '').trim();
+    const driver = String(r['운행자명'] || '').trim();
+    const model = String(r['차종'] || '').trim();
+    const contractStartDate = String(r['계약시작일'] || '').trim();
+    const contractEndDate = String(r['계약종료일'] || '').trim();
+    const feeRaw = r['월대여료(원)'];
+    const feeProvided = !(feeRaw === '' || feeRaw === undefined || feeRaw === null);
+    const fee = feeProvided ? Number(feeRaw) : undefined;
+    const prevPlate = String(r['이전차량번호'] || '').trim().replace(/^\(.*\)$/, '');
+    if(contractStartDate && !DED_CONTRACT_DATE_RE.test(contractStartDate)){ errors.push(`${rowNum}행(${plate}): 계약시작일 형식 오류 (YYYY-MM-DD)`); return; }
+    if(contractEndDate && !DED_CONTRACT_DATE_RE.test(contractEndDate)){ errors.push(`${rowNum}행(${plate}): 계약종료일 형식 오류 (YYYY-MM-DD)`); return; }
+    if(feeProvided && (isNaN(fee) || fee < 0)){ errors.push(`${rowNum}행(${plate}): 월대여료 값이 올바르지 않습니다.`); return; }
+    const existsByPlate = VEHICLES.find(v => v.plate === plate);
+    const prevVeh = prevPlate ? VEHICLES.find(v => v.plate === prevPlate) : null;
+    const targetVeh = existsByPlate || prevVeh; // 교체 시 이전차량 행을 갱신 대상으로 사용
+    if(!targetVeh && (!org || !role || !model)){ errors.push(`${rowNum}행(${plate}): 신규 차량은 사업장/부서, 직책/구분, 차종이 필수입니다.`); return; }
+    if(prevPlate && prevPlate === plate){ errors.push(`${rowNum}행(${plate}): 이전차량번호가 자기 자신과 같습니다.`); return; }
+    if(prevPlate && !prevVeh){ errors.push(`${rowNum}행(${plate}): 이전차량번호 '${prevPlate}'에 해당하는 차량을 찾을 수 없습니다.`); return; }
+    plan.push({rowNum, plate, org, role, driver, model, contractStartDate, contractEndDate, fee, feeProvided, prevPlate, prevVeh, existsByPlate, isNew: !targetVeh});
+  });
+  if(errors.length){
+    resultEl.innerHTML = `<div style="color:var(--ded-red);font-weight:600;margin-bottom:6px;">⚠ ${errors.length}건의 오류로 반영을 중단했습니다. 아래 항목을 수정한 뒤 다시 업로드해주세요.</div>` +
+      errors.map(e => `<div style="color:var(--ded-red);">· ${_appModalEsc(e)}</div>`).join('');
+    return;
+  }
+  if(!plan.length){ resultEl.innerHTML = '<span style="color:var(--ded-red);">⚠ 반영할 유효한 행이 없습니다.</span>'; return; }
+  const summary = plan.map(p => {
+    if(p.isNew) return `➕ 신규 등록: ${p.plate} (${p.org} · ${p.role})`;
+    if(p.prevVeh) return `🔁 차량 교체: ${p.prevVeh.plate} → ${p.plate} (${p.org || p.prevVeh.org})`;
+    const v = p.existsByPlate;
+    const changes = [];
+    if(p.feeProvided && p.fee !== v.monthlyFee) changes.push(`월대여료 ${v.monthlyFee != null ? Number(v.monthlyFee).toLocaleString() : '–'}→${Number(p.fee).toLocaleString()}원`);
+    if(p.contractStartDate && p.contractStartDate !== v.contractStartDate) changes.push(`계약시작일 ${v.contractStartDate || '–'}→${p.contractStartDate}`);
+    if(p.contractEndDate && p.contractEndDate !== v.contractEndDate) changes.push(`계약종료일 ${v.contractEndDate || '–'}→${p.contractEndDate}`);
+    return changes.length ? `🔄 계약 갱신: ${p.plate} (${changes.join(', ')})` : `− 변경 없음: ${p.plate}`;
+  });
+  const ok = await appConfirm(`아래 ${plan.length}건을 전용차량 계약정보에 반영합니다.\n\n${summary.join('\n')}\n\n계속 진행하시겠습니까?`, {danger:true});
+  if(!ok) return;
+
+  plan.forEach(p => {
+    if(p.isNew){
+      const key = 'veh_' + p.plate.replace(/[^0-9a-zA-Z]/g, '');
+      if(VEHICLES.some(v => v.key === key)) return;
+      VEHICLES.push({
+        key, org: p.org, role: p.role, driver: p.driver || '', plate: p.plate, model: p.model,
+        monthlyFee: p.feeProvided ? p.fee : 0, token: randomToken(),
+        contractStartDate: p.contractStartDate || todayIsoStr(), contractEndDate: p.contractEndDate || null,
+        chairman: false
+      });
+    }else if(p.prevVeh){
+      const v = p.prevVeh;
+      v.plateHistory = v.plateHistory || [];
+      v.plateHistory.push({
+        plate: v.plate, model: v.model,
+        contractStartDate: v.contractStartDate, contractEndDate: p.contractStartDate || todayIsoStr(),
+        monthlyFee: v.monthlyFee
+      });
+      v.plate = p.plate;
+      if(p.model) v.model = p.model;
+      if(p.org) v.org = p.org;
+      if(p.role) v.role = p.role;
+      if(p.driver) v.driver = p.driver;
+      v.contractStartDate = p.contractStartDate || todayIsoStr();
+      v.contractEndDate = p.contractEndDate || null;
+      if(p.feeProvided) v.monthlyFee = p.fee;
+      v.token = randomToken();
+    }else{
+      const v = p.existsByPlate;
+      if(p.org) v.org = p.org;
+      if(p.role) v.role = p.role;
+      if(p.driver) v.driver = p.driver;
+      if(p.model) v.model = p.model;
+      if(p.feeProvided) v.monthlyFee = p.fee;
+      if(p.contractStartDate) v.contractStartDate = p.contractStartDate;
+      if(p.contractEndDate) v.contractEndDate = p.contractEndDate;
+    }
+  });
+
+  try{
+    const payload = {};
+    VEHICLES.forEach(v => {
+      payload[v.key] = {
+        org: v.org, role: v.role, driver: v.driver, plate: v.plate, model: v.model,
+        token: v.token, chairman: !!v.chairman,
+        contractStartDate: v.contractStartDate, contractEndDate: v.contractEndDate, monthlyFee: v.monthlyFee,
+        plateHistory: v.plateHistory || []
+      };
+    });
+    await fbPut(`${DEDICATED_STORAGE_KEY}/contracts`, payload);
+    resultEl.innerHTML = `<span style="color:var(--ded-good);font-weight:600;">✅ 반영 완료 — ${plan.length}건 처리되었습니다.</span>`;
+    renderContractRows();
+    renderStats();
+    renderCards();
+    document.getElementById('dedContractExcelInput').value = '';
+  }catch(e){
+    console.error('[전용차량 대시보드] 계약정보 엑셀 반영 실패:', e);
+    resultEl.innerHTML = `<span style="color:var(--ded-red);">⚠ 저장 실패: ${_appModalEsc(e.message)}</span>`;
+  }
+}
+
 // 지정한 헤더 컬럼(숫자값)에 엑셀 천단위 구분 표시 형식("#,##0")을 적용한다.
 // 문자열 값("(미입력)" 등)이 섞여 있는 셀은 건드리지 않는다.
 function applyThousandsFormat(ws, rows, headerNames){
@@ -1488,7 +1672,7 @@ async function printAllQrCodesDedicated(){
       return;
     }
     const ok = await appConfirm(
-      `총 ${VEHICLES.length}대 차량의 QR코드를 A4 용지(가로, 8개씩) 배치의 PDF 파일로 생성합니다.\n계속하시겠습니까?`,
+      `총 ${VEHICLES.length}대 차량의 QR코드를 차량당 2매씩(A4 용지 가로, 총 8칸 중 ${VEHICLES.length*2}칸 사용) PDF 파일로 생성합니다.\n계속하시겠습니까?`,
       {title:'QR 일괄 PDF 다운로드', okText:'PDF 생성'}
     );
     if(!ok) return;
@@ -1595,9 +1779,12 @@ async function generateBulkQrPdfDedicated(vehicles){
     tempWrap.style.cssText = 'position:fixed;left:-9999px;top:-9999px;';
     document.body.appendChild(tempWrap);
 
+    // 차량당 QR 2매씩 인쇄(예비용 포함) — 3대 기준 총 6매가 A4 1페이지(8칸)에 배치되고 2칸은 공란으로 남는다
+    const printItems = vehicles.flatMap(v => [v, v]);
+
     let col = 0, row = 0, pageStarted = false;
-    for(let i = 0; i < vehicles.length; i++){
-      const v = vehicles[i];
+    for(let i = 0; i < printItems.length; i++){
+      const v = printItems[i];
       const url = `${DEDICATED_APP_URL}?t=${encodeURIComponent(v.token)}`;
 
       tempWrap.innerHTML = '';
