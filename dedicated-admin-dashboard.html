@@ -10,6 +10,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css');
 
@@ -374,6 +375,7 @@
       <button class="ded-exit" id="refreshDataBtn" onclick="refreshDashboard()" style="border-color:var(--ded-beige);color:var(--ded-beige);">⟳ 새로고침</button>
       <button class="ded-exit" onclick="openContractModal()">📋 계약정보 관리</button>
       <button class="ded-exit" onclick="exportTripsExcel()">⬇ 엑셀내보내기</button>
+      <button class="ded-exit" id="dedQrBulkPdfBtn" onclick="printAllQrCodesDedicated()">📄 QR 일괄 PDF 다운로드</button>
       <button class="ded-exit" onclick="exitDash()">세션 종료</button>
     </div>
   </div>
@@ -1469,6 +1471,164 @@ function downloadQrDedicated(){
   a.href = canvas.toDataURL('image/png');
   a.download = `QR_전용차량_${plate}.png`;
   a.click();
+}
+
+// ── QR 일괄 PDF 다운로드 ──
+// 전용차량 전체(회장차+전무이사 차량)의 QR을 공용차량 시스템(index.html generateBulkQrPdf)과
+// 동일한 A4 가로·4x2(8매) 카드 배치/실측 사이즈(카드 63.25mm x 90mm)로 PDF 생성.
+// 카드 디자인 자체는 전용차량 인쇄 카드(printQrDedicated)와 동일한 제네시스 톤(무광 블랙+베이지)을 따른다.
+async function printAllQrCodesDedicated(){
+  try{
+    if(!Array.isArray(VEHICLES) || VEHICLES.length === 0){
+      appAlert('PDF로 만들 차량이 없습니다.');
+      return;
+    }
+    const ok = await appConfirm(
+      `총 ${VEHICLES.length}대 차량의 QR코드를 A4 용지(가로, 8개씩) 배치의 PDF 파일로 생성합니다.\n계속하시겠습니까?`,
+      {title:'QR 일괄 PDF 다운로드', okText:'PDF 생성'}
+    );
+    if(!ok) return;
+    await generateBulkQrPdfDedicated(VEHICLES);
+  }catch(err){
+    console.error('printAllQrCodesDedicated 오류:', err);
+    appAlert('QR 일괄 PDF 준비 중 오류가 발생했습니다: ' + err.message);
+  }
+}
+
+async function generateBulkQrPdfDedicated(vehicles){
+  const btn = document.getElementById('dedQrBulkPdfBtn');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ PDF 생성 중…'; }
+  try{
+    if(!window.jspdf || !window.jspdf.jsPDF){ appAlert('PDF 생성 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.'); return; }
+    if(!window.QRCode){ appAlert('QR 코드 생성 라이브러리를 불러오지 못했습니다.'); return; }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    doc.setFont('helvetica', 'normal');
+
+    // 공용차량 QR 일괄 PDF(index.html generateBulkQrPdf)와 동일한 레이아웃 상수
+    // → 카드 실측 사이즈가 공용차량 인쇄 카드와 동일(63.25mm x 90mm)해지도록 맞춤
+    const pageW = 297, pageH = 210;
+    const margin = 10;
+    const cols = 4, rows = 2; // 페이지당 4 x 2 = 8매
+    const gapX = 8, gapY = 10;
+    const usableW = pageW - margin*2;
+    const usableH = pageH - margin*2;
+    const cardW = (usableW - gapX*(cols-1)) / cols;
+    const cardH = (usableH - gapY*(rows-1)) / rows;
+    const qrSize = Math.min(cardW - 16, cardH * 0.42);
+
+    function drawCutGuides(){
+      doc.setDrawColor(90, 90, 90);
+      doc.setLineWidth(0.2);
+      if(typeof doc.setLineDashPattern === 'function') doc.setLineDashPattern([1.2, 1], 0);
+      for(let c = 0; c < cols - 1; c++){
+        const rightEdge = margin + c*(cardW+gapX) + cardW;
+        const nextLeft = margin + (c+1)*(cardW+gapX);
+        const xMid = (rightEdge + nextLeft) / 2;
+        doc.line(xMid, margin - 3, xMid, pageH - margin + 3);
+      }
+      for(let r = 0; r < rows - 1; r++){
+        const bottomEdge = margin + r*(cardH+gapY) + cardH;
+        const nextTop = margin + (r+1)*(cardH+gapY);
+        const yMid = (bottomEdge + nextTop) / 2;
+        doc.line(margin - 3, yMid, pageW - margin + 3, yMid);
+      }
+      if(typeof doc.setLineDashPattern === 'function') doc.setLineDashPattern([], 0);
+    }
+
+    const tempWrap = document.createElement('div');
+    tempWrap.style.cssText = 'position:fixed;left:-9999px;top:-9999px;';
+    document.body.appendChild(tempWrap);
+
+    let col = 0, row = 0, pageStarted = false;
+    for(let i = 0; i < vehicles.length; i++){
+      const v = vehicles[i];
+      const url = `${DEDICATED_APP_URL}?t=${encodeURIComponent(v.token)}`;
+
+      tempWrap.innerHTML = '';
+      new QRCode(tempWrap, {
+        text: url, width: 280, height: 280,
+        colorDark: '#0A0A0A', colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      const canvas = tempWrap.querySelector('canvas');
+      const qrImg = canvas ? canvas.toDataURL('image/png') : null;
+
+      if(col === 0 && row === 0){
+        if(pageStarted) doc.addPage();
+        pageStarted = true;
+        doc.setFillColor(255, 255, 255);
+        doc.rect(0, 0, pageW, pageH, 'F');
+        drawCutGuides();
+      }
+
+      const x = margin + col * (cardW + gapX);
+      const y = margin + row * (cardH + gapY);
+
+      // 카드 배경(무광 블랙) + 베이지 테두리 — 전용차량 인쇄 카드(printQrDedicated) 톤 유지
+      doc.setFillColor(10, 10, 10);
+      doc.setDrawColor(203, 178, 149); // #CBB295
+      doc.setLineWidth(0.4);
+      doc.rect(x, y, cardW, cardH, 'FD');
+
+      // 상단 구분 라벨
+      doc.setTextColor(203, 178, 149);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'normal');
+      doc.text('EXECUTIVE VEHICLE LOG', x + cardW/2, y + 8, { align: 'center' });
+
+      // 차량번호 + 모델
+      doc.setTextColor(245, 243, 239);
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${v.plate} · ${v.model}`, x + cardW/2, y + 15, { align: 'center', maxWidth: cardW - 6 });
+
+      // 구분/사업장
+      doc.setTextColor(180, 178, 174);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`${v.role} · ${v.org}`, x + cardW/2, y + 20.5, { align: 'center', maxWidth: cardW - 6 });
+
+      // QR 이미지(흰 배경 프레임)
+      if(qrImg){
+        const frameSize = qrSize + 4;
+        const fx = x + (cardW - frameSize)/2;
+        const fy = y + 24;
+        doc.setFillColor(245, 243, 239);
+        doc.rect(fx, fy, frameSize, frameSize, 'F');
+        doc.addImage(qrImg, 'PNG', fx + 2, fy + 2, qrSize, qrSize);
+      }
+
+      // 안내 문구
+      const captionY = y + cardH - 9;
+      doc.setTextColor(245, 243, 239);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'bold');
+      if(v.chairman){
+        doc.text('QR 스캔 후 당일 출발·종료 정보를', x + cardW/2, captionY, { align: 'center' });
+        doc.text('각 1회씩 입력해 주세요.', x + cardW/2, captionY + 4, { align: 'center' });
+      }else{
+        doc.text('QR 스캔 후 운행 정보를 입력해 주세요.', x + cardW/2, captionY + 2, { align: 'center' });
+      }
+
+      col++;
+      if(col >= cols){ col = 0; row++; }
+      if(row >= rows){ row = 0; }
+    }
+
+    document.body.removeChild(tempWrap);
+
+    const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    doc.save(`QR_일괄인쇄_전용차량_${vehicles.length}대_${dateStr}.pdf`);
+
+    appAlert(`QR 일괄 PDF 다운로드가 완료되었습니다 · ${vehicles.length}대`);
+  }catch(err){
+    console.error('generateBulkQrPdfDedicated 오류:', err);
+    appAlert('QR 일괄 PDF 생성 중 오류가 발생했습니다: ' + err.message);
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '📄 QR 일괄 PDF 다운로드'; }
+  }
 }
 
 document.getElementById('gatePw').addEventListener('keydown', e=>{
