@@ -226,7 +226,7 @@
   .ded-qr-actions button.primary{background:var(--ded-beige); color:var(--ded-btn-text-on-accent);}
   .ded-qr-actions button.primary:hover{opacity:.85;}
 
-  /* 계약정보 관리 폼 */
+  /* 계약정보 관리 폼(운행기록 수정 모달과 공용) */
   .contract-row{border-bottom:1px solid var(--ded-line); padding:14px 0;}
   .contract-row:last-child{border-bottom:none;}
   .contract-row .veh-label{font-size:13px; color:var(--ded-beige); margin-bottom:8px;}
@@ -237,43 +237,22 @@
     padding:8px 10px; font-family:'Pretendard',sans-serif; font-size:13px;
   }
   .contract-row input:focus{outline:none; border-color:var(--ded-beige);}
-  /* 계약시작일·계약종료일 한 줄 좌우 배치 + YY-MM-DD 오버레이 표시 */
-  .contract-date-pair{flex:1; display:flex; align-items:center; gap:8px;}
-  .contract-date-pair .cdf{position:relative; flex:1; min-width:0;}
-  .contract-date-pair input[type=date]{width:100%; color:transparent; -webkit-text-fill-color:transparent; padding-right:20px;}
-  .contract-date-pair input[type=date]::-webkit-calendar-picker-indicator{
-    filter:invert(1); opacity:.7; cursor:pointer;
+
+  /* 계약정보 엑셀 일괄 반영 (전용차량 계약정보 관리 모달) */
+  .dci-btn{
+    display:block; width:100%; padding:11px; border:1px solid var(--ded-beige); background:transparent;
+    color:var(--ded-beige); font-family:'Pretendard',sans-serif; font-size:12.5px; cursor:pointer; text-align:center;
+    border-radius:0; box-sizing:border-box;
   }
-  .contract-date-pair .cdf-fmt{
-    position:absolute; left:10px; right:20px; top:0; bottom:0;
-    display:flex; align-items:center; font-family:'Outfit',sans-serif; font-size:13px; color:var(--ded-text);
-    pointer-events:none; white-space:nowrap; overflow:hidden;
+  .dci-btn:hover{background:var(--ded-beige); color:var(--ded-btn-text-on-accent);}
+  .dci-btn.primary{background:var(--ded-beige); color:var(--ded-btn-text-on-accent); margin-top:0;}
+  .dci-btn.primary:hover{opacity:.85;}
+  .dci-upload-zone{
+    margin-top:14px; border:1.5px dashed var(--ded-line); padding:20px; text-align:center;
   }
-  .contract-date-pair .sep{flex:0 0 auto; color:var(--ded-muted); font-size:12px;}
-  .contract-row .swap-btn{
-    width:100%; margin-top:6px; padding:9px; background:none; border:1px dashed var(--ded-line);
-    color:var(--ded-muted); font-family:'Pretendard',sans-serif; font-size:12.5px; cursor:pointer;
+  .dci-upload-zone input[type=file]{
+    display:block; width:100%; margin:0 0 12px; font-size:12px; color:var(--ded-muted); box-sizing:border-box;
   }
-  .contract-row .swap-btn:hover{border-color:var(--ded-beige); color:var(--ded-beige);}
-  .swap-panel{
-    max-height:0; overflow:hidden; transition:max-height .2s ease;
-  }
-  .swap-panel.open{max-height:400px; margin-top:8px; padding-top:8px; border-top:1px dashed var(--ded-line);}
-  .swap-panel .field-line label{flex:0 0 90px;}
-  .swap-panel .swap-apply{
-    width:100%; margin-top:4px; padding:9px; background:none; border:1px solid var(--ded-beige);
-    color:var(--ded-beige); font-family:'Pretendard',sans-serif; font-size:12.5px; cursor:pointer;
-  }
-  .swap-panel .swap-apply:hover{background:var(--ded-beige); color:var(--ded-bg-pure);}
-  .plate-history{margin-top:8px;}
-  .plate-history .hist-item{
-    display:flex; justify-content:space-between; align-items:center; gap:8px;
-    font-size:11.5px; color:var(--ded-muted-2); padding:5px 0; border-bottom:1px solid var(--ded-line);
-  }
-  .plate-history .hist-item .del-hist{
-    background:none; border:none; color:var(--ded-muted-2); cursor:pointer; font-size:11px; flex-shrink:0;
-  }
-  .plate-history .hist-item .del-hist:hover{color:var(--ded-red);}
 
   /* 필터탭 */
   .ded-tabs{display:flex; gap:0; border-bottom:1px solid var(--ded-line); margin-bottom:0;}
@@ -438,34 +417,20 @@
       <button class="ded-qr-close" onclick="closeContractModal()">✕</button>
     </div>
     <div class="ded-qr-body" style="text-align:left;">
-      <div style="margin:0 0 18px;padding:14px;border:1px dashed var(--ded-line);">
-        <div style="font-size:12px;color:var(--ded-muted);margin-bottom:10px;line-height:1.7;word-break:keep-all;">
-          📥 <b style="color:var(--ded-beige);">엑셀 일괄 반영</b> — 계약 연장(단가·기간 변경)이나 차량 교체를 엑셀로 한 번에 처리할 수 있습니다.<br>
-          1) 양식 다운로드(현재 차량 포함) → 2) 값 수정(차량 교체 시 '이전차량번호'란에 반납될 차량번호 입력) → 3) 업로드 후 반영
-        </div>
-        <button type="button" class="swap-btn" onclick="downloadDedicatedContractTemplate()">📥 양식 다운로드(현재 차량 포함)</button>
-        <div style="margin-top:10px;">
-          <input type="file" id="dedContractExcelInput" accept=".xlsx,.xls" style="width:100%;font-size:12px;color:var(--ded-muted);">
-        </div>
-        <button type="button" class="swap-apply" style="margin-top:10px;" onclick="handleDedicatedContractExcelUpload()">엑셀 업로드 및 반영</button>
-        <div id="dedContractImportResult" style="margin-top:10px;font-size:11.5px;line-height:1.6;word-break:keep-all;"></div>
+      <div style="font-size:12.5px;line-height:1.85;color:var(--ded-muted);word-break:keep-all;margin-bottom:18px;">
+        <b style="color:var(--ded-beige);">사용 방법</b><br>
+        1. <b style="color:var(--ded-text);">양식 다운로드</b>로 현재 등록 차량이 채워진 엑셀을 받습니다.<br>
+        2. <b style="color:var(--ded-text);">계약 연장</b>(단가·계약기간 변경)은 기존 행의 값만 수정하세요. 차량번호는 그대로 둡니다.<br>
+        3. <b style="color:var(--ded-text);">차량 교체</b>(반납 후 신차 투입)는 새 차량번호로 행을 수정하고, <b style="color:var(--ded-text);">이전차량번호</b> 열에 반납되는 차량번호를 적어주세요.<br>
+        4. 사업장/부서·직책/구분·차종을 채운 새 행을 추가하면 신규 차량으로 등록됩니다.<br>
+        5. 작성한 엑셀을 아래에 업로드하면 변경 내용을 확인 팝업으로 미리 보여준 뒤 반영합니다.
       </div>
-      <div id="contractFormRows"></div>
-      <button class="swap-btn" onclick="toggleAddVehiclePanel()" style="margin-top:10px;">＋ 신규 차량 추가</button>
-      <div class="swap-panel" id="addVehiclePanel">
-        <div class="field-line"><label>사업장/부서</label><input type="text" id="newVehOrg" placeholder="예: 경영기획실"></div>
-        <div class="field-line"><label>직책/구분</label><input type="text" id="newVehRole" placeholder="예: 상임이사"></div>
-        <div class="field-line"><label>운행자명</label><input type="text" id="newVehDriver" placeholder="기본 운행자(수행기사) 이름"></div>
-        <div class="field-line"><label>차량번호</label><input type="text" id="newVehPlate" placeholder="예: 111호1234"></div>
-        <div class="field-line"><label>차종</label><input type="text" id="newVehModel" placeholder="예: G80"></div>
-        <div class="field-line"><label>계약시작일</label><input type="date" id="newVehStart"></div>
-        <div class="field-line"><label>월대여료(원)</label><input type="text" inputmode="numeric" id="newVehFee" placeholder="0" oninput="formatMoneyInput(this)"></div>
-        <button class="swap-apply" onclick="confirmAddVehicle()">＋ 차량 추가</button>
+      <button type="button" class="dci-btn" onclick="downloadDedicatedContractTemplate()">📥 양식 다운로드(현재 차량 포함)</button>
+      <div class="dci-upload-zone">
+        <input type="file" id="dedContractExcelInput" accept=".xlsx,.xls">
+        <button type="button" class="dci-btn primary" onclick="handleDedicatedContractExcelUpload()">엑셀 업로드 및 반영</button>
       </div>
-      <div class="ded-qr-actions">
-        <button class="primary" onclick="saveContracts()" id="contractSaveBtn">💾 저장</button>
-      </div>
-      <div id="contractSaveMsg" style="margin-top:10px;font-size:12px;color:var(--ded-muted);"></div>
+      <div id="dedContractImportResult" style="margin-top:14px;font-size:12px;line-height:1.6;word-break:keep-all;"></div>
     </div>
   </div>
 </div>
@@ -1117,14 +1082,7 @@ function closeQrModal(){
 
 // ── 계약정보 관리 모달 ──
 
-// YY-MM-DD 표시용 포맷 (input[type=date]의 값(YYYY-MM-DD)을 짧게 표시)
-function yyMmDd(dateStr){
-  if(!dateStr) return '';
-  const parts = dateStr.split('-');
-  if(parts.length!==3) return dateStr;
-  return `${parts[0].slice(2)}-${parts[1]}-${parts[2]}`;
-}
-// 숫자 입력창에 천단위 콤마를 실시간으로 붙여준다 (월대여료 입력 등)
+// 숫자 입력창에 천단위 콤마를 실시간으로 붙여준다 (운행기록 수정 모달 등에서 공용)
 function formatMoneyInput(el){
   const raw = el.value.replace(/[^0-9]/g,'');
   el.value = raw ? Number(raw).toLocaleString() : '';
@@ -1133,70 +1091,12 @@ function moneyValue(el){
   return el && el.value ? Number(el.value.replace(/,/g,'')) || 0 : 0;
 }
 
-function contractDateFieldHtml(idPrefix, key, value){
-  return `
-    <div class="cdf">
-      <input type="date" id="${idPrefix}_${key}" value="${value||''}" oninput="syncContractDateFmt('${idPrefix}_${key}')" onchange="syncContractDateFmt('${idPrefix}_${key}')">
-      <div class="cdf-fmt" id="${idPrefix}Fmt_${key}">${value?yyMmDd(value):'YY-MM-DD'}</div>
-    </div>`;
-}
-function syncContractDateFmt(inputId){
-  const el = document.getElementById(inputId);
-  const fmt = document.getElementById(inputId.replace('_', 'Fmt_'));
-  if(el && fmt) fmt.textContent = el.value ? yyMmDd(el.value) : 'YY-MM-DD';
-}
-
 function openContractModal(){
-  renderContractRows();
-  document.getElementById('addVehiclePanel').classList.remove('open');
-  document.getElementById('contractSaveMsg').textContent = '';
   const excelInput = document.getElementById('dedContractExcelInput');
   if(excelInput) excelInput.value = '';
   const importResult = document.getElementById('dedContractImportResult');
   if(importResult) importResult.innerHTML = '';
   document.getElementById('dedContractOverlay').classList.add('open');
-}
-
-function renderContractRows(){
-  const wrap = document.getElementById('contractFormRows');
-  wrap.innerHTML = VEHICLES.map(v => {
-    const histHtml = (v.plateHistory||[]).map((h,i)=>`
-      <div class="hist-item">
-        <span>${h.model||''} · ${h.plate||''} (${yyMmDd(h.contractStartDate)} ~ ${yyMmDd(h.contractEndDate)})</span>
-        <button type="button" class="del-hist" onclick="deletePlateHistory('${v.key}', ${i})">삭제</button>
-      </div>`).join('');
-    return `
-    <div class="contract-row" id="cRow_${v.key}">
-      <div class="veh-label">${v.org} · ${v.model} · ${v.plate}</div>
-      <div class="field-line">
-        <label>계약기간</label>
-        <div class="contract-date-pair">
-          ${contractDateFieldHtml('cStart', v.key, v.contractStartDate)}
-          <span class="sep">~</span>
-          ${contractDateFieldHtml('cEnd', v.key, v.contractEndDate)}
-        </div>
-      </div>
-      <div class="field-line">
-        <label>월대여료(원)</label>
-        <input type="text" inputmode="numeric" id="cFee_${v.key}" value="${v.monthlyFee!=null?v.monthlyFee.toLocaleString():''}" oninput="formatMoneyInput(this)">
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button type="button" class="swap-btn" style="flex:1;" onclick="toggleSwapPanel('${v.key}')">🔁 차량 교체</button>
-        <button type="button" class="swap-btn" style="flex:0 0 90px; color:var(--ded-red); border-color:var(--ded-red);" onclick="deleteVehicle('${v.key}')">🗑 삭제</button>
-      </div>
-      <div class="swap-panel" id="swapPanel_${v.key}">
-        <div style="font-size:11.5px;color:var(--ded-muted-2);margin-bottom:6px;">현재 차량을 반납 처리하고 신규 차량으로 교체합니다. 기존 계약 정보는 이력에 보관됩니다.</div>
-        <div class="field-line"><label>반납일</label><input type="date" id="swapReturn_${v.key}" value="${todayIsoStr()}"></div>
-        <div class="field-line"><label>신규 차량번호</label><input type="text" id="swapPlate_${v.key}" placeholder="예: 111호1234"></div>
-        <div class="field-line"><label>신규 차종</label><input type="text" id="swapModel_${v.key}" placeholder="예: G80"></div>
-        <div class="field-line"><label>신규 계약시작일</label><input type="date" id="swapStart_${v.key}"></div>
-        <div class="field-line"><label>신규 월대여료(원)</label><input type="text" inputmode="numeric" id="swapFee_${v.key}" value="${v.monthlyFee!=null?v.monthlyFee.toLocaleString():''}" oninput="formatMoneyInput(this)"></div>
-        <button type="button" class="swap-apply" onclick="applySwap('${v.key}')">교체 적용</button>
-      </div>
-      ${histHtml ? `<div class="plate-history">${histHtml}</div>` : ''}
-    </div>
-  `;
-  }).join('');
 }
 
 function todayIsoStr(){
@@ -1209,140 +1109,15 @@ function randomToken(){
   return Array.from(bytes, b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-function toggleSwapPanel(key){
-  const panel = document.getElementById(`swapPanel_${key}`);
-  panel.classList.toggle('open');
-}
-
-async function applySwap(key){
-  const v = VEHICLES.find(x=>x.key===key);
-  if(!v) return;
-  const returnDate = document.getElementById(`swapReturn_${key}`).value || todayIsoStr();
-  const newPlate = document.getElementById(`swapPlate_${key}`).value.trim();
-  const newModel = document.getElementById(`swapModel_${key}`).value.trim();
-  const newStart = document.getElementById(`swapStart_${key}`).value || returnDate;
-  const newFee = moneyValue(document.getElementById(`swapFee_${key}`));
-  if(!newPlate || !newModel){
-    appAlert('신규 차량번호와 차종을 입력해주세요.');
-    return;
-  }
-  if(!await appConfirm(`${v.plate}(${v.model}) 차량을 ${returnDate}자로 반납 처리하고,\n${newPlate}(${newModel}) 차량으로 교체합니다. 계속할까요?`)) return;
-
-  v.plateHistory = v.plateHistory || [];
-  v.plateHistory.push({
-    plate: v.plate, model: v.model,
-    contractStartDate: v.contractStartDate, contractEndDate: returnDate,
-    monthlyFee: v.monthlyFee
-  });
-  v.plate = newPlate;
-  v.model = newModel;
-  v.contractStartDate = newStart;
-  v.contractEndDate = null;
-  v.monthlyFee = newFee;
-  v.token = randomToken();
-
-  renderContractRows();
-}
-
-async function deletePlateHistory(key, idx){
-  const v = VEHICLES.find(x=>x.key===key);
-  if(!v || !v.plateHistory) return;
-  if(!await appConfirm('이 이력 항목을 삭제할까요?')) return;
-  v.plateHistory.splice(idx, 1);
-  renderContractRows();
-}
-
-async function deleteVehicle(key){
-  const v = VEHICLES.find(x=>x.key===key);
-  if(!v) return;
-  if(!await appConfirm(`${v.org} · ${v.plate} 차량을 목록에서 완전히 삭제할까요?\n(운행기록은 Firebase에 남아있으나 대시보드에서 더 이상 표시되지 않습니다)`, {danger:true})) return;
-  const idx = VEHICLES.findIndex(x=>x.key===key);
-  if(idx>-1) VEHICLES.splice(idx,1);
-  renderContractRows();
-}
-
-function toggleAddVehiclePanel(){
-  document.getElementById('addVehiclePanel').classList.toggle('open');
-}
-
-function confirmAddVehicle(){
-  const org = document.getElementById('newVehOrg').value.trim();
-  const role = document.getElementById('newVehRole').value.trim();
-  const driver = document.getElementById('newVehDriver').value.trim();
-  const plate = document.getElementById('newVehPlate').value.trim();
-  const model = document.getElementById('newVehModel').value.trim();
-  const start = document.getElementById('newVehStart').value || todayIsoStr();
-  const fee = moneyValue(document.getElementById('newVehFee'));
-  if(!org || !plate || !model){
-    appAlert('사업장/부서, 차량번호, 차종은 필수입니다.');
-    return;
-  }
-  const key = 'veh_' + plate.replace(/[^0-9a-zA-Z]/g,'');
-  if(VEHICLES.some(v=>v.key===key)){
-    appAlert('이미 등록된 차량번호입니다.');
-    return;
-  }
-  VEHICLES.push({
-    key, org, role: role||'구분 미지정', driver: driver||'', plate, model,
-    monthlyFee: fee, token: randomToken(), contractStartDate: start, contractEndDate: null,
-    chairman: false
-  });
-  ['newVehOrg','newVehRole','newVehDriver','newVehPlate','newVehModel','newVehStart','newVehFee'].forEach(id=>{
-    document.getElementById(id).value = '';
-  });
-  document.getElementById('addVehiclePanel').classList.remove('open');
-  renderContractRows();
-}
-
 function closeContractModal(){
   document.getElementById('dedContractOverlay').classList.remove('open');
-}
-async function saveContracts(){
-  const btn = document.getElementById('contractSaveBtn');
-  const msg = document.getElementById('contractSaveMsg');
-  btn.disabled = true; btn.textContent = '저장 중…';
-  try{
-    const payload = {};
-    VEHICLES.forEach(v=>{
-      const startEl = document.getElementById(`cStart_${v.key}`);
-      const endEl = document.getElementById(`cEnd_${v.key}`);
-      const feeEl = document.getElementById(`cFee_${v.key}`);
-      const startVal = startEl ? (startEl.value || null) : v.contractStartDate;
-      const endVal = endEl ? (endEl.value || null) : v.contractEndDate;
-      const feeVal = feeEl ? moneyValue(feeEl) : v.monthlyFee;
-      v.contractStartDate = startVal;
-      v.contractEndDate = endVal;
-      v.monthlyFee = feeVal;
-      payload[v.key] = {
-        org: v.org, role: v.role, driver: v.driver, plate: v.plate, model: v.model,
-        token: v.token, chairman: !!v.chairman,
-        contractStartDate: startVal, contractEndDate: endVal, monthlyFee: v.monthlyFee,
-        plateHistory: v.plateHistory || []
-      };
-    });
-    // 삭제된 차량(대시보드에서 제거된 key)은 별도 tombstone 없이 payload에서 제외되며,
-    // 다음 로드 시 loadContractsFromFirebase가 VEHICLES 기본 목록만 갱신하므로 하드코딩된 기본 3대는
-    // 화면 새로고침 시 다시 나타날 수 있습니다 — 완전 삭제가 필요하면 코드에서 VEHICLES 기본값도 함께 조정해주세요.
-    await fbPut(`${DEDICATED_STORAGE_KEY}/contracts`, payload);
-    msg.style.color = 'var(--ded-good)';
-    msg.textContent = '저장되었습니다.';
-    renderStats();
-    renderCards();
-    setTimeout(()=>{ closeContractModal(); }, 700);
-  }catch(e){
-    console.error('[전용차량 대시보드] 계약정보 저장 실패:', e);
-    msg.style.color = 'var(--ded-red)';
-    msg.textContent = `저장 실패: ${e.message}`;
-  }finally{
-    btn.disabled = false; btn.textContent = '💾 저장';
-  }
 }
 
 // ============================================================
 // 계약정보 엑셀 일괄 반영 (공용차량 대시보드 '차량계약정보 관리'와 동일한 방식)
 // - 계약 연장(같은 차량번호, 단가/기간만 변경): 기존 행 갱신 + plateHistory에는 남기지 않음(연장은 이력 대상 아님)
 // - 차량 교체(반납 후 신차 투입): 새 차량번호로 행을 갱신하고, '이전차량번호' 열에 반납되는 차량번호를 적으면
-//   기존 계약 정보를 plateHistory에 보관한 뒤 신규 차량번호/차종/계약시작일/월대여료로 교체합니다 (applySwap과 동일 로직)
+//   기존 계약 정보를 plateHistory에 보관한 뒤 신규 차량번호/차종/계약시작일/월대여료로 교체합니다
 // - 신규 차량 추가(사업장/부서·직책/구분·차량번호·차종 필수)도 함께 처리됩니다
 // ============================================================
 const DED_CONTRACT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -1495,7 +1270,6 @@ async function applyDedicatedContractImport(rows, resultEl){
     });
     await fbPut(`${DEDICATED_STORAGE_KEY}/contracts`, payload);
     resultEl.innerHTML = `<span style="color:var(--ded-good);font-weight:600;">✅ 반영 완료 — ${plan.length}건 처리되었습니다.</span>`;
-    renderContractRows();
     renderStats();
     renderCards();
     document.getElementById('dedContractExcelInput').value = '';
