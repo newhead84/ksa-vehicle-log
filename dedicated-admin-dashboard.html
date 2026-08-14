@@ -1477,6 +1477,34 @@ function downloadQrDedicated(){
 // 전용차량 전체(회장차+전무이사 차량)의 QR을 공용차량 시스템(index.html generateBulkQrPdf)과
 // 동일한 A4 가로·4x2(8매) 카드 배치/실측 사이즈(카드 63.25mm x 90mm)로 PDF 생성.
 // 카드 디자인 자체는 전용차량 인쇄 카드(printQrDedicated)와 동일한 제네시스 톤(무광 블랙+베이지)을 따른다.
+// 한글(차량번호·구분·안내문구) 표시를 위해 공용차량 QR 일괄 PDF와 동일하게 Paperlogy 폰트를 임베드한다
+// (jsPDF 기본 폰트는 한글을 지원하지 않아 임베드하지 않으면 문자가 깨져 보임).
+const DEDICATED_FONTS_BASE_URL = 'https://newhead84.github.io/ksa-vehicle-log/fonts/';
+let _dedPaperlogyFontCache = null;
+
+async function fetchFontAsBase64Dedicated(url){
+  const res = await fetch(url);
+  if(!res.ok) throw new Error(`폰트 파일을 불러오지 못했습니다 (${res.status}): ${url}`);
+  const buf = await res.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const chunk = 0x8000;
+  for(let i = 0; i < bytes.length; i += chunk){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+async function ensurePaperlogyFontLoadedDedicated(){
+  if(_dedPaperlogyFontCache) return _dedPaperlogyFontCache;
+  const [regular, bold] = await Promise.all([
+    fetchFontAsBase64Dedicated(`${DEDICATED_FONTS_BASE_URL}Paperlogy-4Regular.ttf`),
+    fetchFontAsBase64Dedicated(`${DEDICATED_FONTS_BASE_URL}Paperlogy-6SemiBold.ttf`)
+  ]);
+  _dedPaperlogyFontCache = { regular, bold };
+  return _dedPaperlogyFontCache;
+}
+
 async function printAllQrCodesDedicated(){
   try{
     if(!Array.isArray(VEHICLES) || VEHICLES.length === 0){
@@ -1502,9 +1530,23 @@ async function generateBulkQrPdfDedicated(vehicles){
     if(!window.jspdf || !window.jspdf.jsPDF){ appAlert('PDF 생성 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.'); return; }
     if(!window.QRCode){ appAlert('QR 코드 생성 라이브러리를 불러오지 못했습니다.'); return; }
 
+    // 1) Paperlogy 폰트를 PDF에 임베드(한글 표시를 위해 필수) — 실패 시 안내 후 중단
+    let fonts = null;
+    try{
+      fonts = await ensurePaperlogyFontLoadedDedicated();
+    }catch(fontErr){
+      console.error('Paperlogy 폰트 임베드 실패:', fontErr);
+      appAlert('한글 폰트를 불러오지 못해 PDF를 생성할 수 없습니다. 인터넷 연결을 확인 후 다시 시도해 주세요.');
+      return;
+    }
+
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    doc.setFont('helvetica', 'normal');
+    doc.addFileToVFS('Paperlogy-Regular.ttf', fonts.regular);
+    doc.addFont('Paperlogy-Regular.ttf', 'Paperlogy', 'normal');
+    doc.addFileToVFS('Paperlogy-SemiBold.ttf', fonts.bold);
+    doc.addFont('Paperlogy-SemiBold.ttf', 'Paperlogy', 'bold');
+    doc.setFont('Paperlogy', 'normal');
 
     // 공용차량 QR 일괄 PDF(index.html generateBulkQrPdf)와 동일한 레이아웃 상수
     // → 카드 실측 사이즈가 공용차량 인쇄 카드와 동일(63.25mm x 90mm)해지도록 맞춤
@@ -1575,19 +1617,19 @@ async function generateBulkQrPdfDedicated(vehicles){
       // 상단 구분 라벨
       doc.setTextColor(203, 178, 149);
       doc.setFontSize(7.5);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('Paperlogy', 'normal');
       doc.text('EXECUTIVE VEHICLE LOG', x + cardW/2, y + 8, { align: 'center' });
 
       // 차량번호 + 모델
       doc.setTextColor(245, 243, 239);
       doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('Paperlogy', 'bold');
       doc.text(`${v.plate} · ${v.model}`, x + cardW/2, y + 15, { align: 'center', maxWidth: cardW - 6 });
 
       // 구분/사업장
       doc.setTextColor(180, 178, 174);
       doc.setFontSize(8);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('Paperlogy', 'normal');
       doc.text(`${v.role} · ${v.org}`, x + cardW/2, y + 20.5, { align: 'center', maxWidth: cardW - 6 });
 
       // QR 이미지(흰 배경 프레임)
@@ -1604,7 +1646,7 @@ async function generateBulkQrPdfDedicated(vehicles){
       const captionY = y + cardH - 9;
       doc.setTextColor(245, 243, 239);
       doc.setFontSize(7.5);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('Paperlogy', 'bold');
       if(v.chairman){
         doc.text('QR 스캔 후 당일 출발·종료 정보를', x + cardW/2, captionY, { align: 'center' });
         doc.text('각 1회씩 입력해 주세요.', x + cardW/2, captionY + 4, { align: 'center' });
