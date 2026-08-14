@@ -1445,22 +1445,24 @@ function printQrDedicated(){
         position:absolute;top:22mm;left:4mm;right:4mm;text-align:center;
         font-weight:400;font-size:8.5pt;color:rgba(245,243,239,0.58);
       }
+      .lower{
+        position:absolute;top:30mm;left:0;right:0;bottom:0;
+        display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;
+      }
       .qr-frame{
-        position:absolute;top:30mm;left:50%;transform:translateX(-50%);
         width:46mm;height:46mm;background:#F5F3EF;padding:3mm;
-        border-radius:3mm;
+        border-radius:3mm;box-sizing:border-box;flex:none;
       }
       .qr-frame img{display:block;width:100%;height:100%;}
       .hint-caption{
-        position:absolute;top:80mm;left:4mm;right:4mm;text-align:center;
+        text-align:center;flex:none;
         font-weight:600;font-size:8pt;line-height:1.45;letter-spacing:.02em;color:#F5F3EF;
       }
       .hint-caption.single-line{
-        white-space:nowrap;font-size:7pt;letter-spacing:0;
+        width:46mm;font-size:9pt;letter-spacing:0;
       }
       .footer-logo{
-        position:absolute;bottom:5mm;left:0;right:0;
-        display:flex;align-items:center;justify-content:center;
+        flex:none;display:flex;align-items:center;justify-content:center;
       }
       .footer-logo img{display:block;height:12px;width:auto;opacity:.92;}
       @media print{
@@ -1471,9 +1473,11 @@ function printQrDedicated(){
       <div class="eyebrow">EXECUTIVE VEHICLE LOG</div>
       <div class="plate">${plate}</div>
       <div class="org">${org}</div>
-      <div class="qr-frame"><img src="${img}"></div>
-      <div class="hint-caption${isChairman ? '' : ' single-line'}">${captionHtml}</div>
-      <div class="footer-logo"><img src="${KSA_LOGO_WORDMARK_WHITE}" alt="KSA 한국표준협회"></div>
+      <div class="lower">
+        <div class="qr-frame"><img src="${img}"></div>
+        <div class="hint-caption${isChairman ? '' : ' single-line'}">${captionHtml}</div>
+        <div class="footer-logo"><img src="${KSA_LOGO_WORDMARK_WHITE}" alt="KSA 한국표준협회"></div>
+      </div>
     </div>
     <script>window.onload=()=>window.print();<\/script>
   </body></html>`);
@@ -1537,12 +1541,14 @@ async function renderDedicatedCardCanvas(v, qrDataUrl){
       <div style="position:absolute;top:8mm;left:5mm;right:5mm;text-align:center;font-family:'Outfit',sans-serif;font-weight:500;font-size:7.5pt;letter-spacing:.22em;color:#CBB295;text-transform:uppercase;">EXECUTIVE VEHICLE LOG</div>
       <div style="position:absolute;top:14mm;left:4mm;right:4mm;text-align:center;font-family:'Outfit',sans-serif;font-weight:500;font-size:17pt;letter-spacing:.02em;color:#F5F3EF;">${v.plate}</div>
       <div style="position:absolute;top:22mm;left:4mm;right:4mm;text-align:center;font-weight:400;font-size:8.5pt;color:rgba(245,243,239,0.58);">${orgText}</div>
-      <div style="position:absolute;top:30mm;left:50%;transform:translateX(-50%);width:46mm;height:46mm;background:#F5F3EF;padding:3mm;border-radius:3mm;box-sizing:border-box;">
-        <img src="${qrDataUrl}" style="display:block;width:100%;height:100%;">
-      </div>
-      <div style="position:absolute;top:80mm;left:4mm;right:4mm;text-align:center;font-weight:600;font-size:${isChairman ? '8pt' : '7pt'};line-height:1.45;letter-spacing:${isChairman ? '.02em' : '0'};color:#F5F3EF;${isChairman ? '' : 'white-space:nowrap;'}">${captionHtml}</div>
-      <div style="position:absolute;bottom:5mm;left:0;right:0;display:flex;align-items:center;justify-content:center;">
-        <img src="${KSA_LOGO_WORDMARK_WHITE}" style="display:block;height:12px;width:auto;opacity:.92;">
+      <div style="position:absolute;top:30mm;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;">
+        <div style="width:46mm;height:46mm;background:#F5F3EF;padding:3mm;border-radius:3mm;box-sizing:border-box;flex:none;">
+          <img src="${qrDataUrl}" style="display:block;width:100%;height:100%;">
+        </div>
+        <div style="text-align:center;flex:none;font-weight:600;font-size:${isChairman ? '8pt' : '9pt'};line-height:1.45;letter-spacing:${isChairman ? '.02em' : '0'};color:#F5F3EF;${isChairman ? '' : 'width:46mm;'}">${captionHtml}</div>
+        <div style="flex:none;display:flex;align-items:center;justify-content:center;">
+          <img src="${KSA_LOGO_WORDMARK_WHITE}" style="display:block;height:12px;width:auto;opacity:.92;">
+        </div>
       </div>
     </div>`;
   document.body.appendChild(wrap);
