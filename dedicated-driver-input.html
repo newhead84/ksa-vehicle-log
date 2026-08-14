@@ -101,6 +101,9 @@
     --ded-header-bg:#0A0A0A;
     --ded-header-text:#F5F3EF;
     --ded-header-muted:rgba(245,243,239,0.58);
+    /* 제출완료 팝업(.ded-confirm-card)은 배경(#111111)이 테마 전환과 무관하게 항상 다크 고정이므로, 내부 텍스트 색상도 var(--ded-text)를 쓰지 않고 이 고정값을 사용 — 화이트골드 테마에서 다크 텍스트가 다크 배경에 묻혀 안 보이던 문제 방지 */
+    --ded-confirm-text:#F5F3EF;
+    --ded-confirm-muted:rgba(245,243,239,0.78);
   }
   /* ── 화이트골드 테마: 우상단 차량번호 박스(plateChip) 탭으로 전환, 기기별 localStorage 저장 ── */
   html.ded-theme-white{
@@ -661,17 +664,17 @@
     padding:22px 24px 18px; border-bottom:1px solid var(--ded-line);
   }
   .ded-confirm-quote-text{
-    font-size:14.5px; line-height:1.6; color:var(--ded-text); text-align:center;
+    font-size:14.5px; line-height:1.6; color:var(--ded-confirm-text); text-align:center;
   }
   .ded-confirm-quote-meta{
-    margin-top:8px; font-size:12.5px; color:var(--ded-muted); text-align:right;
+    margin-top:8px; font-size:12.5px; color:var(--ded-confirm-muted); text-align:center;
   }
   .ded-confirm-quote-meta .kw{color:var(--ded-beige);}
   .ded-confirm-quote-meta .quote-person{cursor:pointer; text-decoration:underline; text-underline-offset:2px;}
   .ded-confirm-quote-meta .quote-person:hover{color:var(--ded-beige);}
   .ded-confirm-body{padding:22px 24px 24px; text-align:center;}
-  .ded-confirm-icon{font-size:30px; margin-bottom:10px;}
-  .ded-confirm-msg{font-size:15px; color:var(--ded-text); line-height:1.5; white-space:pre-line;}
+  .ded-confirm-icon{font-size:30px; margin-bottom:10px; color:var(--ded-confirm-text);}
+  .ded-confirm-msg{font-size:15px; color:var(--ded-confirm-text); line-height:1.5; white-space:pre-line;}
   .ded-confirm-close{
     width:100%; margin-top:20px; padding:13px; border:1px solid var(--ded-beige); background:transparent;
     color:var(--ded-beige); font-family:'Pretendard',sans-serif; font-size:14px; cursor:pointer;
