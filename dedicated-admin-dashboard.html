@@ -35,21 +35,21 @@
   }
   /* ── 화이트골드 테마 (우상단 토글 버튼으로 전환) ── */
   body.ded-theme-white{
-    --ded-bg:#FBF9F4;
+    --ded-bg:#FAFAF9;
     --ded-bg-pure:#FFFFFF;
     --ded-text:#221D14;
-    --ded-line:#E4D9C7;
+    --ded-line:#E3E3E0;
     --ded-beige:#9C7A3D;
     --ded-beige-dark:#C9AF7F;
     --ded-red:#C23054;
     --ded-muted:rgba(34,29,20,0.6);
     --ded-muted-2:rgba(34,29,20,0.4);
     --ded-good:#3F8259;
-    --ded-card-hover:#F4EDE0;
-    --ded-card-active:#F7F0E3;
+    --ded-card-hover:#F3F3F1;
+    --ded-card-active:#F5F5F3;
     --ded-modal-bg:#FFFFFF;
     --ded-input-bg:#FFFFFF;
-    --ded-table-hover:#F4EDE0;
+    --ded-table-hover:#F3F3F1;
     --ded-btn-text-on-accent:#FFFFFF;
   }
   *{box-sizing:border-box;}
@@ -357,6 +357,9 @@
       <button class="ded-exit" onclick="openContractModal()">📋 계약정보 관리</button>
       <button class="ded-exit" onclick="exportTripsExcel()">⬇ 엑셀내보내기</button>
       <button class="ded-exit" id="dedQrBulkPdfBtn" onclick="printAllQrCodesDedicated()">📄 QR 일괄 PDF 다운로드</button>
+      <button class="ded-exit" id="dedBackupDataBtn" onclick="backupDedicatedData()" style="border-color:var(--ded-beige);color:var(--ded-beige);">💾 데이터 백업</button>
+      <button class="ded-exit" id="dedRestoreDataBtn" onclick="document.getElementById('dedRestoreInput').click()" style="border-color:var(--ded-red);color:var(--ded-red);">📂 데이터 복원</button>
+      <input type="file" id="dedRestoreInput" accept=".json" style="display:none;" onchange="restoreDedicatedData(this)">
       <button class="ded-exit" onclick="exitDash()">세션 종료</button>
     </div>
   </div>
@@ -773,6 +776,61 @@ async function refreshDashboard(){
   renderTabs();
   renderTrips();
   if(refreshBtn){ refreshBtn.disabled = false; refreshBtn.textContent = '⟳ 새로고침'; }
+}
+
+// ============================================================
+// 데이터 백업 / 복원 (공용차량 index.html과 동일한 방식 — 계약정보+차량별 운행기록 전체를 하나의 JSON으로)
+// ============================================================
+async function backupDedicatedData(){
+  const btn = document.getElementById('dedBackupDataBtn');
+  if(btn){ btn.disabled = true; btn.textContent = '💾 백업 중…'; }
+  try{
+    const dedicatedFleetData = await fbGet(DEDICATED_STORAGE_KEY);
+    if(!dedicatedFleetData){ appAlert('백업할 데이터가 없습니다.'); return; }
+    const backup = {version:1, exportedAt:new Date().toISOString(), dedicatedFleetData};
+    const blob = new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href=url; a.download=`전용차량관리_백업_${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    const vehicleCount = Object.keys(dedicatedFleetData.vehicles||{}).length;
+    appAlert(`백업 완료 · 차량 ${vehicleCount}대`);
+  }catch(e){
+    appAlert('백업 오류: ' + e.message);
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '💾 데이터 백업'; }
+  }
+}
+
+async function restoreDedicatedData(input){
+  const file = input.files[0];
+  if(!file) return;
+  input.value='';
+
+  const reader = new FileReader();
+  reader.onload = async(e)=>{
+    try{
+      const backup = JSON.parse(e.target.result);
+      // dedicatedFleetData로 감싸진 형식(정상 백업 파일) 또는 루트 노드가 그대로 저장된 형식 모두 호환
+      const dedicatedFleetData = backup.dedicatedFleetData || backup;
+      const parsed = typeof dedicatedFleetData==='string' ? JSON.parse(dedicatedFleetData) : dedicatedFleetData;
+      if(!parsed.vehicles) throw new Error('올바른 백업 파일이 아닙니다.');
+      const vehicleCount = Object.keys(parsed.vehicles).length;
+      const tripCount = Object.values(parsed.vehicles).reduce((s,v)=>s+(Array.isArray(v.trips)?v.trips.length:0),0);
+      const ok = await appConfirm(
+        `차량 ${vehicleCount}대 · 운행기록 ${tripCount}건이 포함되어 있습니다.\n⚠ 현재 데이터에 덮어씌웁니다. 복원 전 백업을 먼저 해두세요.`,
+        {title:'📂 복원 파일 확인', okText:'복원 실행', danger:true}
+      );
+      if(!ok) return;
+      await fbPut(DEDICATED_STORAGE_KEY, parsed);
+      await refreshDashboard();
+      appAlert('복원 완료 — 데이터가 반영됐습니다.');
+    }catch(err){
+      appAlert('파일을 읽을 수 없습니다. 올바른 백업 파일인지 확인해 주세요.\n' + err.message);
+    }
+  };
+  reader.readAsText(file);
 }
 
 function exitDash(){
