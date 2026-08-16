@@ -15,7 +15,11 @@
   // ── 화이트골드 테마 조기 적용(FOUC 방지): 렌더 전에 저장된 테마를 <html>에 반영 ──
   (function(){
     try{
-      if(localStorage.getItem('dedTheme') === 'white'){
+      // 차량별(QR ?t=토큰 또는 구버전 ?plate=) 테마 독립 저장: 파라미터가 없으면 데모/기본 화면으로 간주해 'default' 키 사용.
+      // 이 키 산출 로직은 하단의 테마 전환 IIFE와 반드시 동일하게 유지해야 한다(불일치 시 FOUC 재발).
+      var _p = new URLSearchParams(window.location.search);
+      window.__dedThemeKey = 'dedTheme:' + (_p.get('t') || _p.get('plate') || 'default');
+      if(localStorage.getItem(window.__dedThemeKey) === 'white'){
         document.documentElement.classList.add('ded-theme-white');
         var mc = document.querySelector('meta[name="theme-color"]');
         if(mc) mc.setAttribute('content', '#F7F4EF');
@@ -105,7 +109,7 @@
     --ded-confirm-text:#F5F3EF;
     --ded-confirm-muted:rgba(245,243,239,0.78);
   }
-  /* ── 화이트골드 테마: 우상단 차량번호 박스(plateChip) 탭으로 전환, 기기별 localStorage 저장 ── */
+  /* ── 화이트골드 테마: 우상단 차량번호 박스(plateChip) 탭으로 전환, 차량별(QR 토큰 기준) localStorage 독립 저장 ── */
   html.ded-theme-white{
     --ded-bg:#F7F4EF;
     --ded-bg-pure:#FFFFFF;
@@ -3030,9 +3034,11 @@ initDates();
 switchVehicle('hoegjang');
 applyQrLock();
 
-// ── 헤더 차량번호 박스(plateChip) 탭: 블랙골드 ↔ 화이트골드 테마 전환, 기기별 localStorage 저장 ──
+// ── 헤더 차량번호 박스(plateChip) 탭: 블랙골드 ↔ 화이트골드 테마 전환, 차량별(QR 토큰 기준) localStorage 독립 저장 ──
 (function(){
-  var THEME_KEY = 'dedTheme';
+  // 차량별(QR 토큰 기준) 테마 독립 저장: <head>의 FOUC 방지 스크립트가 window.__dedThemeKey에
+  // 이미 동일한 로직으로 키를 계산해두었으므로 그대로 재사용한다(로직 중복/불일치 방지).
+  var THEME_KEY = window.__dedThemeKey || 'dedTheme:default';
   var chip = document.getElementById('plateChip');
   if(!chip) return;
   chip.setAttribute('role', 'button');

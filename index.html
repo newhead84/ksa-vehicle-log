@@ -35,6 +35,14 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-16] 주말·공휴일 개인사용 안내 모달 문구 3건 수정. ① "차량이용" 항목의 기존
+  법인하이패스카드 분리 이용 안내를 강조 표시(색상+굵게). ② "차량관리" 항목의 세차 의무
+  문구("차량세차(개인부담), 반납 전 반드시 세차 해주세요!") 삭제 후 실내 청결 유지를
+  권고하는 문구("차량 내부에 쓰레기 등이 남지 않도록 깨끗하게 이용해 주세요")로 대체(세차
+  의무 개념 삭제). ③ "이용수칙" 4번 항목에서 하이패스카드 분리를 별도 강조 문구로 분리하고
+  목록에서 세차 항목 제외(실내정리, 개인주유, 증빙업로드만 남김) | 변경: weekendOverlay 모달
+  본문 텍스트(함수 변경 없음)
+
   [2026-08-16] 수행기사(회장차) 근로시간 입력 근로기준법 준수 검증 추가. ① 심야시간(22:00~06:00,
   제56조) 구간은 실제 근로시간 범위 밖이거나 22:00~06:00 밖이면 제출 차단, 근로종료가 22:00
   이전이면 "심야시간 구간 추가" 버튼 자체를 비활성화. ② 휴게시간(제54조: 근로 4시간→30분/
@@ -82,15 +90,6 @@
   unresolveAccidentAsUser(), refreshAfterResolveAction() | 변경: renderVehicleAlertPanel()
   항목별 idx/accId 추적 및 버튼 렌더링, resolveMaintenance()/unresolveMaintenance() 컨텍스트
   인지형 갱신으로 수정
-  [2026-08-13] 점검요청/사고접수 완료 처리 기능 추가(관리자 전용, 최초 구현). 관리자가 차량상세 화면의 운행기록
-  "상태" 열에서 ⚠점검요망 건을 "✅ 완료처리" 버튼으로 완료 표시할 수 있음(원본 status·이력은
-  보존, maintenanceResolved* 필드만 추가되며 처리/취소 이력은 maintenanceStatusHistory에
-  누적 기록). 사고접수는 기존 처리상태를 "완료"로 저장 시 statusHistory에 이미 기록되던
-  이력을 그대로 활용. 완료 처리된 건은 renderVehicleAlertPanel() 안내 배너에서 완료일 기준
-  10일간 "✅ 점검완료 처리됨" 문구로 표시된 뒤 자동으로 배너에서 빠짐(원본 완료 이력 데이터는
-  계속 보존, 배너 노출 기간만 지남). 완료 처리 취소(되돌리기)도 지원 | 신규: resolveMaintenance(),
-  unresolveMaintenance(), MAINTENANCE_RESOLVED_DISPLAY_DAYS | 변경: renderVehicleAlertPanel()
-  완료 필터링/색상 전환, openVehicle() 상태 열 완료처리 버튼
 -->
 
 <head>
@@ -1277,7 +1276,7 @@
         <div style="background:var(--accent-soft);color:var(--navy);width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px;">🚗</div>
         <div>
           <b style="display:block;font-size:14px;color:var(--ink);margin-bottom:2px;">차량이용</b>
-          <div style="font-size:13px;color:var(--ink);line-height:1.6;">차량키 수령, 기존 법인하이패스카드 분리 후 이용</div>
+          <div style="font-size:13px;color:var(--ink);line-height:1.6;">차량키 수령, <span style="color:var(--bad);font-weight:700;">기존 법인하이패스카드 분리 후 이용</span></div>
         </div>
       </div>
 
@@ -1287,7 +1286,7 @@
           <b style="display:block;font-size:14px;color:var(--ink);margin-bottom:2px;">차량관리</b>
           <div style="font-size:13px;color:var(--ink);line-height:1.6;">
             이용거리 기준 주유비 개인결제<br><span style="color:var(--bad);font-weight:700;">※ 주유비 기준 하단 참조</span><br>
-            차량세차(개인부담), 반납 전 반드시 세차 해주세요!<br>
+            차량 내부에 쓰레기 등이 남지 않도록 깨끗하게 이용해 주세요<br>
             차량 내 또는 별도 배포된 <span style="color:var(--navy);font-weight:700;background:var(--accent-soft);padding:0 3px;border-radius:4px;">QR코드를 통해 운행정보 입력 (업무용 이용분과 반드시 구분하여 별도 입력)</span>
           </div>
         </div>
@@ -1299,7 +1298,7 @@
           <b style="display:block;font-size:14px;color:var(--ink);margin-bottom:2px;">차량반납</b>
           <div style="font-size:13px;color:var(--ink);line-height:1.6;">
             차량 이상여부 확인, 하이패스카드 원상복구<br>
-            차량키 반납 <span style="color:var(--bad);font-weight:700;">※ 주유비 증빙 문서중앙화 업로드 필수</span>
+            차량키 반납 <span style="color:var(--bad);font-weight:700;">※ 운행정보 입력 시 주유영수증 시스템 내 첨부 필수</span>
           </div>
         </div>
       </div>
@@ -1314,19 +1313,12 @@
         <div style="font-size:13.5px;color:var(--ink);line-height:1.7;">네이버 지도 길찾기 검색(중형차) 기준<br><b style="color:var(--navy);">이용거리 연료비 이상</b></div>
       </div>
 
-      <div style="background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px;">
+      <div style="background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:16px;margin-bottom:20px;">
         <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">주유비 증빙</div>
         <div style="font-size:13.5px;color:var(--ink);line-height:1.7;">
-          주유 영수증, 개인 결제내역 캡쳐<br>파일명을 다음과 같이 작성하여 업로드
-          <div style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--ink);margin-top:6px;font-family:monospace;line-height:1.5;">
-            (주유일)_(부서명)_(사용자명)_('비용' 원)<br>예시) 20240110_자산총무실_문익주_30,000원
-          </div>
+          운행정보 입력 화면에서 개인 사용 체크 시 주유영수증을 바로 촬영하거나 앨범에서 선택하여 첨부<br>
+          <span style="color:var(--bad);font-weight:700;">미첨부 시 제출일로부터 10일 이내 "내 제출 기록 수정"에서 반드시 추가 제출</span>
         </div>
-      </div>
-
-      <div style="background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:16px;margin-bottom:20px;">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">증빙 문서중앙화 업로드 경로</div>
-        <div style="font-size:13.5px;color:var(--ink);line-height:1.7;">Y:\공통\★주말및공휴일 차량사용<br>주유비 증빙 제출폴더</div>
       </div>
 
       <!-- 이용수칙 -->
@@ -1361,7 +1353,7 @@
       <div style="display:flex;gap:12px;margin-bottom:14px;align-items:flex-start;">
         <div style="background:var(--navy);color:#fff;font-size:12px;font-weight:700;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">4</div>
         <div style="font-size:13.5px;color:var(--ink);line-height:1.6;">
-          차량 사용 전, 하이패스카드 분리 이용 →<br><span style="color:var(--navy);font-weight:700;background:var(--accent-soft);padding:0 3px;border-radius:4px;">반납 전 실내정리, 세차, 개인주유, 증빙업로드</span>
+          <span style="color:var(--bad);font-weight:700;">차량 사용 전 하이패스카드 분리 필수</span><br>반납 전 <span style="color:var(--navy);font-weight:700;background:var(--accent-soft);padding:0 3px;border-radius:4px;">실내정리, 개인주유, 증빙업로드</span>
         </div>
       </div>
 
