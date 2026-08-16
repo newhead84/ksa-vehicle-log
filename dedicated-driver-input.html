@@ -1309,8 +1309,9 @@ async function refreshHoegjangLayout(){
   // 운행자명 입력창은 항상 노출한다(숨기지 않음) — KSA직원 모드에서는 기본값만 비워서 직접 입력받는다
   const effChairman = v.chairman && !(isHoegjang && hoegjangMode === 'staff');
   document.getElementById('driverNameRow').style.display = 'flex';
-  // KSA직원 모드에서는 운행자명(실명)이 필수 입력 항목임을 표시(*) — 그 외 모드는 기본 수행기사명이 자동 채워지므로 필수 표시 없음
-  document.getElementById('driverNameReqMark').style.display = (isHoegjang && hoegjangMode === 'staff') ? 'inline' : 'none';
+  // 운행자명(실명) 필수 입력 표시(*): 회장차 KSA직원 모드, 그리고 전무이사 차량(jeonmu1/jeonmu2)에서 노출
+  // 회장차 수행기사 모드는 기본 수행기사명이 자동 채워지고 변경할 일이 없으므로 필수 표시 없음
+  document.getElementById('driverNameReqMark').style.display = (!isHoegjang || hoegjangMode === 'staff') ? 'inline' : 'none';
   document.getElementById('driverNameErr').classList.remove('show');
   document.getElementById('etcSection').style.display = 'block';
   document.getElementById('submitBtnMain').style.display = '';
@@ -2146,11 +2147,11 @@ async function submitLog(){
     return;
   }
 
-  // 회장차·KSA직원 모드: 운행자명(실명) 필수 입력 검증 — 비어있으면 저장 불가
+  // 회장차·KSA직원 모드, 전무이사 차량: 운행자명(실명) 필수 입력 검증 — 비어있으면 저장 불가
   const driverNameInputEl = document.getElementById('driverName');
   const driverNameErrEl = document.getElementById('driverNameErr');
-  const isStaffMode = (currentVehicleKey === 'hoegjang' && hoegjangMode === 'staff');
-  if(isStaffMode && !driverNameInputEl.value.trim()){
+  const requireDriverName = (currentVehicleKey === 'hoegjang') ? (hoegjangMode === 'staff') : true;
+  if(requireDriverName && !driverNameInputEl.value.trim()){
     driverNameErrEl.classList.add('show');
     driverNameInputEl.focus();
     showToast('운행자명(KSA직원 성함)을 입력해 주세요.', true);
@@ -2260,7 +2261,7 @@ async function submitLog(){
   }
 
   // KSA직원 모드는 위에서 필수 검증을 통과한 실제 입력 성함을 그대로 저장한다(기존: 'KSA직원' 고정 문자열로 저장되어 실명이 유실되던 버그 수정)
-  const driver = isStaffMode
+  const driver = requireDriverName
     ? driverNameInputEl.value.trim()
     : (document.getElementById('driverName').value.trim() || v.driver);
   const chauffeur = isChauffeurMode();
