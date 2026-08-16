@@ -779,11 +779,12 @@
     <div class="ded-daecha-active-banner" id="daeChaActiveBanner"></div>
 
     <div class="ded-line-field" id="driverNameRow">
-      <label>운행자</label>
+      <label>운행자<span class="req" id="driverNameReqMark" style="display:none;">*</span></label>
       <div class="in-wrap">
         <input type="text" id="driverName" placeholder="운행자명" style="text-align:center">
       </div>
     </div>
+    <div class="ded-inline-err" id="driverNameErr">운행자명(KSA직원 성함)을 입력해 주세요.</div>
 
     <div class="ded-line-field" id="dateRangeRow">
       <label>운행기간</label>
@@ -1308,6 +1309,9 @@ async function refreshHoegjangLayout(){
   // 운행자명 입력창은 항상 노출한다(숨기지 않음) — KSA직원 모드에서는 기본값만 비워서 직접 입력받는다
   const effChairman = v.chairman && !(isHoegjang && hoegjangMode === 'staff');
   document.getElementById('driverNameRow').style.display = 'flex';
+  // KSA직원 모드에서는 운행자명(실명)이 필수 입력 항목임을 표시(*) — 그 외 모드는 기본 수행기사명이 자동 채워지므로 필수 표시 없음
+  document.getElementById('driverNameReqMark').style.display = (isHoegjang && hoegjangMode === 'staff') ? 'inline' : 'none';
+  document.getElementById('driverNameErr').classList.remove('show');
   document.getElementById('etcSection').style.display = 'block';
   document.getElementById('submitBtnMain').style.display = '';
   document.getElementById('doneTodayBanner').style.display = 'none';
@@ -2142,6 +2146,18 @@ async function submitLog(){
     return;
   }
 
+  // 회장차·KSA직원 모드: 운행자명(실명) 필수 입력 검증 — 비어있으면 저장 불가
+  const driverNameInputEl = document.getElementById('driverName');
+  const driverNameErrEl = document.getElementById('driverNameErr');
+  const isStaffMode = (currentVehicleKey === 'hoegjang' && hoegjangMode === 'staff');
+  if(isStaffMode && !driverNameInputEl.value.trim()){
+    driverNameErrEl.classList.add('show');
+    driverNameInputEl.focus();
+    showToast('운행자명(KSA직원 성함)을 입력해 주세요.', true);
+    return;
+  }
+  driverNameErrEl.classList.remove('show');
+
   // 대차 인수/반납 시 차량번호 필수 입력 검증
   const daeChaPickupSwitch = document.getElementById('daeChaPickupSwitch');
   const daeChaPickupCond = document.getElementById('daeChaPickupCond');
@@ -2243,8 +2259,9 @@ async function submitLog(){
     }
   }
 
-  const driver = (currentVehicleKey === 'hoegjang' && hoegjangMode === 'staff')
-    ? 'KSA직원'
+  // KSA직원 모드는 위에서 필수 검증을 통과한 실제 입력 성함을 그대로 저장한다(기존: 'KSA직원' 고정 문자열로 저장되어 실명이 유실되던 버그 수정)
+  const driver = isStaffMode
+    ? driverNameInputEl.value.trim()
     : (document.getElementById('driverName').value.trim() || v.driver);
   const chauffeur = isChauffeurMode();
   const fuelCost = parseFloat((document.getElementById('fuelCost').value || '').replace(/,/g,'')) || 0;
@@ -2719,7 +2736,7 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY && !EMAILJS_PUBLIC_KEY.startsWith('YOUR_
 function openAccidentPopup(){
   const v = VEHICLES[currentVehicleKey];
   const submitter = (currentVehicleKey === 'hoegjang' && hoegjangMode === 'staff')
-    ? 'KSA직원'
+    ? document.getElementById('driverName').value.trim()
     : (document.getElementById('driverName').value.trim() || v.driver);
 
   if(!accidentCompleted) markAccidentPending();
