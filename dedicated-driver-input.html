@@ -461,6 +461,11 @@
     font-family:'Pretendard',sans-serif;
   }
   .ded-add-btn:hover{border-color:var(--ded-beige); color:var(--ded-beige);}
+  /* 근로종료가 22:00 이전이라 심야시간을 추가할 수 없는 상태 */
+  .ded-add-btn.ded-disabled{opacity:.35; pointer-events:none; cursor:not-allowed;}
+  /* 휴게시간 법정 최소 충족여부 안내문구 */
+  .ded-field-note.ded-restmin-ok{color:var(--ded-muted);}
+  .ded-field-note.ded-restmin-short{color:var(--ded-red); font-weight:500;}
 
   /* ── 점검요청 / 운행기록 확인수정 (한 줄 좌우 버튼) ── */
   .ded-action-row{display:flex; gap:12px; margin:10px 0 4px;}
@@ -964,12 +969,17 @@
         <div class="ded-period-list" id="restPeriodsList"></div>
         <button type="button" class="ded-add-btn" onclick="addPeriod('restPeriodsList')">+ 휴게시간 구간 추가</button>
         <div class="ded-inline-err" id="restPeriodErr">휴게시간을 1개 이상, 시작·종료 모두 입력해 주세요.</div>
+        <div class="ded-field-note" id="restMinReqNote" style="display:none;"></div>
+        <div class="ded-inline-err" id="restMinErr">법정 최소 휴게시간(4시간→30분/8시간→1시간)을 채워야 제출할 수 있습니다.</div>
       </div>
 
       <div id="overtimeSection">
-        <div class="ded-subhead" style="margin-top:18px;">심야시간 <span style="font-weight:400;opacity:.7;">(해당하는 경우만)</span></div>
+        <div class="ded-subhead" style="margin-top:18px;">심야시간 <span style="font-weight:400;opacity:.7;">(해당하는 경우만, 22:00~06:00)</span></div>
         <div class="ded-period-list" id="overtimePeriodsList"></div>
-        <button type="button" class="ded-add-btn" onclick="addPeriod('overtimePeriodsList')">+ 심야시간 구간 추가(해당하는경우)</button>
+        <div class="ded-field-note" id="overtimeAutoNote" style="display:none;">⏱ 근로시간 기준으로 심야시간이 자동 계산되었습니다. 실제와 다르면 시간을 수정하거나 구간을 삭제해 주세요.</div>
+        <button type="button" class="ded-add-btn" id="overtimeAddBtn" onclick="addOvertimePeriodUI()">+ 심야시간 구간 추가(해당하는경우)</button>
+        <div class="ded-field-note" id="overtimeIneligibleNote" style="display:none;">🔒 근로 종료가 22:00 이전이면 심야시간을 추가할 수 없습니다</div>
+        <div class="ded-inline-err" id="overtimePeriodErr">심야시간 구간은 실제 근로시간 범위 안, 22:00~06:00 사이여야 합니다.</div>
       </div>
     </div>
   </div>
@@ -1144,6 +1154,7 @@ function applyQrLock(){
 
 // 회장차(177호1673) 전용: 수행기사 / KSA직원 구분, 출발·도착 QR 이중화 상태
 let hoegjangMode = 'driver'; // 'driver' | 'staff'
+let autoOvertimeDismissed = false; // 사용자가 자동계산된 심야시간 구간을 직접 삭제했는지(true면 재자동추가하지 않음)
 let editingIndex = null;      // 내 운행기록 수정 중인 trips[] 인덱스 (null이면 신규 입력)
 let myRecordsCache = [];      // 내 운행기록 패널에 표시 중인 목록 캐시
 let driverPhase = 'start';    // 회장차 수행기사 모드 전용: 'start'(출발 등록) | 'end'(도착 등록)
@@ -1209,6 +1220,7 @@ function syncWorkTime(which){
 function switchVehicle(key){
   currentVehicleKey = key;
   editingIndex = null;
+  autoOvertimeDismissed = false; // 다른 차량/화면으로 전환 시 자동 심야시간 계산 상태 초기화
   document.getElementById('editBanner').style.display = 'none';
   closeMyRecordsPanel(); // 다른 차량 화면으로 전환 시 운행기록 확인수정 패널/버튼을 비활성화한다
   resetAccidentState(); renderAccidentNotice(); updateAccidentSubmitGate();
@@ -1763,6 +1775,114 @@ function timeStrToMins(t){
   return h*60+mi;
 }
 
+// 근로시간 법정 기준 관련 상수
+// - 심야근로: 22:00~06:00 (근로기준법 제56조)
+// - 휴게시간: 근로 4시간→30분 이상, 8시간→1시간 이상 (근로기준법 제54조제1항)
+const NIGHT_START_MIN = 22*60;        // 22:00
+const NIGHT_WINDOW_END_MIN = 30*60;   // 근로시작일 기준 정규화된 "다음날 06:00"(24:00+06:00)
+
+// 근로 시작~종료를 근로시작일 기준 분단위로 반환({startMin, endMin}). endMin은 자정을 넘기면 +24h.
+// 값이 없거나 형식이 올바르지 않으면 null.
+function getWorkSpanMins(){
+  const startMin = timeStrToMins(document.getElementById('workStart').value);
+  let endMin = timeStrToMins(document.getElementById('workEnd').value);
+  if(startMin===null || endMin===null) return null;
+  if(endMin < startMin) endMin += 24*60;
+  return {startMin, endMin};
+}
+
+// 근로종료 시각이 22:00(심야시간 시작) 이전이면 심야시간을 기록할 수 없다 —
+// 근로 자체가 심야시간대에 걸치지 않는데 심야시간을 입력하는 것을 방지
+function isNightEligible(){
+  const span = getWorkSpanMins();
+  if(!span) return false;
+  return span.endMin > NIGHT_START_MIN;
+}
+
+// 대기/휴게/심야 구간의 "HH:MM" 시작·종료를 근로시작일 기준으로 정규화하여 {start,end}(분) 반환.
+// 근로시작 시각보다 이른 시각은 다음날로 간주(+24h), 구간 자체가 자정을 넘기면 종료값도 +24h.
+function normalizePeriodToWorkDay(startStr, endStr, workStartMin){
+  let s = timeStrToMins(startStr), e = timeStrToMins(endStr);
+  if(s===null || e===null) return null;
+  if(s < workStartMin) s += 24*60;
+  if(e < s) e += 24*60;
+  return {start:s, end:e};
+}
+
+// 법정 최소 휴게시간(분): 근로시간 8시간 이상→60분, 4시간 이상→30분, 미만→0 (근로기준법 제54조제1항)
+function requiredRestMinutes(spanMins){
+  if(spanMins >= 8*60) return 60;
+  if(spanMins >= 4*60) return 30;
+  return 0;
+}
+
+// 심야시간 구간이 (1) 실제 근로시간 범위 안에 있는지, (2) 22:00~06:00 범위 안에 있는지 검증.
+// 문제되는 구간의 표시용 텍스트를 담은 배열을 반환(비어있으면 전부 유효).
+function validateOvertimePeriods(){
+  const span = getWorkSpanMins();
+  const rows = document.querySelectorAll('#overtimePeriodsList .ded-period-row');
+  const problems = [];
+  if(!span){ return problems; } // 근로시간 자체가 없으면 별도 처리(다른 필수값 검증에서 걸림)
+  rows.forEach(row=>{
+    const inputs = row.querySelectorAll('input.ded-period-time');
+    const startStr = inputs[0]?.value, endStr = inputs[1]?.value;
+    if(!startStr || !endStr) return; // 완전히 채워지지 않은 행은 여기서 다루지 않음(다른 곳에서 무시됨)
+    const norm = normalizePeriodToWorkDay(startStr, endStr, span.startMin);
+    if(!norm){ problems.push(`${startStr}~${endStr}`); return; }
+    const withinWork = norm.start >= span.startMin && norm.end <= span.endMin;
+    const withinNight = norm.start >= NIGHT_START_MIN && norm.end <= NIGHT_WINDOW_END_MIN;
+    if(!withinWork || !withinNight) problems.push(`${startStr}~${endStr}`);
+  });
+  return problems;
+}
+
+// 분(0~1439 범위를 벗어날 수 있음) → "HH:MM" 문자열로 변환(24시간 기준으로 mod 처리)
+function minsToTimeStr(mins){
+  const m = ((mins % (24*60)) + 24*60) % (24*60);
+  return String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+}
+
+// 근로시간과 심야시간대(22:00~06:00)가 겹치는 구간을 자동 계산. 겹치는 부분이 없으면 null.
+function computeAutoNightPeriod(){
+  const span = getWorkSpanMins();
+  if(!span || !isNightEligible()) return null;
+  const s = Math.max(span.startMin, NIGHT_START_MIN);
+  const e = Math.min(span.endMin, NIGHT_WINDOW_END_MIN);
+  if(e <= s) return null;
+  return { start: minsToTimeStr(s), end: minsToTimeStr(e) };
+}
+
+// 근로종료가 22:00를 넘기면 심야시간 구간을 자동으로 채워준다(사용자가 직접 계산해 입력할 필요 없도록).
+// - 목록이 비어있을 때만 자동 추가(사용자가 이미 수동으로 입력/추가한 구간이 있으면 건드리지 않음)
+// - 이미 자동 추가된 구간(data-auto="1")은 근로종료가 바뀔 때마다 최신 값으로 갱신
+// - 사용자가 자동 추가된 구간을 직접 수정하면(onTimeInput에서 data-auto 해제) 이후 자동 갱신 대상에서 제외
+// - 근로종료를 다시 22:00 이전으로 되돌리는 등 더 이상 해당되지 않게 되면, 아직 손대지 않은 자동 구간은 제거
+function syncAutoOvertimePeriod(){
+  const list = document.getElementById('overtimePeriodsList');
+  const note = document.getElementById('overtimeAutoNote');
+  if(!list) return;
+  const auto = computeAutoNightPeriod();
+  const rows = Array.from(list.querySelectorAll('.ded-period-row'));
+  const autoRow = rows.find(r => r.dataset.auto === '1');
+  if(!auto){
+    if(autoRow) autoRow.remove();
+    if(note) note.style.display = 'none';
+    return;
+  }
+  if(autoRow){
+    const inputs = autoRow.querySelectorAll('input.ded-period-time');
+    inputs[0].value = auto.start;
+    inputs[1].value = auto.end;
+    if(note) note.style.display = 'block';
+  } else if(rows.length === 0){
+    if(autoOvertimeDismissed){ if(note) note.style.display = 'none'; return; }
+    addPeriod('overtimePeriodsList', auto.start, auto.end, true);
+    if(note) note.style.display = 'block';
+  } else if(note){
+    note.style.display = 'none'; // 사용자가 이미 직접 구간을 넣어둔 상태라 자동값은 표시하지 않음
+  }
+}
+
 // 구간 목록(대기/휴게/심야) 리스트에서 시작·종료 시각이 모두 입력된 행만 분단위 합계로 반환
 function sumPeriodMinutes(listId){
   const rows = document.querySelectorAll(`#${listId} .ded-period-row`);
@@ -1785,14 +1905,49 @@ function calcWorkTotal(){
   const e = document.getElementById('workEnd').value;
   const out = document.getElementById('workTotalVal');
   const sMin = timeStrToMins(s), eMin = timeStrToMins(e);
-  if(sMin===null || eMin===null){ out.textContent = '–'; return; }
-  let mins = eMin - sMin;
-  if(mins < 0) mins += 24*60;
+  if(sMin===null || eMin===null){
+    out.textContent = '–';
+    updateNightEligibilityUI();
+    updateRestMinReqNote(null);
+    syncAutoOvertimePeriod();
+    return;
+  }
+  let grossMins = eMin - sMin;
+  if(grossMins < 0) grossMins += 24*60;
   const restMins = sumPeriodMinutes('restPeriodsList');
-  mins = Math.max(0, mins - restMins);
+  const mins = Math.max(0, grossMins - restMins);
   const h = Math.floor(mins/60), m = mins%60;
   out.textContent = `${h}시간 ${m}분`;
   clearPeriodErrorsIfValid();
+  updateNightEligibilityUI();
+  updateRestMinReqNote(grossMins);
+  syncAutoOvertimePeriod();
+}
+
+// 근로종료가 22:00 이전이면 심야시간 추가 버튼을 비활성화하고 안내문구를 표시
+function updateNightEligibilityUI(){
+  const btn = document.getElementById('overtimeAddBtn');
+  const note = document.getElementById('overtimeIneligibleNote');
+  if(!btn) return;
+  const eligible = isNightEligible();
+  btn.disabled = !eligible;
+  btn.classList.toggle('ded-disabled', !eligible);
+  if(note) note.style.display = eligible ? 'none' : 'block';
+}
+
+// 휴게시간 섹션에 법정 최소 휴게시간 안내(및 충족여부) 표시
+function updateRestMinReqNote(grossMins){
+  const note = document.getElementById('restMinReqNote');
+  if(!note) return;
+  if(grossMins===null || grossMins===undefined){ note.textContent=''; note.style.display='none'; return; }
+  const required = requiredRestMinutes(grossMins);
+  if(required === 0){ note.style.display='none'; return; }
+  const restMins = sumPeriodMinutes('restPeriodsList');
+  const ok = restMins >= required;
+  note.style.display = 'block';
+  note.textContent = `법정 최소 휴게시간 ${required}분 (현재 ${restMins}분)${ok ? ' ✓' : ' — 부족'}`;
+  note.classList.toggle('ded-restmin-ok', ok);
+  note.classList.toggle('ded-restmin-short', !ok);
 }
 
 // 대기시간/휴게시간 필수값 에러 안내문구는 제출 시도 후에만 표시되는데,
@@ -1808,10 +1963,11 @@ function clearPeriodErrorsIfValid(){
   }
 }
 
-function addPeriod(listId, defaultStart, defaultEnd){
+function addPeriod(listId, defaultStart, defaultEnd, isAuto){
   const list = document.getElementById(listId);
   const row = document.createElement('div');
   row.className = 'ded-period-row';
+  if(isAuto) row.dataset.auto = '1';
   row.innerHTML = `
     <input type="text" inputmode="numeric" maxlength="5" class="ded-time-input ded-period-time" placeholder="HH:MM" value="${defaultStart||''}" oninput="onTimeInput(this, calcWorkTotal)" onblur="onTimeBlur(this, calcWorkTotal)">
     <span class="arrow">→</span>
@@ -1819,6 +1975,16 @@ function addPeriod(listId, defaultStart, defaultEnd){
     <button type="button" class="rm" onclick="confirmRemovePeriod(this);">✕</button>
   `;
   list.appendChild(row);
+}
+
+// "+ 심야시간 구간 추가" 버튼 핸들러: 근로종료가 22:00 이전이면(=심야시간대에 걸치지 않으면) 추가를 막는다.
+// (버튼이 disabled 처리되어 있어도 방어적으로 한 번 더 확인)
+function addOvertimePeriodUI(){
+  if(!isNightEligible()){
+    showToast('근로 종료가 22:00 이전이라 심야시간을 추가할 수 없습니다.', true);
+    return;
+  }
+  addPeriod('overtimePeriodsList');
 }
 
 // 휴게시간 목록이 비어있을 때 점심시간(12:00~13:00)을 기본값으로 한 행을 추가한다.
@@ -1835,12 +2001,17 @@ function addDefaultRestPeriodIfEmpty(){
 async function confirmRemovePeriod(btn){
   if(!await appConfirm('이 구간을 삭제하시겠습니까?')) return;
   const row = btn.closest('.ded-period-row');
+  // 자동계산된 심야시간 구간을 사용자가 직접 삭제한 경우, 근로종료가 바뀔 때마다 다시 자동추가되지 않도록 표시
+  if(row && row.dataset.auto === '1') autoOvertimeDismissed = true;
   if(row) row.remove();
   calcWorkTotal();
 }
 
 // 24시간 텍스트 시간 입력: 숫자만 남기고 HH:MM 형태로 자동 포맷(입력 중 실시간)
 function onTimeInput(el, cb){
+  // 자동계산된 심야시간 구간을 사용자가 직접 타이핑하면, 이후 자동 재계산 대상에서 제외(수동 입력 존중)
+  const row = el.closest('.ded-period-row');
+  if(row && row.dataset.auto === '1') delete row.dataset.auto;
   const digits = el.value.replace(/[^0-9]/g,'').slice(0,4);
   el.value = digits.length > 2 ? (digits.slice(0,2) + ':' + digits.slice(2)) : digits;
   if(el.value.length === 5 && typeof cb === 'function') cb();
@@ -1987,7 +2158,8 @@ async function submitLog(){
   // 대기시간/휴게시간 필수 입력 검증 — 도착 등록 단계 등 해당 섹션이 노출된 경우에만 적용
   const waitErr = document.getElementById('waitPeriodErr');
   const restErr = document.getElementById('restPeriodErr');
-  waitErr.classList.remove('show'); restErr.classList.remove('show');
+  const restMinErr = document.getElementById('restMinErr');
+  waitErr.classList.remove('show'); restErr.classList.remove('show'); restMinErr.classList.remove('show');
   if(isVisible('standbyRestSection')){
     const waitState = validatePeriodList('waitPeriodsList');
     const restState = validatePeriodList('restPeriodsList');
@@ -1995,6 +2167,30 @@ async function submitLog(){
     if(restState !== 'ok') restErr.classList.add('show');
     if(waitState !== 'ok' || restState !== 'ok'){
       showToast('대기시간·휴게시간을 입력해주세요.', true);
+      return;
+    }
+    // 법정 최소 휴게시간(근로기준법 제54조: 4시간→30분/8시간→1시간) 미달이면 제출 차단
+    const span = getWorkSpanMins();
+    if(span){
+      const grossMins = span.endMin - span.startMin;
+      const required = requiredRestMinutes(grossMins);
+      const restMins = sumPeriodMinutes('restPeriodsList');
+      if(restMins < required){
+        restMinErr.classList.add('show');
+        showToast(`법정 최소 휴게시간 ${required}분을 채워야 제출할 수 있습니다. (현재 ${restMins}분)`, true);
+        return;
+      }
+    }
+  }
+
+  // 심야시간 구간 검증 — 실제 근로시간 범위 안 + 22:00~06:00 범위 안인지 확인
+  const overtimeErr = document.getElementById('overtimePeriodErr');
+  overtimeErr.classList.remove('show');
+  if(isVisible('overtimeSection')){
+    const otProblems = validateOvertimePeriods();
+    if(otProblems.length > 0){
+      overtimeErr.classList.add('show');
+      showToast('심야시간 구간을 확인해 주세요: ' + otProblems.join(', '), true);
       return;
     }
   }
@@ -2192,6 +2388,7 @@ async function submitLog(){
 }
 
 function resetFormAfterSubmit(carryStartOdo){
+  autoOvertimeDismissed = false; // 다음 운행 입력은 자동 심야시간 계산을 다시 새로 적용
   // 대차인수/반납 스위치와 관련 상태를 먼저 직접 초기화한다(click()으로 끄면 반납 조회용
   // 비동기 fetch 등 부수효과가 발생해 아래 carryStartOdo 반영과 순서가 꼬일 수 있어 회피).
   ['substituteSwitch','daeChaPickupSwitch','daeChaReturnSwitch'].forEach(id=>{
@@ -2298,6 +2495,7 @@ function startEditRecord(idx){
   const t = myRecordsCache.find(r=>r._idx===idx);
   if(!t) return;
   editingIndex = idx;
+  autoOvertimeDismissed = true; // 기존 기록 수정 시에는 저장된 값을 그대로 두고 자동 심야시간 계산으로 덮어쓰지 않음
 
   const v = VEHICLES[currentVehicleKey];
   document.getElementById('hoegjangModeBar').style.display = 'none';

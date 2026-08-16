@@ -35,6 +35,15 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-16] 수행기사(회장차) 근로시간 입력 근로기준법 준수 검증 추가. ① 심야시간(22:00~06:00,
+  제56조) 구간은 실제 근로시간 범위 밖이거나 22:00~06:00 밖이면 제출 차단, 근로종료가 22:00
+  이전이면 "심야시간 구간 추가" 버튼 자체를 비활성화. ② 휴게시간(제54조: 근로 4시간→30분/
+  8시간→1시간) 법정 최소치 미달 시 제출 차단, 부족분을 실시간 안내문구로 표시 | 변경:
+  dedicated-driver-input.html(신규: getWorkSpanMins()/isNightEligible()/
+  normalizePeriodToWorkDay()/requiredRestMinutes()/validateOvertimePeriods()/
+  updateNightEligibilityUI()/updateRestMinReqNote()/addOvertimePeriodUI(), 수정:
+  calcWorkTotal()/submitLog())
+
   [2026-08-14] 대차인수(반납 아님) + 종료거리 미입력 시 endOdo=startOdo(0km)로 자동 처리되는 케이스에서,
   다음 정상 운행이 그 종료거리를 이어받아 시작하면(시작거리=문제기록의 시작거리이자 종료거리) 늦은입력
   겹침(⚠ 확인필요)으로 오탐되던 버그 수정. 대차인수 전용 0km 기록과의 시작거리 일치는 정상 체인
