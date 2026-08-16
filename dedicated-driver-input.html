@@ -971,6 +971,7 @@
         <div class="ded-period-list" id="waitPeriodsList"></div>
         <button type="button" class="ded-add-btn" onclick="addPeriod('waitPeriodsList')">+ 대기시간 구간 추가</button>
         <div class="ded-inline-err" id="waitPeriodErr">대기시간을 1개 이상, 시작·종료 모두 입력해 주세요.</div>
+        <div class="ded-inline-err" id="waitTimingErr">대기시간은 출발 시작 최소 30분 이후 ~ 도착 등록 최소 30분 전 구간에서만 입력할 수 있습니다.</div>
 
         <div class="ded-subhead" style="margin-top:18px;">휴게시간<span class="req">*</span></div>
         <div class="ded-period-list" id="restPeriodsList"></div>
@@ -1845,6 +1846,32 @@ function validateOvertimePeriods(){
   return problems;
 }
 
+// 대기시간 구간이 (1) 출발(근로시작) 시각으로부터 최소 30분 이후에 시작하는지,
+// (2) 도착(근로종료) 시각까지 최소 30분 여유를 두고 종료하는지 검증한다.
+// (도착 등록 전이라 근로종료가 비어있으면 종료 쪽 조건은 검사하지 않음)
+// 문제되는 구간의 표시용 텍스트를 담은 배열을 반환(비어있으면 전부 유효).
+function validateWaitPeriodsTiming(){
+  const problems = [];
+  const startMin = timeStrToMins(document.getElementById('workStart').value);
+  if(startMin === null) return problems; // 출발 시각이 없으면 다른 필수값 검증에서 걸림
+  let endMin = timeStrToMins(document.getElementById('workEnd').value);
+  if(endMin !== null && endMin < startMin) endMin += 24*60;
+  const rows = document.querySelectorAll('#waitPeriodsList .ded-period-row');
+  rows.forEach(row=>{
+    const inputs = row.querySelectorAll('input.ded-period-time');
+    const startStr = inputs[0]?.value, endStr = inputs[1]?.value;
+    if(!startStr || !endStr) return; // 미완성 행은 다른 검증(필수 입력)에서 처리
+    const norm = normalizePeriodToWorkDay(startStr, endStr, startMin);
+    if(!norm){ problems.push(`${startStr}~${endStr}`); return; }
+    const minStart = startMin + 30;
+    const maxEnd = endMin !== null ? endMin - 30 : null;
+    const violatesStart = norm.start < minStart;
+    const violatesEnd = maxEnd !== null && norm.end > maxEnd;
+    if(violatesStart || violatesEnd) problems.push(`${startStr}~${endStr}`);
+  });
+  return problems;
+}
+
 // 분(0~1439 범위를 벗어날 수 있음) → "HH:MM" 문자열로 변환(24시간 기준으로 mod 처리)
 function minsToTimeStr(mins){
   const m = ((mins % (24*60)) + 24*60) % (24*60);
@@ -2168,7 +2195,8 @@ async function submitLog(){
   const waitErr = document.getElementById('waitPeriodErr');
   const restErr = document.getElementById('restPeriodErr');
   const restMinErr = document.getElementById('restMinErr');
-  waitErr.classList.remove('show'); restErr.classList.remove('show'); restMinErr.classList.remove('show');
+  const waitTimingErr = document.getElementById('waitTimingErr');
+  waitErr.classList.remove('show'); restErr.classList.remove('show'); restMinErr.classList.remove('show'); waitTimingErr.classList.remove('show');
   if(isVisible('standbyRestSection')){
     const waitState = validatePeriodList('waitPeriodsList');
     const restState = validatePeriodList('restPeriodsList');
@@ -2176,6 +2204,13 @@ async function submitLog(){
     if(restState !== 'ok') restErr.classList.add('show');
     if(waitState !== 'ok' || restState !== 'ok'){
       showToast('대기시간·휴게시간을 입력해주세요.', true);
+      return;
+    }
+    // 대기시간 구간이 출발 시작 최소 30분 이후 ~ 도착 등록 최소 30분 전 범위를 벗어나면 제출 차단
+    const waitTimingProblems = validateWaitPeriodsTiming();
+    if(waitTimingProblems.length > 0){
+      waitTimingErr.classList.add('show');
+      showToast('대기시간은 출발 시작 최소 30분 이후, 도착 등록 최소 30분 전까지만 입력할 수 있습니다: ' + waitTimingProblems.join(', '), true);
       return;
     }
     // 법정 최소 휴게시간(근로기준법 제54조: 4시간→30분/8시간→1시간) 미달이면 제출 차단
@@ -2979,6 +3014,9 @@ function openSubmitConfirm(message){
 }
 function closeSubmitConfirm(){
   document.getElementById('submitConfirmOverlay').classList.remove('open');
+  // 수행기사 모드: 출발 등록 완료 확인 후 도착 등록 화면(또는 다음 단계 화면)이
+  // 이전 스크롤 위치(중간)에서부터 보이는 문제 방지 — 팝업을 닫을 때 화면 최상단으로 이동
+  if(isChauffeurMode()) window.scrollTo({top: 0, behavior: 'smooth'});
 }
 
 // GENESIS 워드마크(화이트, 비상업적 참고용 데모 자산) — 어두운 배경 헤더 전용, 임의 변형 금지 원칙 준수
