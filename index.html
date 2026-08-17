@@ -35,6 +35,15 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-17] "내 제출 기록 수정" 화면 2건 수정. ① 개인사용(주말·공휴일) 기록에서 최초 제출 시
+  "나중에 첨부"를 선택해 영수증을 첨부하지 못한 건을 이 화면에서 실제로 첨부할 수 있는 버튼이
+  없던 문제 → 개인사용 체크된 기록 카드에 촬영/앨범 첨부 버튼과 OCR 인식(금액·일자·영수증
+  종류 판정)을 추가하고, 저장 버튼을 눌러야 실제 업로드·반영되도록 구현(제출 당시와 동일한
+  OCR 로직 재사용). ② 차량별로 기록을 묶어 표시할 때 그룹 내부만 오름차순으로 재정렬되어
+  방금 입력한 기록이 카드 맨 아래에 표시되던 버그 → 상단 "최신순 정렬"과 동일하게 내림차순으로
+  통일 | 신규: ueReceiptAttach(), ueReceiptFileSelected() | 변경: loadUserEditable()(영수증
+  첨부 영역 렌더링, 차량별 그룹 정렬), toggleUePersonal(), saveUserEdits()(영수증 업로드 반영)
+
   [2026-08-16] 주말·공휴일 개인사용 안내(weekendOverlay) "차량관리" 항목 및 DT센터 주차
   유의사항(parkingOverlay) 1~3번 항목 문구 간소화·줄바꿈 정리(전용/공용차량 주차 안내를
   줄바꿈으로 분리, "※ 주유비 기준 하단 참조" 링크 문구 삭제, 불필요한 조사/어미 정리) |
@@ -8212,7 +8221,9 @@ function loadUserEditable(){
 
   let html='';
   Object.keys(byPlate).sort().forEach(plate=>{
-    const rows=byPlate[plate].sort((a,b)=>tripChronoCompare(a.trip,b.trip));
+    // 차량별로 묶은 뒤에도 상단의 "최신순 정렬"(newest-first)을 유지 — 과거에는 이 그룹 내부만
+    // 오름차순(a,b)으로 재정렬되어 방금 입력한 기록이 카드 맨 아래에 표시되는 문제가 있었음.
+    const rows=byPlate[plate].sort((a,b)=>tripChronoCompare(b.trip,a.trip));
     html+=`
     <div style="margin-bottom:18px;">
       <div class="user-edit-plate">
@@ -8269,6 +8280,21 @@ function loadUserEditable(){
           <div class="ue-daecha-field" style="${f.trip.isDaeCha?'':'display:none;'}margin-top:8px;">
             <input class="ue-inp" data-f="daeChaPate" value="${escapeHtml(f.trip.daeChaPate||'')}" placeholder="대차 차량번호(필수)" style="width:100%;font-size:13px;border:1px solid var(--accent);border-radius:8px;padding:8px 6px;">
             <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5;">인수·반납 상세정보(차종·하이패스·주유게이지·이상여부)는 이 화면에서 수정할 수 없습니다. 최초 제출한 운행기록의 인수/반납 여부는 그대로 유지됩니다.</div>
+          </div>
+          <div class="ue-receipt-field" style="${f.trip.isPersonal?'':'display:none;'}margin-top:10px;padding-top:10px;border-top:1px dashed #93C5FD;">
+            <div style="font-size:11px;font-weight:700;color:#1D4ED8;margin-bottom:6px;">🧾 개인사용 주유영수증</div>
+            <div class="ue-receipt-status">${f.trip.receiptPath ? receiptStatusBadgeHtml(f.trip) : `
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button type="button" class="ue-receipt-btn" onclick="ueReceiptAttach(this,'camera')" style="flex:1 1 45%;min-width:88px;padding:9px 6px;border-radius:8px;border:none;background:#1D4ED8;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">📷 촬영</button>
+                <button type="button" class="ue-receipt-btn" onclick="ueReceiptAttach(this,'album')" style="flex:1 1 45%;min-width:88px;padding:9px 6px;border-radius:8px;border:1px solid #93C5FD;background:#fff;color:#1D4ED8;font-size:12px;font-weight:700;cursor:pointer;">🖼️ 앨범에서 선택</button>
+              </div>
+              <input type="file" class="ue-receipt-file-camera" accept="image/*" capture="environment" style="display:none;" onchange="ueReceiptFileSelected(this)">
+              <input type="file" class="ue-receipt-file-album" accept="image/*" style="display:none;" onchange="ueReceiptFileSelected(this)">
+              <div class="ue-receipt-thumb-wrap" style="display:none;margin-top:8px;gap:8px;align-items:flex-start;">
+                <img class="ue-receipt-thumb" src="" alt="영수증 미리보기" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid #93C5FD;flex-shrink:0;">
+                <div class="ue-receipt-ocr-status" style="font-size:11px;flex:1;"></div>
+              </div>
+            `}</div>
           </div>
           <div style="margin-top:10px;">
             <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">출퇴근 사용 <span style="font-weight:400;">(단신부임자 급여공제 승인자)</span></div>
@@ -8336,11 +8362,74 @@ function toggleUeDaeCha(chk){
   if(field) field.style.display = chk.checked ? 'block' : 'none';
 }
 
-// 개인사용 체크 시 출퇴근 선택 자동 해제 (중복선택 방지)
+// 개인사용 체크 시 출퇴근 선택 자동 해제 (중복선택 방지) + 영수증 첨부 영역 표시/숨김
 function toggleUePersonal(chk){
-  if(!chk.checked) return;
   const row=chk.closest('[data-plate]');
+  const field=row?.querySelector('.ue-receipt-field');
+  if(field) field.style.display = chk.checked ? 'block' : 'none';
+  if(!chk.checked) return;
   row?.querySelectorAll('.ue-commute-btn.active-commute').forEach(b=>b.classList.remove('active-commute'));
+}
+
+// 내 제출기록 수정 화면에서 영수증 촬영/앨범 버튼 클릭 시 숨겨진 파일 입력을 트리거
+function ueReceiptAttach(btn, type){
+  const row=btn.closest('[data-plate]');
+  const fileInp = row?.querySelector(type==='camera' ? '.ue-receipt-file-camera' : '.ue-receipt-file-album');
+  if(fileInp) fileInp.click();
+}
+
+// 내 제출기록 수정 화면에서 영수증 파일 선택 시 OCR 인식 실행 (제출 당시와 동일한 판정 로직 재사용).
+// 실제 업로드는 저장 시점(saveUserEdits)에 수행하며, 이 함수는 파일을 window._ueReceiptFileMap에 보관하고
+// 인식 결과만 미리 계산해 카드에 표시한다.
+async function ueReceiptFileSelected(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if(!file) return;
+  const row = inputEl.closest('[data-plate]');
+  if(!row) return;
+  const key = row.dataset.key;
+  window._ueReceiptFileMap = window._ueReceiptFileMap || {};
+  window._ueReceiptFileMap[key] = file;
+
+  const thumbWrap = row.querySelector('.ue-receipt-thumb-wrap');
+  const thumbImg = row.querySelector('.ue-receipt-thumb');
+  const statusEl = row.querySelector('.ue-receipt-ocr-status');
+  if(thumbImg) thumbImg.src = URL.createObjectURL(file);
+  if(thumbWrap) thumbWrap.style.display = 'flex';
+  if(statusEl) statusEl.innerHTML = '🔄 영수증 인식 중...';
+
+  const dateFromInp = row.querySelector('.ue-date-from');
+  const tripDateStr = dateFromInp ? dateFromInp.value : todayLocalISO();
+  const fuelInp = row.querySelector('[data-f="fuel"]');
+
+  const { text } = await callVisionOcr(file);
+  const amountCandidates = parseReceiptAmount(text);
+  const ocrAmount = amountCandidates.length ? amountCandidates[0] : null;
+  const ocrDate = parseReceiptDate(text);
+  const { valid: dateValid, diffDays } = validateReceiptDate(ocrDate, tripDateStr);
+  const typeValid = isFuelReceiptText(text);
+  const currentFuel = fuelInp ? parseFuelAmount(fuelInp.value) : 0;
+  const matched = ocrAmount!==null ? matchReceiptAmount(currentFuel, [ocrAmount]) : null;
+
+  row.dataset.receiptOcrAmount = ocrAmount===null ? '' : String(ocrAmount);
+  row.dataset.receiptOcrMatched = matched===null ? '' : String(matched);
+  row.dataset.receiptOcrDate = ocrDate || '';
+  row.dataset.receiptDateValid = dateValid===null ? '' : String(dateValid);
+  row.dataset.receiptTypeValid = typeValid===null ? '' : String(typeValid);
+
+  let amountBadge, dateBadge, typeBadge;
+  if(ocrAmount!==null) amountBadge = `인식 금액: <b>${ocrAmount.toLocaleString()}원</b> ${matched?'<span style="color:#059669;font-weight:700;">✅ 금액일치</span>':'<span style="color:#B45309;font-weight:700;">⚠️ 주유비와 다름</span>'}`;
+  else amountBadge = `<span style="color:#B45309;font-weight:700;">🔍 금액 자동 인식 실패 - 관리자 확인 예정</span>`;
+  if(dateValid===true) dateBadge = `<span style="color:#059669;font-weight:700;">✅ 증빙 일자 적격 (운행일 ±10일 이내)</span>`;
+  else if(dateValid===false) dateBadge = `<span style="color:#DC2626;font-weight:700;">⚠️ 증빙 부적격 — 영수증 일자(${ocrDate})가 운행일보다 ${Math.abs(diffDays)}일 ${diffDays<0?'이전':'초과'}입니다</span>`;
+  else dateBadge = `<span style="color:#B45309;font-weight:700;">🔍 일자 자동 인식 실패 - 관리자 확인 예정</span>`;
+  if(typeValid===true) typeBadge = `<span style="color:#059669;font-weight:700;">✅ 주유 영수증으로 확인됨</span>`;
+  else if(typeValid===false) typeBadge = `<span style="color:#DC2626;font-weight:700;">⚠️ 주유 영수증이 아닌 것으로 보입니다 - 관리자 확인 예정</span>`;
+  else typeBadge = `<span style="color:#B45309;font-weight:700;">🔍 영수증 종류 자동 인식 실패 - 관리자 확인 예정</span>`;
+
+  if(statusEl){
+    statusEl.innerHTML = amountBadge + `<br>` + dateBadge + `<br>` + typeBadge +
+      `<br><span style="color:#6B7280;">저장 버튼을 눌러야 최종 반영됩니다.</span>`;
+  }
 }
 
 // 날짜 텍스트 입력 자동 포맷: 숫자만 입력 → YYYY-MM-DD 자동 삽입 (내 제출기록 수정용)
@@ -8460,11 +8549,11 @@ async function saveUserEdits(name){
 
   // 저장 직전 최신 데이터 재조회 후 키 기반 매칭 (동시 수정 유실 방지)
   await refreshDataFromStorage();
-  rows.forEach(tr=>{
+  for(const tr of rows){
     const plate=tr.dataset.plate;
     const key=tr.dataset.key;
     const t=(data.vehicles[plate]?.trips||[]).find(x=>`${x.isoDate}|${x.startOdo}|${x.endOdo}|${x.submitter||''}`===key);
-    if(!t) return;
+    if(!t) continue;
     const locked = isChainLocked(plate, t); // 다음 기록에 이미 연동된 경우, 화면 조작과 무관하게 서버측에서도 재확인 후 차단
     tr.querySelectorAll('.ue-inp').forEach(inp=>{
       const f=inp.dataset.f;
@@ -8507,7 +8596,27 @@ async function saveUserEdits(name){
         t.usageDates = allDates;
       }
     }
-  });
+    // 나중에 첨부: 이 화면에서 새로 선택한 영수증 파일이 있으면 지금 압축+업로드하여 반영.
+    // 업로드 실패해도 나머지 저장은 계속 진행(영수증만 미반영, receiptPath는 기존 상태 유지).
+    const newReceiptFile = window._ueReceiptFileMap && window._ueReceiptFileMap[key];
+    if(t.isPersonal && newReceiptFile && !t.receiptPath){
+      try{
+        const fileName = buildReceiptFileName(t.user, t.isoDate, t.fuel);
+        const compressed = await compressReceiptImage(newReceiptFile);
+        t.receiptPath = await uploadReceiptToStorage(compressed, fileName);
+        t.receiptUploadedAt = new Date().toISOString();
+        t.receiptOcrAmount = tr.dataset.receiptOcrAmount ? Number(tr.dataset.receiptOcrAmount) : null;
+        t.receiptOcrMatched = tr.dataset.receiptOcrMatched==='' ? null : tr.dataset.receiptOcrMatched==='true';
+        t.receiptOcrDate = tr.dataset.receiptOcrDate || null;
+        t.receiptDateValid = tr.dataset.receiptDateValid==='' ? null : tr.dataset.receiptDateValid==='true';
+        t.receiptTypeValid = tr.dataset.receiptTypeValid==='' ? null : tr.dataset.receiptTypeValid==='true';
+        delete window._ueReceiptFileMap[key];
+      }catch(e){
+        console.error('[내 제출기록 수정 - 영수증 업로드 실패]', e);
+        if(err){ err.textContent='⚠ 영수증 업로드에 실패했습니다. 나머지 내용은 저장되며, 영수증은 다시 시도해 주세요.'; err.style.display='block'; }
+      }
+    }
+  }
   // 본인 사고 이력 반영 (사고일시·장소·사고내용만 수정 대상 — 처리상태·처리메모는 관리자 전용)
   accRows.forEach(tr=>{
     const id=tr.dataset.accidentId;
