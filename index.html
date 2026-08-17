@@ -35,6 +35,20 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-17] 관리자 대시보드에 개인사용 증빙/주유 모니터링 기능 신규 추가. 기존에는 "주말 및
+  공휴일 개인사용 현황" 섹션이 운행자 이름을 검색해야만 내용이 표시되어(검색 전엔 "엑셀에서
+  확인" 안내만 노출), 부적격 증빙이나 과소주유 건을 관리자가 이름을 모르면 찾을 방법이 없던
+  문제 해결. ① 섹션 제목에 전체 문제건수 배지 추가(펼치지 않아도 확인 가능), ② 요약카드 2종
+  (🧾 증빙 부적격·기한초과 N건 / ⛽ 과소주유 N건) 상시 표시, ③ 검색어가 없으면 기본적으로
+  "문제건만" 표시하도록 변경(이름을 몰라도 즉시 확인), "전체보기" 버튼으로 전체 이력도 확인
+  가능, ④ 테이블에 "주유적정성" 열 신규 추가(estimateMinFuelCost 기준 과소/적정 배지, 과소 시
+  예상 최소 유류비 툴팁) | 신규: isReceiptProblem(), isFuelUnderpaid(), togglePersonalShowAll()
+  | 변경: renderPersonalUseList()
+
+  [2026-08-17] 제출 확인 팝업(submitConfirmOverlay)의 "개인사용" 배지 옆에, 영수증을 "나중에 첨부"로
+  선택한 건은 "⏳ 증빙 나중에 첨부" 배지를 함께 표시해 최종 제출 전에 인지할 수 있도록 개선 |
+  변경: showSubmitConfirm()
+
   [2026-08-17] 주말·공휴일 개인사용 체크 후 영수증 첨부 3버튼(촬영/앨범/나중에 첨부) 중 아무것도
   선택하지 않아도 운행기록 제출이 그대로 완료되던 버그 수정. 개인사용 건은 반드시 셋 중 하나를
   선택해야 제출 가능하도록 제출 전 검증에 차단 로직 추가. 임시저장 복원 시 "나중에 첨부"를
@@ -1155,11 +1169,13 @@
     </div>
 
     <div class="section-head">
-      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>주말 및 공휴일 개인사용 현황 <span style="font-size:11px;color:var(--muted);font-weight:400;">(가동율 미반영)</span></h2>
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>주말 및 공휴일 개인사용 현황 <span style="font-size:11px;color:var(--muted);font-weight:400;">(가동율 미반영)</span> <span id="personalProblemCountBadge" style="font-size:11px;color:var(--bad);font-weight:700;"></span></h2>
     </div>
     <div class="section-body collapsed" id="personalUseWrap">
+      <div id="personalUseSummaryCards" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
         <input class="search-box" id="personalSearchBox" placeholder="운행자 이름 검색…" oninput="renderPersonalUseList()" style="max-width:280px;">
+        <button type="button" id="personalShowAllBtn" class="btn-ghost" style="font-size:12px;padding:6px 12px;" onclick="togglePersonalShowAll()">전체보기</button>
         <div id="personalUseSummaryBar" style="font-size:12.5px;color:var(--ink);"></div>
       </div>
       <div id="personalUseList"></div>
@@ -3951,29 +3967,96 @@ async function viewReceiptImage(path){
   }
 }
 
+// 개인사용 영수증이 "문제건"인지 판정 — ① 업로드된 영수증의 금액/일자/영수증종류 중 하나라도
+// 부적격으로 판정됐거나, ② 아직 첨부하지 않았는데 본인수정 가능 기한(USER_EDIT_WINDOW_DAYS)이
+// 지난 경우. 기한이 남아있는 "대기중" 상태는 아직 정상 진행 중이므로 문제건으로 집계하지 않는다.
+function isReceiptProblem(t){
+  if(t.receiptPath){
+    return t.receiptOcrMatched===false || t.receiptDateValid===false || t.receiptTypeValid===false;
+  }
+  if(!t.submittedAt) return false;
+  const submitted = new Date(t.submittedAt);
+  if(isNaN(submitted)) return false;
+  const daysLeft = USER_EDIT_WINDOW_DAYS - Math.floor((Date.now()-submitted.getTime())/86400000);
+  return daysLeft < 0;
+}
+
+// 주행거리 대비 주유비가 예상 최소 유류비(estimateMinFuelCost, 오피넷 단가 기준)에 미달하는지 판정.
+// 제출 시점 경고와 동일한 산식이지만, 여기서는 사후(대시보드)에 다시 계산 — 트립에 별도 저장된 값이
+// 없으므로 현재 오피넷 단가를 기준으로 재판정한다(단가가 바뀐 과거 건은 근사치일 수 있음).
+function isFuelUnderpaid(t){
+  const dist = Number(t.distance)||0;
+  if(dist<=0) return false;
+  const minCost = estimateMinFuelCost(dist);
+  return (Number(t.fuel)||0) < minCost;
+}
+
+function togglePersonalShowAll(){
+  window._personalShowAll = !window._personalShowAll;
+  renderPersonalUseList();
+}
+
 function renderPersonalUseList(){
   const q=(document.getElementById('personalSearchBox')?.value||'').trim();
-  if(!q){
-    document.getElementById('personalUseSummaryBar').innerHTML='';
-    document.getElementById('personalUseList').innerHTML=`<div style="text-align:center;padding:24px;color:var(--muted);font-size:13px;">개인사용 전체 현황은 엑셀 내보내기에서 확인 가능.</div>`;
-    return;
+  const all=personalUseTrips();
+
+  // 요약카드: 검색어·전체보기 여부와 무관하게 항상 전체 개인사용 건 기준으로 집계
+  const receiptProblems = all.filter(isReceiptProblem);
+  const fuelProblems = all.filter(isFuelUnderpaid);
+  const totalProblems = new Set([...receiptProblems, ...fuelProblems]).size;
+  const cardStyle='flex:1 1 160px;min-width:150px;border-radius:12px;padding:10px 14px;';
+  document.getElementById('personalUseSummaryCards').innerHTML = `
+    <div style="${cardStyle}background:${receiptProblems.length?'var(--bad-soft)':'var(--paper)'};">
+      <div style="font-size:11px;color:${receiptProblems.length?'var(--bad)':'var(--muted)'};font-weight:700;margin-bottom:2px;">🧾 증빙 부적격·기한초과</div>
+      <div style="font-size:18px;font-weight:700;color:${receiptProblems.length?'var(--bad)':'var(--ink)'};">${receiptProblems.length}건</div>
+    </div>
+    <div style="${cardStyle}background:${fuelProblems.length?'var(--bad-soft)':'var(--paper)'};">
+      <div style="font-size:11px;color:${fuelProblems.length?'var(--bad)':'var(--muted)'};font-weight:700;margin-bottom:2px;">⛽ 과소주유(적정액 미달)</div>
+      <div style="font-size:18px;font-weight:700;color:${fuelProblems.length?'var(--bad)':'var(--ink)'};">${fuelProblems.length}건</div>
+    </div>`;
+  const titleBadge = document.getElementById('personalProblemCountBadge');
+  if(titleBadge) titleBadge.textContent = totalProblems ? `⚠ 문제건 ${totalProblems}건` : '';
+
+  const showAll = !!window._personalShowAll;
+  const showAllBtn = document.getElementById('personalShowAllBtn');
+  if(showAllBtn){
+    showAllBtn.textContent = showAll ? '문제건만 보기' : '전체보기';
+    showAllBtn.style.background = showAll ? 'var(--navy)' : '';
+    showAllBtn.style.color = showAll ? '#fff' : '';
   }
-  let list=personalUseTrips().filter(t=>(t.user||'').includes(q));
+
+  let list;
+  if(q){
+    list = all.filter(t=>(t.user||'').includes(q));
+  } else if(showAll){
+    list = all;
+  } else {
+    // 검색어 없고 "전체보기"도 아니면, 이름을 몰라도 바로 확인할 수 있도록 문제건만 기본 표시
+    list = all.filter(t=>isReceiptProblem(t)||isFuelUnderpaid(t));
+  }
+
   const totalDist=list.reduce((s,t)=>s+(Number(t.distance)||0),0);
   const totalFuel=list.reduce((s,t)=>s+(Number(t.fuel)||0),0);
-  const rows=list.map(t=>`<tr>
+  const rows=list.map(t=>{
+    const fuelBad = isFuelUnderpaid(t);
+    const fuelBadge = fuelBad
+      ? `<span style="background:var(--bad-soft);color:var(--bad);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;" title="예상 최소 유류비 ${estimateMinFuelCost(t.distance).toLocaleString()}원">⚠️ 과소</span>`
+      : `<span style="background:var(--good-soft);color:var(--good);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;">✅ 적정</span>`;
+    return `<tr>
     <td class="mono">${t.date||t.isoDate||''}</td>
     <td class="mono"><b>${t.plate}</b></td>
     <td>${escapeHtml(t.branch||'')}</td>
     <td>${escapeHtml(t.user||'')}</td>
     <td class="mono">${(Number(t.distance)||0).toLocaleString()}km</td>
     <td class="mono">${(Number(t.fuel)||0).toLocaleString()}원</td>
+    <td>${fuelBadge}</td>
     <td>${escapeHtml(t.dest||'')}</td>
     <td style="color:var(--muted);">${escapeHtml(t.submitter||'')}</td>
     <td>${receiptStatusBadgeHtml(t)}</td>
-  </tr>`).join('');
-  document.getElementById('personalUseSummaryBar').innerHTML=list.length?`총 <b>${list.length}건</b> · 주행거리 <b>${totalDist.toLocaleString()}km</b> · 총주유비 <b>${totalFuel.toLocaleString()}원</b>`:'';
-  document.getElementById('personalUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>주행거리</th><th>주유비</th><th>행선지</th><th>제출자</th><th>증빙상태</th></tr></thead><tbody>${rows||`<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">검색 결과가 없습니다</td></tr>`}</tbody></table></div>`;
+  </tr>`;}).join('');
+  const modeNote = q ? `'${escapeHtml(q)}' 검색 결과` : (showAll ? '전체' : '문제건만 표시 중 — 이름 검색 또는 "전체보기"로 전체 이력 확인 가능');
+  document.getElementById('personalUseSummaryBar').innerHTML=list.length?`${modeNote} · 총 <b>${list.length}건</b> · 주행거리 <b>${totalDist.toLocaleString()}km</b> · 총주유비 <b>${totalFuel.toLocaleString()}원</b>`:modeNote;
+  document.getElementById('personalUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>주행거리</th><th>주유비</th><th>주유적정성</th><th>행선지</th><th>제출자</th><th>증빙상태</th></tr></thead><tbody>${rows||`<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted);">${showAll||q?'검색 결과가 없습니다':'현재 문제건이 없습니다 ✓'}</td></tr>`}</tbody></table></div>`;
 }
 
 // 전체 차량의 운행기록 중 출퇴근사용(isCommute, 단신부임자 급여공제) 건만 모아서 반환
@@ -7450,7 +7533,7 @@ function showSubmitConfirm(submitter, plate, rows){
         <div><span style="color:var(--muted);">행선지</span> <b style="color:var(--ink);">${escapeHtml(r.dest||'-')}</b></div>
         ${r.fuel?`<div><span style="color:var(--muted);">주유비</span> <b>${Number(r.fuel).toLocaleString()}원</b></div>`:''}
       </div>
-      ${r.isPersonal?'<div style="margin-top:4px;"><span style="background:#EFF6FF;color:#1D4ED8;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">개인사용</span></div>':''}
+      ${r.isPersonal?`<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;"><span style="background:#EFF6FF;color:#1D4ED8;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">개인사용</span>${r.receiptDeferred?'<span style="background:#FEF3C7;color:#B45309;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">⏳ 증빙 나중에 첨부</span>':''}</div>`:''}
       ${r.isDaeCha?`<div style="margin-top:4px;"><span style="background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">${r.isDaeChaPickup?'대차인수':''}${r.isDaeChaPickup&&r.isDaeChaReturn?' / ':''}${r.isDaeChaReturn?'대차반납':''} ${escapeHtml(r.daeChaPate)}</span></div>`:''}
       ${r.isCommute?`<div style="margin-top:4px;"><span style="background:#F5F3FF;color:#7C3AED;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">${r.commuteDir||'출퇴근'}사용 ${dist.toLocaleString()}km</span></div>`:''}
     </div>`;
