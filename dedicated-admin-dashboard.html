@@ -174,6 +174,7 @@
     font-family:'Outfit',sans-serif; font-size:19px; font-weight:500; color:var(--ded-beige); white-space:nowrap;
   }
   .ded-card .model-line{font-size:17.5px; color:var(--ded-muted-2); margin-top:7px;}
+  .ded-card .contract-period{font-family:'Outfit',sans-serif; font-size:14px; color:var(--ded-muted); margin-top:5px; white-space:nowrap;}
 
   /* 세부정보(주행거리/주유비/대여료 등) 2x2 그리드 */
   .ded-card .card-stats{
@@ -183,6 +184,7 @@
   .ded-card .stat-cell{min-width:0;}
   .ded-card .stat-cell .l{font-size:21px; color:var(--ded-muted); margin-bottom:8px; line-height:1.3;}
   .ded-card .stat-cell .v{font-family:'Outfit',sans-serif; font-size:24px; color:var(--ded-beige); font-weight:500; line-height:1.2; text-align:right;}
+  .ded-card .stat-cell .v-sub{font-size:14px; color:var(--ded-muted); font-weight:400;}
 
   .ded-card .qr-btn{
     margin-top:26px; width:100%; padding:13px; background:transparent;
@@ -494,9 +496,9 @@
 // token: QR/기사님 입력 URL에서 차량번호 대신 사용하는 임의 12자리 hex (차량번호 노출 방지)
 // contractStartDate: 계약정보 관리 모달에서 실제 값으로 갱신 가능 (Firebase dedicated-fleet-data/contracts 에 저장)
 const VEHICLES = [
-  {key:'hoegjang', org:'한국표준협회', role:'회장(수행기사)', driver:'이왕희', plate:'177호1673', model:'G90', modelFull:'G90 (G)3.5T 20"다이아몬드', monthlyFee:2198000, token:'48ac240c17b5', contractStartDate:'2024-11-21', chairman:true},
-  {key:'jeonmu1', org:'경영품질원', role:'전무이사', driver:'이경근', plate:'222호7779', model:'G80', modelFull:'G80 (G)2.5T 18"/SDS1 4WD AT', monthlyFee:1350000, token:'98aa695b10cc', contractStartDate:'2024-08-28', chairman:false},
-  {key:'jeonmu2', org:'산업표준원', role:'전무이사', driver:'이동석', plate:'222호7780', model:'G80', modelFull:'G80 (G)2.5T 18"/SDS1 4WD AT', monthlyFee:1350000, token:'e7ccd86d4078', contractStartDate:'2024-12-30', chairman:false}
+  {key:'hoegjang', org:'한국표준협회', role:'회장(수행기사)', driver:'이왕희', plate:'177호1673', model:'G90', modelFull:'G90 (G)3.5T 20"다이아몬드', monthlyFee:2198000, token:'48ac240c17b5', contractStartDate:'2024-11-21', contractEndDate:'2027-11-21', chairman:true},
+  {key:'jeonmu1', org:'경영품질원', role:'전무이사', driver:'이경근', plate:'222호7779', model:'G80', modelFull:'G80 (G)2.5T 18"/SDS1 4WD AT', monthlyFee:1350000, token:'98aa695b10cc', contractStartDate:'2024-08-28', contractEndDate:'2027-08-28', chairman:false},
+  {key:'jeonmu2', org:'산업표준원', role:'전무이사', driver:'이동석', plate:'222호7780', model:'G80', modelFull:'G80 (G)2.5T 18"/SDS1 4WD AT', monthlyFee:1350000, token:'e7ccd86d4078', contractStartDate:'2024-12-30', contractEndDate:'2027-12-30', chairman:false}
 ];
 
 // Firebase에서 불러온 실제 운행기록 (평탄화된 배열, 화면표시용 필드로 매핑됨)
@@ -682,10 +684,30 @@ function monthsElapsed(startDateStr, endDateStr){
   if(end.getDate() >= start.getDate()) months += 1; // 해당 월의 계약일이 지났으면 그 달도 포함
   return Math.max(0, months);
 }
+// contractEndDate가 미래 날짜(계약은 등록됐지만 아직 반납 전)이면 오늘까지만 경과분으로 계산하고,
+// 이미 지난 날짜(실제 반납 완료)이면 그 날짜까지 계산한다. monthsElapsed()는 endDateStr이 있으면
+// 무조건 "반납 완료"로 간주하므로, 미래 계약종료일을 그대로 넘기면 아직 쓰지도 않은 향후 대여료까지
+// 누계에 포함되는 문제가 있어 이 헬퍼를 거쳐서 넘긴다.
+function effectiveEnd(endDateStr){
+  if(!endDateStr) return null;
+  const end = new Date(endDateStr);
+  if(isNaN(end.getTime())) return null;
+  return end <= new Date() ? endDateStr : null;
+}
 function totalRentalFor(v){
-  const current = monthsElapsed(v.contractStartDate, v.contractEndDate) * (v.monthlyFee||0);
-  const past = (v.plateHistory||[]).reduce((s,h)=>s + monthsElapsed(h.contractStartDate, h.contractEndDate) * (h.monthlyFee||0), 0);
+  const current = monthsElapsed(v.contractStartDate, effectiveEnd(v.contractEndDate)) * (v.monthlyFee||0);
+  const past = (v.plateHistory||[]).reduce((s,h)=>s + monthsElapsed(h.contractStartDate, effectiveEnd(h.contractEndDate)) * (h.monthlyFee||0), 0);
   return current + past;
+}
+// 현재 계약(반납 전이면 오늘 기준)의 사용기간(개월수) — 대여료 누계 옆 (MM개월) 표기용
+function currentUsageMonths(v){
+  return monthsElapsed(v.contractStartDate, effectiveEnd(v.contractEndDate));
+}
+// 'YYYY-MM-DD' → 'YY-MM-DD' (계약기간 표시용)
+function shortDate(dateStr){
+  if(!dateStr) return '';
+  const m = /^\d{2}(\d{2})-(\d{2})-(\d{2})$/.exec(dateStr);
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : dateStr;
 }
 
 // Firebase에서 세 차량의 trips를 모두 읽어와 대시보드 표시용 평탄 배열(TRIPS)로 변환합니다.
@@ -891,6 +913,9 @@ function renderCards(){
     const vFuel = vTrips.reduce((s,t)=>s+(t.fuel||0),0);
     const m = monthlyStatsFor(v.key);
     const rentalTotal = v.contractStartDate ? totalRentalFor(v).toLocaleString()+'원' : '미입력';
+    const usageMonths = v.contractStartDate ? currentUsageMonths(v) : 0;
+    const rentalTotalWithMonths = v.contractStartDate ? `${rentalTotal} <span class="v-sub">(${usageMonths}개월)</span>` : rentalTotal;
+    const contractPeriod = (v.contractStartDate && v.contractEndDate) ? `${shortDate(v.contractStartDate)} ~ ${shortDate(v.contractEndDate)}` : '';
     return `
     <div class="ded-card ${currentFilter===v.key?'active':''}" onclick="setFilter('${v.key}')" title="클릭하여 이 차량의 운행기록만 보기">
       <div class="card-top">
@@ -901,13 +926,14 @@ function renderCards(){
         <div class="card-plate">
           <div class="plate-badge">${v.plate}</div>
           <div class="model-line">${v.modelFull || v.model}</div>
+          ${contractPeriod ? `<div class="contract-period">${contractPeriod}</div>` : ''}
         </div>
       </div>
       <div class="card-stats">
         <div class="stat-cell"><div class="l">이번달 주행거리</div><div class="v">${m.km.toLocaleString()}km</div></div>
         <div class="stat-cell"><div class="l">주유비 누계</div><div class="v">${vFuel.toLocaleString()}원</div></div>
         <div class="stat-cell"><div class="l">월 대여료</div><div class="v">${(v.monthlyFee||0).toLocaleString()}원</div></div>
-        <div class="stat-cell"><div class="l">대여료 누계</div><div class="v">${rentalTotal}</div></div>
+        <div class="stat-cell"><div class="l">대여료 누계</div><div class="v">${rentalTotalWithMonths}</div></div>
       </div>
       <button class="qr-btn" onclick="event.stopPropagation(); openQrModal('${v.key}')">📱 QR / 링크 보기</button>
     </div>
