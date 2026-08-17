@@ -8114,14 +8114,14 @@ async function doSubmit(submitter, plate, rows){
           }
         }
         if(!receiptPath){
-          receiptUploadFailures.push({isoDate, dateDisplay});
+          receiptUploadFailures.push({isoDate, dateDisplay, errMsg: lastErr?.message||''});
         }
       } else {
         // "나중에 첨부"를 선택하지 않았는데도 실제 File 참조가 남아있지 않은 경우(모바일에서
         // 카메라 앱 전환 중 저사양 기기가 페이지를 새로고침해 메모리가 초기화된 경우 등) —
         // 제출 전 검증(submitDirectInput)에서 대부분 걸러지지만, 만일을 대비해 여기서도
         // 동일하게 첨부 실패로 간주해 사용자에게 알린다(기존엔 조용히 receiptPath=null로만 저장됨).
-        receiptUploadFailures.push({isoDate, dateDisplay});
+        receiptUploadFailures.push({isoDate, dateDisplay, errMsg:'첨부한 사진 데이터가 유실됨(예: 카메라 앱 전환 중 새로고침)'});
       }
     }
 
@@ -8233,9 +8233,9 @@ async function doSubmit(submitter, plate, rows){
   // 사용자가 반드시 알 수 있도록 명확히 안내한다(기존엔 콘솔 로그만 남고 조용히 넘어가
   // "분명히 올렸는데 왜 대기중인지" 알 수 없었음).
   if(receiptUploadFailures.length){
-    const list = receiptUploadFailures.map(f=>`· ${f.dateDisplay||f.isoDate}`).join('\n');
+    const list = receiptUploadFailures.map(f=>`· ${f.dateDisplay||f.isoDate}${f.errMsg?` (${f.errMsg})`:''}`).join('\n');
     await appAlert(
-      `아래 운행기록의 영수증 업로드에 실패했습니다(통신 상태 영향일 수 있습니다). 운행기록 자체는 정상 제출되었으나 영수증은 저장되지 않아 증빙상태가 "대기중"으로 표시됩니다.\n\n${list}\n\n"내 제출기록 수정" 화면에서 해당 기록을 찾아 영수증을 다시 첨부해 주세요.`,
+      `아래 운행기록의 영수증 업로드에 실패했습니다. 운행기록 자체는 정상 제출되었으나 영수증은 저장되지 않아 증빙상태가 "대기중"으로 표시됩니다.\n\n${list}\n\n"내 제출기록 수정" 화면에서 해당 기록을 찾아 영수증을 다시 첨부해 주세요. 같은 문제가 반복되면 위 괄호 안 내용과 함께 관리자에게 문의해 주세요.`,
       {title:'⚠️ 영수증 업로드 실패', danger:true}
     );
   }
