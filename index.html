@@ -35,6 +35,17 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-17] 개인사용/차량 모니터링 3건 보완. ① 과소주유 판정 기준을 완화 — 예상 최소 유류비보다
+  FUEL_UNDERPAID_TOLERANCE_WON(3,000원) 이내로 적은 경우는 오차범위로 보고 "적정"으로 인정
+  (기존엔 1원이라도 부족하면 과소로 판정해 너무 타이트했음). ② 개인사용 문제건 모니터링(요약카드·
+  기본목록)을 PERSONAL_MONITORING_SINCE(기능 도입 시점, 2026-08-17 20:31 KST) 이후 제출건만
+  대상으로 제한 — 도입 이전 과거 기록까지 소급 판정하지 않도록 함(검색·전체보기로는 과거 기록도
+  계속 조회 가능). ③ 차량별 "미운행 N일째" 모니터링 신규 추가 — VEHICLE_IDLE_ALERT_DAYS(10일)
+  이상 운행기록이 확인되지 않는 차량을 차량카드 배지 및 "공용차량 현황" 제목 배지(⚠ 미운행 N대)로
+  표시(운행기록이 아예 없는 차량도 동일하게 포함) | 신규: isMonitoredTrip() | 변경:
+  isFuelUnderpaid()(허용오차 반영), renderPersonalUseList()(모니터링 대상 필터링),
+  vehicleStatsOf()(idleDays 신규 반환), vcardHtml()(미운행 배지), renderVehicles()(제목 배지 집계)
+
   [2026-08-17] 관리자 대시보드에 개인사용 증빙/주유 모니터링 기능 신규 추가. 기존에는 "주말 및
   공휴일 개인사용 현황" 섹션이 운행자 이름을 검색해야만 내용이 표시되어(검색 전엔 "엑셀에서
   확인" 안내만 노출), 부적격 증빙이나 과소주유 건을 관리자가 이름을 모르면 찾을 방법이 없던
@@ -1193,7 +1204,7 @@
     </div>
 
     <div class="section-head" style="margin-bottom:10px;">
-      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>공용차량 현황 (<span id="vehicleCount">0</span>대)</h2>
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>공용차량 현황 (<span id="vehicleCount">0</span>대) <span id="vehicleIdleCountBadge" style="font-size:11px;color:var(--bad);font-weight:700;"></span></h2>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px;">
       <div class="view-toggle" id="viewToggle" style="flex-shrink:0;">
@@ -1612,6 +1623,22 @@ firebase.initializeApp(firebaseConfig);
 const GOOGLE_VISION_API_KEY   = "AIzaSyD2yFArdilNg76gWJcZAwbvxKPXoUJZ2t8";
 const FIREBASE_STORAGE_BUCKET = "ksa-vehicle-log.firebasestorage.app"; // 콘솔에서 실제 버킷명 확인 후 교체
 const RECEIPT_DATE_TOLERANCE_DAYS = 10; // 영수증 일자와 운행일 허용 오차(±일)
+
+// ============================================================
+// ★ 개인사용 증빙/주유 모니터링 (관리자 대시보드) 기준값 ★
+// FUEL_UNDERPAID_TOLERANCE_WON : 과소주유 판정 시 허용 오차. 예상 최소 유류비(estimateMinFuelCost)
+//                                보다 이 금액 이내로 적게 낸 경우는 오차 범위로 보고 "적정"으로 인정.
+//                                (단가/연비 추정치의 오차 흡수 목적 — 너무 타이트하게 걸면 정상
+//                                제출건까지 과소로 오탐될 수 있음)
+// PERSONAL_MONITORING_SINCE    : 이 시각(ISO) 이후 제출된(submittedAt) 개인사용 건만 모니터링
+//                                대상으로 집계. 기능 도입 이전 과거 기록까지 소급 적용하면
+//                                (당시엔 없던 기준으로) 오탐이 쌓이므로, 기능 배포 시점 이후
+//                                신규 제출 건부터만 문제건 판정 대상에 포함한다.
+const FUEL_UNDERPAID_TOLERANCE_WON = 3000;
+const PERSONAL_MONITORING_SINCE = '2026-08-17T20:31:33+09:00';
+// VEHICLE_IDLE_ALERT_DAYS : 이 일수 이상 운행기록(개인사용·출퇴근사용 포함 전체)이 없는 차량은
+//                          차량카드/차량목록 제목에 "미운행" 경고로 표시한다.
+const VEHICLE_IDLE_ALERT_DAYS = 10;
 
 let _authReadyResolve;
 const authReadyPromise = new Promise(res=>{ _authReadyResolve = res; });
@@ -3787,7 +3814,18 @@ function vehicleStatsOf(plate, businessOnly){
   const lastTripSorted=sortedByDate.length?sortedByDate[sortedByDate.length-1]:null;
   const lastDate=lastTripSorted?(lastTripSorted.isoDate?formatTripDateDisplay(lastTripSorted.isoDate,lastTripSorted.dateTo):(lastTripSorted.date||'-')):'-';
   const util=calcUtilization(trips);
-  return{v,trips,totalDist,manualDist,totalFuel,issues,lastDate,util};
+  // 최근 운행일로부터 경과일수 — 차량카드/차량목록 "미운행 N일째" 경고 표시에 사용.
+  // 운행기록 자체가 없거나(lastTripSorted 없음) 날짜를 파싱할 수 없는 예외 데이터는 null로 두고,
+  // 호출부에서 null도 "최근 10일 내 확인된 운행기록 없음"으로 취급한다.
+  let idleDays=null;
+  if(lastTripSorted){
+    const eff=lastTripSorted.dateTo||lastTripSorted.isoDate;
+    if(eff){
+      const d=new Date(eff+'T00:00:00');
+      if(!isNaN(d)) idleDays=Math.floor((Date.now()-d.getTime())/86400000);
+    }
+  }
+  return{v,trips,totalDist,manualDist,totalFuel,issues,lastDate,util,idleDays};
 }
 
 // "YYYY-MM-DD" → "YY-MM-DD" (지역구분별 가동현황 표 전용 축약 표기)
@@ -3982,13 +4020,25 @@ function isReceiptProblem(t){
 }
 
 // 주행거리 대비 주유비가 예상 최소 유류비(estimateMinFuelCost, 오피넷 단가 기준)에 미달하는지 판정.
+// FUEL_UNDERPAID_TOLERANCE_WON 이내 차이는 단가/연비 추정 오차 범위로 보고 "적정"으로 인정한다
+// (너무 타이트하면 정상 제출건까지 과소로 오탐되므로 허용범위를 둠).
 // 제출 시점 경고와 동일한 산식이지만, 여기서는 사후(대시보드)에 다시 계산 — 트립에 별도 저장된 값이
 // 없으므로 현재 오피넷 단가를 기준으로 재판정한다(단가가 바뀐 과거 건은 근사치일 수 있음).
 function isFuelUnderpaid(t){
   const dist = Number(t.distance)||0;
   if(dist<=0) return false;
   const minCost = estimateMinFuelCost(dist);
-  return (Number(t.fuel)||0) < minCost;
+  return (Number(t.fuel)||0) < (minCost - FUEL_UNDERPAID_TOLERANCE_WON);
+}
+
+// 개인사용 모니터링(문제건 판정) 대상 여부 — 기능 도입 시점(PERSONAL_MONITORING_SINCE) 이후에
+// 제출된 건만 대상으로 한다. 그 이전 과거 기록은 검색/전체보기로는 계속 조회 가능하지만,
+// 요약카드·문제건 집계에는 포함하지 않는다.
+function isMonitoredTrip(t){
+  if(!t.submittedAt) return false;
+  const submitted = new Date(t.submittedAt);
+  if(isNaN(submitted)) return false;
+  return submitted >= new Date(PERSONAL_MONITORING_SINCE);
 }
 
 function togglePersonalShowAll(){
@@ -3999,10 +4049,11 @@ function togglePersonalShowAll(){
 function renderPersonalUseList(){
   const q=(document.getElementById('personalSearchBox')?.value||'').trim();
   const all=personalUseTrips();
+  // 문제건 판정(요약카드·기본목록)은 모니터링 도입 시점 이후 제출건만 대상으로 함
+  const monitored = all.filter(isMonitoredTrip);
 
-  // 요약카드: 검색어·전체보기 여부와 무관하게 항상 전체 개인사용 건 기준으로 집계
-  const receiptProblems = all.filter(isReceiptProblem);
-  const fuelProblems = all.filter(isFuelUnderpaid);
+  const receiptProblems = monitored.filter(isReceiptProblem);
+  const fuelProblems = monitored.filter(isFuelUnderpaid);
   const totalProblems = new Set([...receiptProblems, ...fuelProblems]).size;
   const cardStyle='flex:1 1 160px;min-width:150px;border-radius:12px;padding:10px 14px;';
   document.getElementById('personalUseSummaryCards').innerHTML = `
@@ -4011,7 +4062,7 @@ function renderPersonalUseList(){
       <div style="font-size:18px;font-weight:700;color:${receiptProblems.length?'var(--bad)':'var(--ink)'};">${receiptProblems.length}건</div>
     </div>
     <div style="${cardStyle}background:${fuelProblems.length?'var(--bad-soft)':'var(--paper)'};">
-      <div style="font-size:11px;color:${fuelProblems.length?'var(--bad)':'var(--muted)'};font-weight:700;margin-bottom:2px;">⛽ 과소주유(적정액 미달)</div>
+      <div style="font-size:11px;color:${fuelProblems.length?'var(--bad)':'var(--muted)'};font-weight:700;margin-bottom:2px;">⛽ 과소주유(적정액 미달, ±${FUEL_UNDERPAID_TOLERANCE_WON.toLocaleString()}원 허용)</div>
       <div style="font-size:18px;font-weight:700;color:${fuelProblems.length?'var(--bad)':'var(--ink)'};">${fuelProblems.length}건</div>
     </div>`;
   const titleBadge = document.getElementById('personalProblemCountBadge');
@@ -4032,7 +4083,8 @@ function renderPersonalUseList(){
     list = all;
   } else {
     // 검색어 없고 "전체보기"도 아니면, 이름을 몰라도 바로 확인할 수 있도록 문제건만 기본 표시
-    list = all.filter(t=>isReceiptProblem(t)||isFuelUnderpaid(t));
+    // (모니터링 도입 이전 과거 기록은 소급 판정하지 않으므로 이 기본목록에도 나타나지 않음)
+    list = monitored.filter(t=>isReceiptProblem(t)||isFuelUnderpaid(t));
   }
 
   const totalDist=list.reduce((s,t)=>s+(Number(t.distance)||0),0);
@@ -4040,7 +4092,7 @@ function renderPersonalUseList(){
   const rows=list.map(t=>{
     const fuelBad = isFuelUnderpaid(t);
     const fuelBadge = fuelBad
-      ? `<span style="background:var(--bad-soft);color:var(--bad);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;" title="예상 최소 유류비 ${estimateMinFuelCost(t.distance).toLocaleString()}원">⚠️ 과소</span>`
+      ? `<span style="background:var(--bad-soft);color:var(--bad);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;" title="예상 최소 유류비 ${estimateMinFuelCost(t.distance).toLocaleString()}원(허용범위 ±${FUEL_UNDERPAID_TOLERANCE_WON.toLocaleString()}원 반영)">⚠️ 과소</span>`
       : `<span style="background:var(--good-soft);color:var(--good);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;">✅ 적정</span>`;
     return `<tr>
     <td class="mono">${t.date||t.isoDate||''}</td>
@@ -4054,7 +4106,7 @@ function renderPersonalUseList(){
     <td style="color:var(--muted);">${escapeHtml(t.submitter||'')}</td>
     <td>${receiptStatusBadgeHtml(t)}</td>
   </tr>`;}).join('');
-  const modeNote = q ? `'${escapeHtml(q)}' 검색 결과` : (showAll ? '전체' : '문제건만 표시 중 — 이름 검색 또는 "전체보기"로 전체 이력 확인 가능');
+  const modeNote = q ? `'${escapeHtml(q)}' 검색 결과` : (showAll ? '전체' : `문제건만 표시 중(모니터링 도입일 이후 제출건 기준) — 이름 검색 또는 "전체보기"로 전체 이력 확인 가능`);
   document.getElementById('personalUseSummaryBar').innerHTML=list.length?`${modeNote} · 총 <b>${list.length}건</b> · 주행거리 <b>${totalDist.toLocaleString()}km</b> · 총주유비 <b>${totalFuel.toLocaleString()}원</b>`:modeNote;
   document.getElementById('personalUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>주행거리</th><th>주유비</th><th>주유적정성</th><th>행선지</th><th>제출자</th><th>증빙상태</th></tr></thead><tbody>${rows||`<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted);">${showAll||q?'검색 결과가 없습니다':'현재 문제건이 없습니다 ✓'}</td></tr>`}</tbody></table></div>`;
 }
@@ -4117,17 +4169,27 @@ function renderCommuteUseList(){
 }
 
 function vcardHtml(p){
-  const{v,trips,totalDist,totalFuel,issues,lastDate,util}=vehicleStatsOf(p,true);
+  const{v,trips,totalDist,totalFuel,issues,lastDate,util,idleDays}=vehicleStatsOf(p,true);
   const inactive=v.active===false;
   const lastTrip=trips.length?trips.slice().sort(tripChronoCompare)[trips.length-1]:null;
   const lastDriverName=lastTrip?(lastTrip.user||'').trim():'';
-  let badge;
-  if(inactive) badge=`<span class="badge" style="background:#E5E7EB;color:#9CA3AF;">운용중지</span>`;
-  else if(issues>0) badge=`<span class="badge badge-bad">점검필요 ${issues}건</span>`;
-  else{
-    const tag=topDriversTagHtml(p);
-    badge=tag||`<span class="badge" style="background:#EFEFEA;color:var(--muted);">운행기록 없음</span>`;
+  // 최근 VEHICLE_IDLE_ALERT_DAYS일 이내 운행기록이 확인되지 않는 차량(운행기록이 아예 없거나,
+  // 날짜 파싱 불가한 예외 데이터 포함)은 미운행 경고로 표시한다.
+  const isIdle = !inactive && (idleDays===null || idleDays>=VEHICLE_IDLE_ALERT_DAYS);
+  const badgeParts=[];
+  if(inactive){
+    badgeParts.push(`<span class="badge" style="background:#E5E7EB;color:#9CA3AF;">운용중지</span>`);
+  }else{
+    if(issues>0) badgeParts.push(`<span class="badge badge-bad">점검필요 ${issues}건</span>`);
+    if(isIdle){
+      const idleLabel = idleDays===null ? '운행기록 없음' : `⚠ 미운행 ${idleDays}일째`;
+      badgeParts.push(`<span class="badge" style="background:var(--bad-soft);color:var(--bad);">${idleLabel}</span>`);
+    }else{
+      const tag=topDriversTagHtml(p);
+      if(tag) badgeParts.push(tag);
+    }
   }
+  const badge=badgeParts.join(' ');
   return `<div class="vcard" data-plate="${p.replace(/"/g,'&quot;')}" style="${inactive?'opacity:.55;border-style:dashed;':''}" >
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px;">
       <div onclick="openVehicle('${p}')" style="cursor:pointer;flex:1;">
@@ -4167,6 +4229,14 @@ function renderVehicles(){
   const activeCount=Object.values(data.vehicles).filter(v=>v.active!==false).length;
   const inactiveCount=Object.values(data.vehicles).filter(v=>v.active===false).length;
   document.getElementById('vehicleCount').textContent=activeCount+(inactiveCount>0?` (운용중지 ${inactiveCount}대 별도)`:'');
+  // 미운행(VEHICLE_IDLE_ALERT_DAYS일 이상 운행기록 미확인) 차량 수 — 검색/필터와 무관하게 활성 차량
+  // 전체를 기준으로 집계해, 검색을 하지 않아도 몇 대가 미운행 상태인지 제목에서 바로 확인 가능하게 함.
+  const idleCount=Object.keys(data.vehicles).filter(p=>data.vehicles[p].active!==false).filter(p=>{
+    const {idleDays}=vehicleStatsOf(p,true);
+    return idleDays===null || idleDays>=VEHICLE_IDLE_ALERT_DAYS;
+  }).length;
+  const idleBadgeEl=document.getElementById('vehicleIdleCountBadge');
+  if(idleBadgeEl) idleBadgeEl.textContent = idleCount ? `⚠ 미운행 ${idleCount}대` : '';
   if(plates.length===0){area.innerHTML=`<div class="empty-state">등록된 차량이 없습니다.</div>`;return;}
   if(viewMode==='flat'){area.innerHTML=`<div class="vehicle-grid">${plates.sort().map(vcardHtml).join('')}</div>`;return;}
   const byBranch={};
