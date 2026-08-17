@@ -349,6 +349,25 @@
   .ded-line-field input::placeholder{color:var(--ded-muted-2); font-size:15px;}
   .ded-unit{font-size:14px; color:var(--ded-muted); flex:0 0 auto; white-space:nowrap;}
 
+  /* ── 핵심 제출 항목 강조(출발지·행선지·도착지·종료거리): 테두리+배경 하이라이트, 크기는 기존 유지 ──
+     ID 셀렉터로 odoSplit(compact 포함)의 기존 .ded-line-field 규칙보다 우선 적용되도록 함 */
+  #startLocationRow.ded-key-field,
+  #routeNoteRow.ded-key-field,
+  #endLocationRow.ded-key-field,
+  #endOdoRow.ded-key-field{
+    border:1.5px solid var(--ded-beige);
+    border-radius:8px;
+    background:rgba(203,178,149,0.10);
+    padding:11px 12px;
+    margin:6px 0;
+  }
+  #startLocationRow.ded-key-field .in-wrap input[type=text],
+  #routeNoteRow.ded-key-field .in-wrap input[type=text],
+  #endLocationRow.ded-key-field .in-wrap input[type=text],
+  #endOdoRow.ded-key-field .in-wrap input[type=text]{
+    border-bottom:none;
+  }
+
   /* ── 시작거리 자동 반영 안내문구 ── */
   .ded-field-note{
     font-size:14px; line-height:1.55; color:var(--ded-muted); padding:0 0 10px;
@@ -643,8 +662,8 @@
   .ded-submit-wrap{padding:24px 22px 40px;}
   .ded-submit{
     width:100%;
-    background:transparent;
-    border:1px solid var(--ded-beige);
+    background:rgba(203,178,149,0.14);
+    border:2px solid var(--ded-beige);
     color:var(--ded-text);
     padding:18px;
     font-family:'Outfit',sans-serif;
@@ -817,19 +836,19 @@
 
     <div class="ded-readonly-summary" id="startPhaseSummary" style="display:none;"></div>
 
-    <div class="ded-line-field" id="startLocationRow">
+    <div class="ded-line-field ded-key-field" id="startLocationRow">
       <label>출발지<span class="req">*</span></label>
       <div class="in-wrap"><input type="text" id="startLocation" style="text-align:center"></div>
     </div>
     <div class="ded-inline-err" id="startLocationErr">출발지를 입력해 주세요.</div>
 
-    <div class="ded-line-field" id="routeNoteRow">
+    <div class="ded-line-field ded-key-field" id="routeNoteRow">
       <label>행선지<span class="req">*</span></label>
       <div class="in-wrap"><input type="text" id="routeNote" placeholder="예시: 지역명, 업체명 등" style="text-align:center"></div>
     </div>
     <div class="ded-inline-err" id="routeNoteErr">행선지를 입력해 주세요.</div>
 
-    <div class="ded-line-field" id="endLocationRow">
+    <div class="ded-line-field ded-key-field" id="endLocationRow">
       <label>도착지<span class="req">*</span></label>
       <div class="in-wrap"><input type="text" id="endLocation" style="text-align:center"></div>
     </div>
@@ -857,7 +876,7 @@
         </div>
       </div>
 
-      <div class="ded-line-field" id="endOdoRow">
+      <div class="ded-line-field ded-key-field" id="endOdoRow">
         <label>종료거리<span class="req">*</span></label>
         <div class="in-wrap">
           <input type="text" id="endOdo" inputmode="numeric" placeholder="0" style="text-align:right" oninput="formatOdoInput('endOdo')">
