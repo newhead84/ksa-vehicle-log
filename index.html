@@ -35,6 +35,25 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-18] 연도별 데이터 분리 구현(2027년부터 적용, 2026년까지 데이터는 그대로 유지·마이그레이션
+  없음). 2026년까지는 기존 fleet-data 노드에 계속 저장, 2027-01-01부터의 신규 운행기록은
+  fleet-data-{연도} 별도 노드에 저장 — 매 로드/저장 시 오가는 데이터가 연도 단위로 리셋되도록.
+  메모리상 trips는 기존처럼 연도구분 없는 통합 배열 유지(하위 함수 무변경), saveData()만 저장
+  시점에 연도별로 분리해서 씀. Node.js 시뮬레이션으로 5개 시나리오 검증 완료.
+  ⚠ 2027년 전 Firebase RTDB 규칙이 fleet-data-{연도} 경로도 허용하는지 확인 필요 |
+  신규: tripYear(), yearNodeKey(), fetchMergedFleetData(), ensureYearLoaded() | 변경: loadData(),
+  saveData(), refreshDataFromStorage(), availableYears(), renderMonthly(), backupData(), restoreData()
+
+  [2026-08-17] 운영 DB 네트워크 부담 검토 후속 조치. ① 관리자 대시보드 자동 새로고침(30초 폴링)
+  제거, "⟳ 새로고침" 버튼(수동)으로만 갱신하도록 변경 — 데이터가 쌓일수록 폴링마다 전체
+  fleet-data를 반복 다운로드하던 부담 제거. ② 사고접수 사진(accident-report.html) 저장 방식을
+  기존 base64(fleet-data 직접 내장)에서 영수증과 동일한 Firebase Storage 업로드 방식으로 전환,
+  fleet-data에는 Storage 경로(path)만 저장 — 신규 접수건부터 적용되며 기존 base64(url) 데이터도
+  그대로 호환 표시. 화면에 실제 노출되는 썸네일만 지연 로딩(hydrateAccidentThumbnails) |
+  신규: fetchAccidentPhotoUrl(), hydrateAccidentThumbnails(), viewAccidentPhotoByPath(),
+  uploadAccidentPhotoToStorage()(accident-report.html) | 변경: accidentCardHtml(),
+  loadUserEditable(), loadData()/enterAdminMode()/enterViewerMode()/exitToRole()(폴링 제거)
+
   [2026-08-17] 개인사용/차량 모니터링 표현·기준 4건 조정. ① "문제건" 표현을 "확인필요"로 순화(섹션
   제목 배지, 전체보기/확인필요 건만 보기 토글 버튼, 목록 상단 안내문구, 빈 목록 안내문구 — 4개소).
   ② 과소주유 허용오차 FUEL_UNDERPAID_TOLERANCE_WON을 3,000원→1,000원으로 축소(요약카드 문구는
@@ -1991,6 +2010,32 @@ async function fetchReceiptImageUrl(path){
   return URL.createObjectURL(blob);
 }
 
+// 사고접수 현장사진(Storage 저장분)을 열람할 때 사용 — 영수증과 동일한 인증 fetch 방식.
+// 사진 자체는 fleet-data(RTDB)에 없고 Storage에만 있으므로, 화면에 실제로 노출될 때만 개별 요청한다.
+// (매 페이지 로드마다 전체 사고 사진을 통째로 내려받지 않기 위한 지연 로딩 캐시)
+const _accidentPhotoUrlCache = {}; // path -> objectURL (or Promise)
+async function fetchAccidentPhotoUrl(path){
+  if(_accidentPhotoUrlCache[path]) return _accidentPhotoUrlCache[path];
+  const token = await getAuthToken();
+  const url = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/${encodeURIComponent(path)}?alt=media`;
+  const promise = fbFetchWithTimeout(url, { headers: token?{'Authorization':`Firebase ${token}`}:{} }, 20000)
+    .then(res=>{ if(!res.ok) throw new Error(`사고사진 조회 실패 (${res.status})`); return res.blob(); })
+    .then(blob=>URL.createObjectURL(blob));
+  _accidentPhotoUrlCache[path] = promise;
+  promise.catch(()=>{ delete _accidentPhotoUrlCache[path]; }); // 실패 시 캐시에서 제거해 재시도 가능하게
+  return promise;
+}
+// 렌더 직후 호출 — container 안의 사고사진 썸네일(data-photo-path 있는 img, 아직 미로드분)만 골라
+// Storage에서 실제 이미지를 받아와 채워 넣는다. 사진이 있어도 화면에 그려지지 않으면 요청 자체가 발생하지 않음.
+function hydrateAccidentThumbnails(container){
+  if(!container) return;
+  container.querySelectorAll('img[data-photo-path]:not([data-hydrated])').forEach(img=>{
+    img.dataset.hydrated = '1';
+    const path = img.dataset.photoPath;
+    fetchAccidentPhotoUrl(path).then(url=>{ img.src = url; }).catch(()=>{ img.alt='사진 로드 실패'; });
+  });
+}
+
 // 오피넷 자동 갱신 휘발유 단가 (기본값은 FUEL_PRICE_PER_L 폴백)
 let currentFuelPricePerL = FUEL_PRICE_PER_L;
 let fuelPriceUpdatedAt = null;
@@ -2328,7 +2373,7 @@ function completeAdminLogin(){
 
   document.getElementById('dateSub').textContent = todayStr() + ' 기준';
   pushAppState('admin');
-  startAdminPolling();
+  adminRefresh();
 }
 
 // 링크(?view=readonly)로 접근한 열람 전용 사용자를 위한 진입 함수.
@@ -2349,7 +2394,7 @@ function enterViewerMode(){
   document.getElementById('dateSub').textContent = todayStr() + ' 기준';
   applyViewerModeUI();
   pushAppState('admin');
-  startAdminPolling();
+  adminRefresh();
 }
 
 // 열람 전용 모드(전체 열람URL·지역별 열람URL 공통)일 때 관리자 툴바 버튼을 정리하고 안내 배지를 표시.
@@ -2559,7 +2604,6 @@ function copyRegionUrl(token){
 }
 
 function exitToRole(){
-  stopAdminPolling();
   viewerMode = false;
   // 관리자 계정으로 로그인돼 있었다면 로그아웃 후 다시 익명 인증으로 복귀
   // (그래야 다음에 일반 사용자가 운행기록을 제출할 때 정상적으로 인증 토큰이 붙음)
@@ -3039,7 +3083,11 @@ function availableYears(){
     (v.trips||[]).forEach(t=>(t.usageDates||[]).forEach(d=>years.add(d.slice(0,4))));
     if(v.manualMonthly) Object.keys(v.manualMonthly).forEach(y=>years.add(String(y)));
   });
-  years.add(String(new Date().getFullYear()));
+  const curYear = new Date().getFullYear();
+  years.add(String(curYear));
+  // 2027년 이후는 아직 메모리에 로드되지 않았어도(다른 해 조회 중) 선택지에는 항상 노출 —
+  // 선택 시 renderMonthly()가 ensureYearLoaded()로 해당 연도 노드를 불러온다.
+  for(let y=LEGACY_DATA_MAX_YEAR+1; y<=curYear; y++) years.add(String(y));
   return Array.from(years).sort();
 }
 function monthCellHtml(rate,hasAnyTrip,beforeService,distance,futureMonth,noData,manual){
@@ -3070,15 +3118,69 @@ function showFirebaseWarning(msg){
 // ============================================================
 // 데이터 로드 / 저장
 // ============================================================
-let adminPollTimer = null;
+// 연도별 데이터 분리(2027~) — 2026년까지의 운행기록은 기존 fleet-data 노드에 그대로 유지하고
+// (과거 데이터 마이그레이션 없음), 2027년 1월 1일부터 발생하는 신규 운행기록은 연도별 별도 노드
+// (fleet-data-2027, fleet-data-2028 …)에 저장한다. 목적: 매 접속·매 저장마다 전체 운행기록을
+// 통째로 주고받는 fleet-data 노드가 해가 갈수록 계속 커지는 것을 막고, 2027년부터는 "당해년도분"만
+// 기본으로 오가도록 해 다운로드량을 연도 단위로 리셋시키기 위함. 차량 메타정보(모델·사업장·계약정보 등)는
+// 연도 개념이 없으므로 계속 fleet-data(메인 노드)에만 저장하고, trips 배열만 연도 기준으로 분리한다.
+const LEGACY_DATA_MAX_YEAR = 2026; // 이 연도까지는 계속 메인 fleet-data 노드에 저장(마이그레이션 없음)
+function yearNodeKey(y){ return `fleet-data-${y}`; }
+// 운행기록 1건의 실제 연도를 판정. isoDate(YYYY-MM-DD)를 우선 사용하고, 없거나 형식이 이상하면
+// date 원본 텍스트로 보정 시도. 그래도 알 수 없으면 레거시 노드(기존과 동일하게 메인 저장)로 취급해
+// 신규 연도 노드가 원인 불명 데이터로 오염되는 것을 방지한다.
+function tripYear(t){
+  const s = (t && (t.isoDate || t.date)) || '';
+  const y = parseInt(String(s).slice(0,4), 10);
+  return (Number.isFinite(y) && y>=2000 && y<=2100) ? y : LEGACY_DATA_MAX_YEAR;
+}
+// 이번 세션에서 메모리(data)에 병합되어 있는 "연도별 노드"(2027년 이후) 목록.
+// loadData()/refreshDataFromStorage() 시점에 채워지고, saveData()가 저장 대상 연도 노드를 판단하는 데 사용된다.
+let _loadedYearNodes = new Set();
+// fleet-data(메인, ~2026 고정) + 필요한 연도별 노드(2027~)를 함께 읽어 하나로 병합한다.
+// extraYears로 명시한 연도(예: 이전에 이미 화면에 불러와 있던 연도)는 항상 함께 재조회하고,
+// 당해년도(오늘 기준)는 LEGACY_DATA_MAX_YEAR를 넘겼다면 지정하지 않아도 항상 포함한다.
+async function fetchMergedFleetData(extraYears){
+  const res = await fbGet(STORAGE_KEY);
+  const merged = (res && typeof res==='object') ? res : {vehicles:{}};
+  if(!merged.vehicles) merged.vehicles = {};
+  const curYear = new Date().getFullYear();
+  const yearsToLoad = new Set((extraYears||[]).filter(y=>y>LEGACY_DATA_MAX_YEAR));
+  if(curYear>LEGACY_DATA_MAX_YEAR) yearsToLoad.add(curYear);
+  _loadedYearNodes = new Set(yearsToLoad);
+  if(yearsToLoad.size){
+    const years = Array.from(yearsToLoad);
+    const results = await Promise.all(years.map(y=>fbGet(yearNodeKey(y)).catch(()=>null)));
+    years.forEach((y,i)=>{
+      const yd = results[i];
+      if(!yd || !yd.vehicles) return;
+      Object.keys(yd.vehicles).forEach(plate=>{
+        const yTrips = yd.vehicles[plate].trips || [];
+        if(!yTrips.length) return;
+        if(!merged.vehicles[plate]) merged.vehicles[plate] = {trips:[]};
+        if(!Array.isArray(merged.vehicles[plate].trips)) merged.vehicles[plate].trips = [];
+        merged.vehicles[plate].trips = merged.vehicles[plate].trips.concat(yTrips);
+      });
+    });
+  }
+  return merged;
+}
+// 화면(월별 가동율 등)에서 2027년 이후의 특정 연도를 아직 메모리에 없는데 조회하려 할 때 호출 —
+// 해당 연도 노드만 추가로 불러와 이미 로드된 다른 연도들과 함께 병합한다.
+async function ensureYearLoaded(year){
+  const y = Number(year);
+  if(!(y>LEGACY_DATA_MAX_YEAR) || _loadedYearNodes.has(y)) return;
+  data = await fetchMergedFleetData([...Array.from(_loadedYearNodes), y]);
+  applyRegionViewerFilter();
+}
 
 async function loadData(){
   if(FIREBASE_URL.includes('YOUR-PROJECT')){
     showFirebaseWarning();
   } else {
     try{
-      const [res] = await Promise.all([ fbGet(STORAGE_KEY), loadRemoteHolidays() ]);
-      if(res && typeof res === 'object') data = res;
+      const [merged] = await Promise.all([ fetchMergedFleetData(), loadRemoteHolidays() ]);
+      data = merged;
       document.getElementById('firebaseWarnBanner')?.remove();
     }catch(e){
       showFirebaseWarning(`Firebase 연결 실패: ${e.message}`);
@@ -3123,23 +3225,27 @@ async function adminRefresh(){
   if(btn){btn.textContent='⟳ 새로고침';btn.disabled=false;}
 }
 
-function startAdminPolling(){
-  stopAdminPolling();
-  adminRefresh(); // 즉시 1회
-  adminPollTimer=setInterval(()=>{
-    if(currentRole==='admin') adminRefresh();
-    else stopAdminPolling();
-  }, 30000); // 30초마다
-}
-
-function stopAdminPolling(){
-  if(adminPollTimer){ clearInterval(adminPollTimer); adminPollTimer=null; }
-}
-
 async function saveData(){
   if(viewerMode){ console.warn('[KSA 차량관리] 열람 전용 모드에서는 저장할 수 없습니다.'); return false; }
   try{
-    await fbSet(STORAGE_KEY, data);
+    // ① 메인 fleet-data 노드: 차량 메타정보 전체 + 2026년까지의 운행기록만 저장(기존과 동일 위치·구조 유지)
+    const legacyVehicles = {};
+    Object.keys(data.vehicles).forEach(plate=>{
+      const v = data.vehicles[plate];
+      legacyVehicles[plate] = {...v, trips:(v.trips||[]).filter(t=>tripYear(t)<=LEGACY_DATA_MAX_YEAR)};
+    });
+    await fbSet(STORAGE_KEY, {...data, vehicles:legacyVehicles});
+    // ② 2027년 이후 연도별 노드: 현재 메모리에 병합돼 있는 연도들만 해당 연도분 운행기록으로 다시 씀
+    //   (해당 연도 운행기록이 전부 삭제된 경우도 빈 배열로 반영되도록 명시적으로 매 저장마다 다시 씀)
+    const yearWrites = Array.from(_loadedYearNodes).map(async y=>{
+      const yearVehicles = {};
+      Object.keys(data.vehicles).forEach(plate=>{
+        const trips = (data.vehicles[plate].trips||[]).filter(t=>tripYear(t)===y);
+        if(trips.length) yearVehicles[plate] = {trips};
+      });
+      await fbSet(yearNodeKey(y), {vehicles:yearVehicles});
+    });
+    await Promise.all(yearWrites);
     document.getElementById('firebaseWarnBanner')?.remove();
     return true;
   }catch(e){
@@ -3153,8 +3259,7 @@ async function saveData(){
 async function refreshDataFromStorage(){
   if(FIREBASE_URL.includes('YOUR-PROJECT')) return;
   try{
-    const res = await fbGet(STORAGE_KEY);
-    if(res && typeof res === 'object') data = res;
+    data = await fetchMergedFleetData(Array.from(_loadedYearNodes));
   }catch(e){}
   FLEET_REGISTRY.forEach(v=>{
     if(!data.vehicles[v.plate]) data.vehicles[v.plate]={model:v.model,branch:v.branch,originalBranch:v.branch,active:true,trips:[],...(v.fee!==undefined?{fee:v.fee}:{}),...(v.serviceStartDate?{serviceStartDate:v.serviceStartDate}:{}),...(v.contractStartDate?{contractStartDate:v.contractStartDate}:{}),...(v.contractEndDate?{contractEndDate:v.contractEndDate}:{})};
@@ -3354,6 +3459,7 @@ function accidentStatusBadge(status){
   return `<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;color:${color};background:${bg};">${escapeHtml(s)}</span>`;
 }
 // 사고 접수 사진 1장을 기존 원본이미지 라이트박스(#imgLightbox)로 확대 열람
+// (구버전 데이터 호환용 — base64 url이 fleet-data에 직접 저장돼 있던 사고 건)
 function viewAccidentPhoto(url, meta){
   const lb=document.getElementById('imgLightbox');
   const lbImg=document.getElementById('lbImg');
@@ -3363,6 +3469,24 @@ function viewAccidentPhoto(url, meta){
   lbImg.style.display='block';
   lbMeta.textContent = meta || '';
   lb.style.display='flex';
+}
+// 신규 사고 사진(Storage 저장분) 원본을 라이트박스로 확대 열람 — 클릭 시점에 실제 원본 이미지를 요청.
+async function viewAccidentPhotoByPath(path, meta){
+  const lb=document.getElementById('imgLightbox');
+  const lbImg=document.getElementById('lbImg');
+  const lbMeta=document.getElementById('lbMeta');
+  if(!lb||!lbImg) return;
+  lbImg.src = '';
+  lbImg.style.display='block';
+  lbMeta.textContent = (meta||'') + ' · 원본 불러오는 중…';
+  lb.style.display='flex';
+  try{
+    const url = await fetchAccidentPhotoUrl(path);
+    lbImg.src = url;
+    lbMeta.textContent = meta || '';
+  }catch(e){
+    lbMeta.textContent = '사진을 불러오지 못했습니다: ' + e.message;
+  }
 }
 // datetime-local 저장값("YYYY-MM-DDTHH:MM")의 'T' 구분자를 화면 표시용으로 공백으로 치환
 function formatAccidentDateTime(s){
@@ -3374,7 +3498,13 @@ function accidentCardHtml(a){
   const photos = a.photos||[];
   const otherCount = (a.otherParties||[]).length;
   const photoThumbs = photos.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
-      ${photos.map((p,i)=>`<img src="${p.url}" alt="${escapeHtml(p.tag||'사고사진')}" title="${escapeHtml(p.tag||'')}" loading="lazy" data-photo-url="${p.url}" data-photo-meta="${escapeHtml((a.ourVehicle?.plate||'미확인')+' · '+(p.tag||'')+' ('+(i+1)+'/'+photos.length+')')}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:pointer;" onclick="viewAccidentPhoto(this.dataset.photoUrl,this.dataset.photoMeta)">`).join('')}
+      ${photos.map((p,i)=>{
+        const meta = escapeHtml((a.ourVehicle?.plate||'미확인')+' · '+(p.tag||'')+' ('+(i+1)+'/'+photos.length+')');
+        const thumbStyle = 'width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:pointer;background:var(--paper);';
+        return p.path
+          ? `<img src="" alt="${escapeHtml(p.tag||'사고사진')}" title="${escapeHtml(p.tag||'')}" data-photo-path="${escapeHtml(p.path)}" data-photo-meta="${meta}" style="${thumbStyle}" onclick="viewAccidentPhotoByPath(this.dataset.photoPath,this.dataset.photoMeta)">`
+          : `<img src="${p.url}" alt="${escapeHtml(p.tag||'사고사진')}" title="${escapeHtml(p.tag||'')}" loading="lazy" data-photo-url="${p.url}" data-photo-meta="${meta}" style="${thumbStyle}" onclick="viewAccidentPhoto(this.dataset.photoUrl,this.dataset.photoMeta)">`;
+      }).join('')}
     </div>` : `<div class="muted" style="font-size:11.5px;margin-top:8px;">첨부된 사진이 없습니다.</div>`;
   return `<div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:#fff;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
@@ -3417,6 +3547,7 @@ function renderAccidentHistory(){
     return;
   }
   wrap.innerHTML = list.map(accidentCardHtml).join('');
+  hydrateAccidentThumbnails(wrap);
 }
 
 // 사고 이력 수정 모달 — 상태/사고일시/장소/사고내용/처리메모를 관리자가 직접 수정.
@@ -3537,7 +3668,8 @@ function renderStats(){
 }
 
 let monthlyYear=null;
-function renderMonthly(year){
+async function renderMonthly(year){
+  if(year && Number(year)>LEGACY_DATA_MAX_YEAR){ await ensureYearLoaded(year); }
   const years=availableYears();
   monthlyYear=year?String(year):(monthlyYear&&years.includes(monthlyYear)?monthlyYear:years[years.length-1]);
   const sel=document.getElementById('monthYearSelect');
@@ -5414,14 +5546,22 @@ async function backupData(){
   try{
     const fleetData = await fbGet(STORAGE_KEY);
     if(!fleetData||!fleetData.vehicles){showAdminToast('백업할 데이터가 없습니다.','bad');return;}
-    const backup = {version:3, exportedAt:new Date().toISOString(), fleetData};
+    // 2027년 이후 연도별 노드도 함께 백업(있는 연도만 포함)
+    const curYear = new Date().getFullYear();
+    const yearKeys=[]; for(let y=LEGACY_DATA_MAX_YEAR+1;y<=curYear;y++) yearKeys.push(y);
+    const yearResults = yearKeys.length ? await Promise.all(yearKeys.map(y=>fbGet(yearNodeKey(y)).catch(()=>null))) : [];
+    const yearData = {};
+    yearKeys.forEach((y,i)=>{ if(yearResults[i] && yearResults[i].vehicles) yearData[y]=yearResults[i]; });
+    const backup = {version:4, exportedAt:new Date().toISOString(), fleetData, yearData};
     const blob = new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href=url; a.download=`차량관리_백업_${new Date().toISOString().slice(0,10)}.json`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(url),1000);
-    showAdminToast(`백업 완료 · 차량 ${Object.keys(fleetData.vehicles).length}대`,'good');
+    const yearTripCount = Object.values(yearData).reduce((s,yd)=>s+Object.values(yd.vehicles||{}).reduce((s2,v)=>s2+(v.trips||[]).length,0),0);
+    const yearNote = Object.keys(yearData).length ? ` · 연도별노드 ${Object.keys(yearData).length}개(${yearTripCount}건)` : '';
+    showAdminToast(`백업 완료 · 차량 ${Object.keys(fleetData.vehicles).length}대${yearNote}`,'good');
   }catch(e){ showAdminToast('백업 오류: '+e.message,'bad'); }
 }
 
@@ -5437,12 +5577,15 @@ async function restoreData(input){
 
       // 버전 1 (fleetData 없이 직접 저장된 형식) 호환
       // 버전 3: fleetData는 이미 객체
+      // 버전 4: fleetData(메인) + yearData(2027년 이후 연도별 노드, {연도:{vehicles:{...}}}) 포함
       const fleetData = backup.fleetData || backup;
       const parsed = typeof fleetData==='string' ? JSON.parse(fleetData) : fleetData;
       if(!parsed.vehicles) throw new Error('올바른 백업 파일이 아닙니다.');
+      const yearData = backup.yearData || null;
       const vehicleCount=Object.keys(parsed.vehicles).length;
-      const tripCount=Object.values(parsed.vehicles).reduce((s,v)=>s+(v.trips||[]).length,0);
-      showRestoreConfirm(fleetData, vehicleCount, tripCount);
+      let tripCount=Object.values(parsed.vehicles).reduce((s,v)=>s+(v.trips||[]).length,0);
+      if(yearData) tripCount += Object.values(yearData).reduce((s,yd)=>s+Object.values(yd.vehicles||{}).reduce((s2,v)=>s2+(v.trips||[]).length,0),0);
+      showRestoreConfirm(fleetData, vehicleCount, tripCount, yearData);
     }catch(err){
       showAdminToast('파일을 읽을 수 없습니다. 올바른 백업 파일인지 확인해 주세요.','bad');
     }
@@ -5451,8 +5594,8 @@ async function restoreData(input){
 }
 
 let _pendingRestoreData=null;
-function showRestoreConfirm(fleetData, vehicleCount, tripCount){
-  _pendingRestoreData={fleetData};
+function showRestoreConfirm(fleetData, vehicleCount, tripCount, yearData){
+  _pendingRestoreData={fleetData, yearData};
   const existing=document.getElementById('restoreConfirmBanner');
   if(existing) existing.remove();
   const div=document.createElement('div');
@@ -5461,7 +5604,7 @@ function showRestoreConfirm(fleetData, vehicleCount, tripCount){
   div.innerHTML=`
     <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px;">📂 복원 파일 확인</div>
     <div style="font-size:13px;color:var(--ink);margin-bottom:12px;">
-      차량 <b>${vehicleCount}대</b> · 운행기록 <b>${tripCount}건</b>이 포함되어 있습니다.<br>
+      차량 <b>${vehicleCount}대</b> · 운행기록 <b>${tripCount}건</b>${yearData?` (연도별노드 ${Object.keys(yearData).length}개 포함)`:''}이 포함되어 있습니다.<br>
       <span style="color:var(--bad);font-size:12px;">⚠ 현재 데이터에 덮어씌웁니다. 복원 전 백업을 먼저 해두세요.</span>
     </div>
     <div style="display:flex;gap:8px;">
@@ -5473,11 +5616,14 @@ function showRestoreConfirm(fleetData, vehicleCount, tripCount){
 
 async function confirmRestore(){
   if(!_pendingRestoreData) return;
-  const {fleetData}=_pendingRestoreData;
+  const {fleetData, yearData}=_pendingRestoreData;
   _pendingRestoreData=null;
   try{
     const parsed = typeof fleetData==='string' ? JSON.parse(fleetData) : fleetData;
     await fbSet(STORAGE_KEY, parsed);
+    if(yearData){
+      await Promise.all(Object.keys(yearData).map(y=>fbSet(yearNodeKey(y), yearData[y])));
+    }
     document.getElementById('restoreConfirmBanner')?.remove();
     await loadData();
     showAdminToast('복원 완료 — 데이터가 반영됐습니다.','good');
@@ -8503,7 +8649,13 @@ function loadUserEditable(){
         ${foundAcc.map(a=>{
           const photos=a.photos||[];
           const photoThumbs = photos.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
-              ${photos.map((p,i)=>`<img src="${p.url}" alt="${escapeHtml(p.tag||'사고사진')}" title="${escapeHtml(p.tag||'')}" loading="lazy" data-photo-url="${p.url}" data-photo-meta="${escapeHtml((a.ourVehicle?.plate||'미확인')+' · '+(p.tag||'')+' ('+(i+1)+'/'+photos.length+')')}" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:pointer;" onclick="viewAccidentPhoto(this.dataset.photoUrl,this.dataset.photoMeta)">`).join('')}
+              ${photos.map((p,i)=>{
+                const meta = escapeHtml((a.ourVehicle?.plate||'미확인')+' · '+(p.tag||'')+' ('+(i+1)+'/'+photos.length+')');
+                const thumbStyle = 'width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:pointer;background:var(--paper);';
+                return p.path
+                  ? `<img src="" alt="${escapeHtml(p.tag||'사고사진')}" title="${escapeHtml(p.tag||'')}" data-photo-path="${escapeHtml(p.path)}" data-photo-meta="${meta}" style="${thumbStyle}" onclick="viewAccidentPhotoByPath(this.dataset.photoPath,this.dataset.photoMeta)">`
+                  : `<img src="${p.url}" alt="${escapeHtml(p.tag||'사고사진')}" title="${escapeHtml(p.tag||'')}" loading="lazy" data-photo-url="${p.url}" data-photo-meta="${meta}" style="${thumbStyle}" onclick="viewAccidentPhoto(this.dataset.photoUrl,this.dataset.photoMeta)">`;
+              }).join('')}
             </div>` : '';
           return `<div data-accident-id="${a.id}" style="border:1.5px solid var(--bad);border-radius:12px;margin:0 12px 10px;padding:12px 14px;background:var(--bad-soft);">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -8528,6 +8680,7 @@ function loadUserEditable(){
     <button class="btn btn-good" style="padding:10px 24px;" onclick="saveUserEdits('${name}')">✓ 수정 내용 저장</button>
   </div>`;
   body.innerHTML=html;
+  hydrateAccidentThumbnails(body);
 }
 
 function recalcUeDist(inp){

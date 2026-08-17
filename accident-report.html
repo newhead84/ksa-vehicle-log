@@ -315,6 +315,33 @@ async function fbSet(path, value){
   return r.json();
 }
 
+// ============================================================
+// 사고 현장사진 Firebase Storage 업로드 (index.html의 영수증 업로드 방식과 동일 패턴)
+// — 사진을 fleet-data(RTDB)에 base64로 직접 얹지 않고 별도 Storage에 올려, 매 접속 시
+//   전체 운행정보를 내려받을 때 사고사진까지 함께 통째로 딸려오는 것을 방지한다.
+// ============================================================
+const FIREBASE_STORAGE_BUCKET = "ksa-vehicle-log.firebasestorage.app"; // index.html과 동일 버킷
+function dataUrlToBlob(dataUrl){
+  const [meta, b64] = dataUrl.split(',');
+  const mime = /data:(.*?);base64/.exec(meta)?.[1] || 'image/jpeg';
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], {type: mime});
+}
+async function uploadAccidentPhotoToStorage(dataUrl, path){
+  const blob = dataUrlToBlob(dataUrl);
+  const token = await getAuthToken();
+  const url = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o?name=${encodeURIComponent(path)}`;
+  const res = await fetch(url, {
+    method:'POST',
+    headers:{ 'Content-Type':'image/jpeg', ...(token?{'Authorization':`Firebase ${token}`}:{}) },
+    body: blob
+  });
+  if(!res.ok) throw new Error(`사고사진 업로드 실패 (${res.status})`);
+  return path;
+}
+
 function escapeHtml(s){
   return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -622,7 +649,16 @@ async function submitAccidentReport(){
     const accidentId = `acc_${stamp}_${rand}`;
     const createdAt = now.toISOString();
 
-    const photos = Object.values(photoStore).map(p=>({ url: p.dataUrl, tag: p.tag }));
+    btn.textContent = '사진 업로드 중...';
+    const photoEntries = Object.values(photoStore);
+    const photos = [];
+    for(let i=0;i<photoEntries.length;i++){
+      const p = photoEntries[i];
+      const path = `accidents/${accidentId}/${i+1}.jpg`;
+      await uploadAccidentPhotoToStorage(p.dataUrl, path);
+      photos.push({ path, tag: p.tag });
+    }
+    btn.textContent = '접수 중...';
     const otherParties = collectOtherParties();
 
     const record = {
