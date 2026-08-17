@@ -1230,6 +1230,8 @@ function downloadDedicatedContractTemplate(){
   });
   const ws = XLSX.utils.json_to_sheet(rows);
   ws['!cols'] = [{wch:16},{wch:14},{wch:12},{wch:16},{wch:30},{wch:12},{wch:12},{wch:12},{wch:20}];
+  applyDateFormat(ws, rows, ['계약시작일','계약종료일']);
+  applyThousandsFormat(ws, rows, ['월대여료(원)']);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '전용차량계약정보');
   XLSX.writeFile(wb, `KSA전용차량계약정보_${todayIsoStr()}.xlsx`);
@@ -1384,8 +1386,31 @@ function applyThousandsFormat(ws, rows, headerNames){
   });
 }
 
+// 문자열 날짜(YYYY-MM-DD) 셀을 실제 엑셀 날짜 타입으로 변환하고 날짜서식(yyyy-mm-dd)을 적용합니다.
+// 형식이 맞지 않거나 비어있는 값(예시 안내문 등)은 원본 그대로 둔다.
+function applyDateFormat(ws, rows, headerNames){
+  if(!rows.length) return;
+  const headers = Object.keys(rows[0]);
+  headerNames.forEach(name=>{
+    const colIdx = headers.indexOf(name);
+    if(colIdx === -1) return;
+    rows.forEach((row, rowIdx)=>{
+      const raw = row[name];
+      if(!raw || !DED_CONTRACT_DATE_RE.test(String(raw))) return;
+      const cellRef = XLSX.utils.encode_cell({r: rowIdx+1, c: colIdx});
+      const cell = ws[cellRef];
+      if(!cell) return;
+      const d = new Date(String(raw).slice(0,10) + 'T00:00:00');
+      if(isNaN(d)) return;
+      cell.t = 'd';
+      cell.v = d;
+      cell.z = 'yyyy-mm-dd';
+    });
+  });
+}
+
 // ── 엑셀 내보내기 ──
-// 현재 필터 기준 운행기록 시트 + 차량별 계약/누적 요약 시트 두 개를 하나의 워크북으로 내보낸다.
+// 현재 필터 기준 운행기록 시트를 워크북으로 내보낸다. (계약·대여료요약 시트는 계약정보 관리에서 별도 확인 가능하므로 미포함)
 function exportTripsExcel(){
   if(!window.XLSX){ appAlert('엑셀 라이브러리 로드에 실패했습니다. 새로고침 후 다시 시도해주세요.'); return; }
   const rows = TRIPS.filter(t => currentFilter==='all' || t.v===currentFilter);
@@ -1397,20 +1422,11 @@ function exportTripsExcel(){
       '거리(km)': t.km, '대리운전': t.sub?'사용':'미사용', '비고': t.note||'', '주유비(원)': t.fuel||0
     };
   });
-  const summarySheetData = VEHICLES.map(v=>({
-    '사업장': v.org, '역할': v.role, '차종': v.model, '차량번호': v.plate,
-    '계약시작일': v.contractStartDate||'(미입력)', '월대여료(원)': v.monthlyFee||0,
-    '총대여료 누계(원)': v.contractStartDate ? totalRentalFor(v) : '(계약시작일 미입력)'
-  }));
   const wb = XLSX.utils.book_new();
   const ws1 = XLSX.utils.json_to_sheet(tripSheetData);
   ws1['!cols'] = [{wch:14},{wch:8},{wch:12},{wch:11},{wch:10},{wch:14},{wch:14},{wch:9},{wch:9},{wch:24},{wch:10}];
   applyThousandsFormat(ws1, tripSheetData, ['거리(km)','주유비(원)']);
   XLSX.utils.book_append_sheet(wb, ws1, '운행기록');
-  const ws2 = XLSX.utils.json_to_sheet(summarySheetData);
-  ws2['!cols'] = [{wch:14},{wch:14},{wch:8},{wch:12},{wch:12},{wch:12},{wch:16}];
-  applyThousandsFormat(ws2, summarySheetData, ['월대여료(원)','총대여료 누계(원)']);
-  XLSX.utils.book_append_sheet(wb, ws2, '계약·대여료요약');
   const today = new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb, `전용차량_운행기록_${today}.xlsx`);
 }
