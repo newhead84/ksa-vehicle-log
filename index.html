@@ -35,6 +35,22 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-18] 개인주유 영수증을 가로로 촬영/첨부한 경우 OCR 줄 인식 순서가 흐트러져 금액을
+  오인식할 위험이 있다는 지적에 따라, 업로드 시 자동 회전(가로→세로) 전처리 추가. <img> 디코딩
+  결과 기준 width가 height보다 10% 이상 크면(가로 판정) 캔버스로 시계방향 90도 회전해 세로로
+  정규화 후 OCR·썸네일·실제 업로드(Storage) 모두에 동일한 파일을 사용. 회전 처리 중 오류가 나도
+  예외 없이 원본 파일로 폴백해 OCR/첨부 자체를 막지 않음 | 신규: normalizeReceiptOrientation()
+  | 변경: onReceiptFileSelected(), ueReceiptFileSelected()
+
+  [2026-08-18] 개인주유 영수증 OCR 금액 오인식 버그 수정. 화질이 선명한 영수증(신반포주유소 사례)
+  에서도 42,000원을 405원 등으로 잘못 인식하는 문제 발생 — 원인은 parseReceiptAmount()가
+  "합계금액/승인금액" 등 키워드 줄 바로 다음 줄의 숫자를 무조건 후보로 포함시켰는데, 다음 줄이
+  우연히 거래번호/승인번호/가맹점번호 같은 콤마 없는 ID성 숫자 줄이면 그 값이 금액으로
+  오인식됨(예: "거래번호 :S6-4052" → 정규식이 앞 3자리 "405"만 그리디하게 매칭). 키워드 줄
+  자체에 숫자가 있으면 그것만 사용, 없을 때만 다음 줄을 보되 ID류 줄은 제외하고 콤마 형식(천단위
+  구분자) 숫자만 인정하도록 수정. 소수점 수량("22.117"L)의 소수점 뒷자리 오매칭도 음의
+  후방탐색으로 함께 차단 | 변경: parseReceiptAmount()
+
   [2026-08-18] 연도별 데이터 분리 구현(2027년부터 적용, 2026년까지 데이터는 그대로 유지·마이그레이션
   없음). 2026년까지는 기존 fleet-data 노드에 계속 저장, 2027-01-01부터의 신규 운행기록은
   fleet-data-{연도} 별도 노드에 저장 — 매 로드/저장 시 오가는 데이터가 연도 단위로 리셋되도록.
@@ -102,19 +118,6 @@
   통일 | 신규: ueReceiptAttach(), ueReceiptFileSelected() | 변경: loadUserEditable()(영수증
   첨부 영역 렌더링, 차량별 그룹 정렬), toggleUePersonal(), saveUserEdits()(영수증 업로드 반영)
 
-  [2026-08-16] 주말·공휴일 개인사용 안내(weekendOverlay) "차량관리" 항목 및 DT센터 주차
-  유의사항(parkingOverlay) 1~3번 항목 문구 간소화·줄바꿈 정리(전용/공용차량 주차 안내를
-  줄바꿈으로 분리, "※ 주유비 기준 하단 참조" 링크 문구 삭제, 불필요한 조사/어미 정리) |
-  변경: weekendOverlay·parkingOverlay 모달 본문 텍스트(함수 변경 없음)
-
-  [2026-08-16] 주말·공휴일 개인사용 안내 모달 문구 3건 수정. ① "차량이용" 항목의 기존
-  법인하이패스카드 분리 이용 안내를 강조 표시(색상+굵게). ② "차량관리" 항목의 세차 의무
-  문구("차량세차(개인부담), 반납 전 반드시 세차 해주세요!") 삭제 후 실내 청결 유지를
-  권고하는 문구("차량 내부에 쓰레기 등이 남지 않도록 깨끗하게 이용해 주세요")로 대체(세차
-  의무 개념 삭제). ③ "이용수칙" 4번 항목에서 하이패스카드 분리를 별도 강조 문구로 분리하고
-  목록에서 세차 항목 제외(실내정리, 개인주유, 증빙업로드만 남김) | 변경: weekendOverlay 모달
-  본문 텍스트(함수 변경 없음)
-
   [2026-08-16] 수행기사(회장차) 근로시간 입력 근로기준법 준수 검증 추가. ① 심야시간(22:00~06:00,
   제56조) 구간은 실제 근로시간 범위 밖이거나 22:00~06:00 밖이면 제출 차단, 근로종료가 22:00
   이전이면 "심야시간 구간 추가" 버튼 자체를 비활성화. ② 휴게시간(제54조: 근로 4시간→30분/
@@ -123,11 +126,6 @@
   normalizePeriodToWorkDay()/requiredRestMinutes()/validateOvertimePeriods()/
   updateNightEligibilityUI()/updateRestMinReqNote()/addOvertimePeriodUI(), 수정:
   calcWorkTotal()/submitLog())
-
-  [2026-08-14] 대차인수(반납 아님) + 종료거리 미입력 시 endOdo=startOdo(0km)로 자동 처리되는 케이스에서,
-  다음 정상 운행이 그 종료거리를 이어받아 시작하면(시작거리=문제기록의 시작거리이자 종료거리) 늦은입력
-  겹침(⚠ 확인필요)으로 오탐되던 버그 수정. 대차인수 전용 0km 기록과의 시작거리 일치는 정상 체인
-  연속이므로 충돌 검사 대상에서 제외 | 변경: resolveLateEntryInsert()
 
   [2026-08-13] 모바일 UI/데이터 버그 3건 수정. ① 차량상세 모달 "재배치 일자" input[type=date]가
   좁은 화면에서 다른 입력칸과 동일한 flex-basis(120px)로 줄어들며 "YYYY. MM. DD." 표기가 잘려
@@ -1733,6 +1731,49 @@ function fileToBase64(file){
   });
 }
 
+// 2026-08-18 추가: 영수증을 가로로 촬영/첨부한 경우 OCR 줄 인식 순서가 흐트러져
+// parseReceiptAmount() 등이 라벨-금액 인접 관계를 잘못 판단할 위험이 커짐(주유영수증은
+// 세로로 긴 문서가 정상 형태). <img> 디코딩은 EXIF Orientation을 브라우저가 자동
+// 반영하므로 그 결과 기준으로, 가로(width>height)로 판정되면 시계방향 90도 추가 회전해
+// 세로로 정규화한다. 실패 시 예외 없이 원본 파일을 그대로 반환(OCR 자체를 막지 않음).
+// 반환된 파일은 OCR과 실제 첨부(업로드)에 동일하게 사용해 인식 결과와 저장된 이미지의
+// 방향이 서로 다르게 남지 않도록 한다.
+function normalizeReceiptOrientation(file){
+  return new Promise((resolve)=>{
+    try{
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = ()=>{
+        try{
+          const isLandscape = img.width > img.height * 1.1; // 여유 10% — 정사각형에 가까운 경우 회전하지 않음
+          if(!isLandscape){ URL.revokeObjectURL(url); resolve(file); return; }
+          const canvas = document.createElement('canvas');
+          canvas.width = img.height;
+          canvas.height = img.width;
+          const ctx = canvas.getContext('2d');
+          ctx.translate(canvas.width, 0);
+          ctx.rotate(Math.PI/2); // 시계방향 90도
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob(blob=>{
+            URL.revokeObjectURL(url);
+            if(!blob){ resolve(file); return; }
+            resolve(new File([blob], file.name || 'receipt.jpg', {type:'image/jpeg'}));
+          }, 'image/jpeg', 0.92);
+        }catch(e){
+          URL.revokeObjectURL(url);
+          console.warn('[영수증 회전 보정] 실패, 원본 사용', e);
+          resolve(file);
+        }
+      };
+      img.onerror = ()=>{ URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    }catch(e){
+      console.warn('[영수증 회전 보정] 실패, 원본 사용', e);
+      resolve(file);
+    }
+  });
+}
+
 // Google Cloud Vision TEXT_DETECTION 호출 → {text, debug} 반환.
 // text: 인식된 전체 텍스트(실패 시 null). debug: 실패 원인 진단용 문자열(성공 시 null) —
 // 2026-08-11 OCR 인식률 이슈 진단을 위해 임시로 추가, 원인 확인 후 제거 예정.
@@ -1768,24 +1809,36 @@ async function callVisionOcr(file){
 }
 
 // OCR 텍스트에서 금액 후보 추출 (설계 3-2)
+// 2026-08-18 수정: 키워드 줄 바로 다음 줄의 숫자를 무조건 후보로 넣던 로직이
+// 거래번호/승인번호/가맹점번호처럼 콤마 없는 ID성 숫자를 금액으로 오인식하는
+// 사례(예: "거래번호 :S6-4052" → 405원 오인식) 발생 → 다음 줄은 콤마(천단위
+// 구분자) 형식 숫자만 인정하도록 제한. 소수점 수량(예: "22.117"L)의 소수점
+// 뒷자리가 별도 숫자로 잘못 잡히는 것도 함께 방지.
 function parseReceiptAmount(text){
   if(!text) return [];
   const lines = text.split('\n');
   const keywordRe = /(합계|결제금액|승인금액|총액|받을금액)/;
-  const numRe = /\d{1,3}(,\d{3})*/g;
+  const idLineRe = /(거래번호|승인번호|승인No|승인NO|가맹점|카드번호|일련번호|사업자|전화|가맹점NO)/i;
+  const numRe = /(?<!\.)\d{1,3}(,\d{3})*/g; // 소수점 뒤 자릿수 오매칭 방지
+  const commaNumRe = /(?<!\.)\d{1,3}(,\d{3})+/g; // 천단위 구분자가 있는 "금액다운" 숫자만
   const toNum = s => Number(s.replace(/,/g,''));
 
-  // 1순위: 키워드 포함 줄 + 인접 줄
+  // 1순위: 키워드 포함 줄. 같은 줄에 숫자가 있으면 그것만 사용하고,
+  // 없을 때만 다음 줄을 보되 ID류 줄은 제외하고 콤마 형식 숫자만 인정
+  // (거래번호/승인번호 등은 콤마가 없으므로 자동 제외됨)
   const candidates1 = [];
   lines.forEach((line, i)=>{
     if(keywordRe.test(line)){
-      [line, lines[i+1]||''].forEach(l=>{
-        const nums = l.match(numRe) || [];
-        nums.forEach(n=>{
-          const v = toNum(n);
-          if(v >= 100 && v <= 1000000) candidates1.push(v);
-        });
-      });
+      const sameLineNums = (line.match(numRe) || []).map(toNum).filter(v=> v>=100 && v<=1000000);
+      if(sameLineNums.length){
+        candidates1.push(...sameLineNums);
+      } else {
+        const nextLine = lines[i+1] || '';
+        if(!idLineRe.test(nextLine)){
+          const nextNums = (nextLine.match(commaNumRe) || []).map(toNum).filter(v=> v>=100 && v<=1000000);
+          candidates1.push(...nextNums);
+        }
+      }
     }
   });
   if(candidates1.length) return candidates1;
@@ -7426,7 +7479,7 @@ function onReceiptAttachLater(id){
 }
 
 async function onReceiptFileSelected(inputEl, id, source){
-  const file = inputEl.files && inputEl.files[0];
+  let file = inputEl.files && inputEl.files[0];
   if(!file) return;
   const card = document.getElementById(id);
   if(card){
@@ -7437,6 +7490,9 @@ async function onReceiptFileSelected(inputEl, id, source){
   if(deferredNote) deferredNote.style.display = 'none';
   updateReceiptButtonStates(id);
 
+  // 가로로 촬영/첨부된 영수증은 세로로 정규화(OCR 인식 순서 안정화 목적) —
+  // 이후 썸네일·OCR·실제 업로드 모두 이 정규화된 파일을 동일하게 사용
+  file = await normalizeReceiptOrientation(file);
   window._receiptFileMap[id] = file;
 
   const thumbWrap = document.getElementById('receiptThumbWrap-'+id);
@@ -8718,11 +8774,13 @@ function ueReceiptAttach(btn, type){
 // 실제 업로드는 저장 시점(saveUserEdits)에 수행하며, 이 함수는 파일을 window._ueReceiptFileMap에 보관하고
 // 인식 결과만 미리 계산해 카드에 표시한다.
 async function ueReceiptFileSelected(inputEl){
-  const file = inputEl.files && inputEl.files[0];
+  let file = inputEl.files && inputEl.files[0];
   if(!file) return;
   const row = inputEl.closest('[data-plate]');
   if(!row) return;
   const key = row.dataset.key;
+  // 가로로 촬영/첨부된 영수증은 세로로 정규화(OCR 인식 순서 안정화 목적)
+  file = await normalizeReceiptOrientation(file);
   window._ueReceiptFileMap = window._ueReceiptFileMap || {};
   window._ueReceiptFileMap[key] = file;
 
