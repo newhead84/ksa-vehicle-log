@@ -35,6 +35,14 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-17] 개인사용/차량 모니터링 표현·기준 4건 조정. ① "문제건" 표현을 "확인필요"로 순화(섹션
+  제목 배지, 전체보기/확인필요 건만 보기 토글 버튼, 목록 상단 안내문구, 빈 목록 안내문구 — 4개소).
+  ② 과소주유 허용오차 FUEL_UNDERPAID_TOLERANCE_WON을 3,000원→1,000원으로 축소(요약카드 문구는
+  상수값 참조라 별도 표기 변경 없이 자동 반영). ③ "주유적정성" 열 배지에 예상 최소 유류비 대비
+  실제 주유비 차액을 천원단위(반올림)로 병기(예: "⚠️ 과소 (-2천원)", "✅ 적정 (+1천원)"). ④ 미운행
+  VEHICLE_IDLE_ALERT_DAYS(10일) 이상 경과 차량의 차량카드 테두리를 붉은색(var(--bad))으로 강조
+  표시 | 변경: renderPersonalUseList(), vcardHtml()
+
   [2026-08-17] 개인사용/차량 모니터링 3건 보완. ① 과소주유 판정 기준을 완화 — 예상 최소 유류비보다
   FUEL_UNDERPAID_TOLERANCE_WON(3,000원) 이내로 적은 경우는 오차범위로 보고 "적정"으로 인정
   (기존엔 1원이라도 부족하면 과소로 판정해 너무 타이트했음). ② 개인사용 문제건 모니터링(요약카드·
@@ -1634,7 +1642,7 @@ const RECEIPT_DATE_TOLERANCE_DAYS = 10; // 영수증 일자와 운행일 허용 
 //                                대상으로 집계. 기능 도입 이전 과거 기록까지 소급 적용하면
 //                                (당시엔 없던 기준으로) 오탐이 쌓이므로, 기능 배포 시점 이후
 //                                신규 제출 건부터만 문제건 판정 대상에 포함한다.
-const FUEL_UNDERPAID_TOLERANCE_WON = 3000;
+const FUEL_UNDERPAID_TOLERANCE_WON = 1000;
 const PERSONAL_MONITORING_SINCE = '2026-08-17T20:31:33+09:00';
 // VEHICLE_IDLE_ALERT_DAYS : 이 일수 이상 운행기록(개인사용·출퇴근사용 포함 전체)이 없는 차량은
 //                          차량카드/차량목록 제목에 "미운행" 경고로 표시한다.
@@ -4066,12 +4074,12 @@ function renderPersonalUseList(){
       <div style="font-size:18px;font-weight:700;color:${fuelProblems.length?'var(--bad)':'var(--ink)'};">${fuelProblems.length}건</div>
     </div>`;
   const titleBadge = document.getElementById('personalProblemCountBadge');
-  if(titleBadge) titleBadge.textContent = totalProblems ? `⚠ 문제건 ${totalProblems}건` : '';
+  if(titleBadge) titleBadge.textContent = totalProblems ? `⚠ 확인필요 ${totalProblems}건` : '';
 
   const showAll = !!window._personalShowAll;
   const showAllBtn = document.getElementById('personalShowAllBtn');
   if(showAllBtn){
-    showAllBtn.textContent = showAll ? '문제건만 보기' : '전체보기';
+    showAllBtn.textContent = showAll ? '확인필요 건만 보기' : '전체보기';
     showAllBtn.style.background = showAll ? 'var(--navy)' : '';
     showAllBtn.style.color = showAll ? '#fff' : '';
   }
@@ -4091,9 +4099,13 @@ function renderPersonalUseList(){
   const totalFuel=list.reduce((s,t)=>s+(Number(t.fuel)||0),0);
   const rows=list.map(t=>{
     const fuelBad = isFuelUnderpaid(t);
+    // 예상 최소 유류비 대비 실제 주유비 차액을 천원단위(반올림)로 산출 — 과소(-)/과대(+) 표시용
+    const fuelMinCost = estimateMinFuelCost(t.distance);
+    const fuelDiffK = Math.round(((Number(t.fuel)||0) - fuelMinCost) / 1000);
+    const fuelDiffLabel = fuelDiffK===0 ? '±0천원' : (fuelDiffK>0 ? `+${fuelDiffK}천원` : `${fuelDiffK}천원`);
     const fuelBadge = fuelBad
-      ? `<span style="background:var(--bad-soft);color:var(--bad);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;" title="예상 최소 유류비 ${estimateMinFuelCost(t.distance).toLocaleString()}원(허용범위 ±${FUEL_UNDERPAID_TOLERANCE_WON.toLocaleString()}원 반영)">⚠️ 과소</span>`
-      : `<span style="background:var(--good-soft);color:var(--good);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;">✅ 적정</span>`;
+      ? `<span style="background:var(--bad-soft);color:var(--bad);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;" title="예상 최소 유류비 ${fuelMinCost.toLocaleString()}원(허용범위 ±${FUEL_UNDERPAID_TOLERANCE_WON.toLocaleString()}원 반영)">⚠️ 과소 (${fuelDiffLabel})</span>`
+      : `<span style="background:var(--good-soft);color:var(--good);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;" title="예상 최소 유류비 ${fuelMinCost.toLocaleString()}원 대비 차액">✅ 적정 (${fuelDiffLabel})</span>`;
     return `<tr>
     <td class="mono">${t.date||t.isoDate||''}</td>
     <td class="mono"><b>${t.plate}</b></td>
@@ -4106,9 +4118,9 @@ function renderPersonalUseList(){
     <td style="color:var(--muted);">${escapeHtml(t.submitter||'')}</td>
     <td>${receiptStatusBadgeHtml(t)}</td>
   </tr>`;}).join('');
-  const modeNote = q ? `'${escapeHtml(q)}' 검색 결과` : (showAll ? '전체' : `문제건만 표시 중(모니터링 도입일 이후 제출건 기준) — 이름 검색 또는 "전체보기"로 전체 이력 확인 가능`);
+  const modeNote = q ? `'${escapeHtml(q)}' 검색 결과` : (showAll ? '전체' : `확인필요 건만 표시 중(모니터링 도입일 이후 제출건 기준) — 이름 검색 또는 "전체보기"로 전체 이력 확인 가능`);
   document.getElementById('personalUseSummaryBar').innerHTML=list.length?`${modeNote} · 총 <b>${list.length}건</b> · 주행거리 <b>${totalDist.toLocaleString()}km</b> · 총주유비 <b>${totalFuel.toLocaleString()}원</b>`:modeNote;
-  document.getElementById('personalUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>주행거리</th><th>주유비</th><th>주유적정성</th><th>행선지</th><th>제출자</th><th>증빙상태</th></tr></thead><tbody>${rows||`<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted);">${showAll||q?'검색 결과가 없습니다':'현재 문제건이 없습니다 ✓'}</td></tr>`}</tbody></table></div>`;
+  document.getElementById('personalUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>주행거리</th><th>주유비</th><th>주유적정성</th><th>행선지</th><th>제출자</th><th>증빙상태</th></tr></thead><tbody>${rows||`<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted);">${showAll||q?'검색 결과가 없습니다':'현재 확인필요 건이 없습니다 ✓'}</td></tr>`}</tbody></table></div>`;
 }
 
 // 전체 차량의 운행기록 중 출퇴근사용(isCommute, 단신부임자 급여공제) 건만 모아서 반환
@@ -4190,7 +4202,7 @@ function vcardHtml(p){
     }
   }
   const badge=badgeParts.join(' ');
-  return `<div class="vcard" data-plate="${p.replace(/"/g,'&quot;')}" style="${inactive?'opacity:.55;border-style:dashed;':''}" >
+  return `<div class="vcard" data-plate="${p.replace(/"/g,'&quot;')}" style="${inactive?'opacity:.55;border-style:dashed;':(isIdle?'border-color:var(--bad);border-width:2px;':'')}" >
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px;">
       <div onclick="openVehicle('${p}')" style="cursor:pointer;flex:1;">
         <div class="plate" style="${inactive?'color:var(--muted);':''}">${p}${v.model?` - ${escapeHtml(modelShort(v.model))}`:''}</div>
