@@ -35,6 +35,12 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-17] 주말·공휴일 개인사용 체크 후 영수증 첨부 3버튼(촬영/앨범/나중에 첨부) 중 아무것도
+  선택하지 않아도 운행기록 제출이 그대로 완료되던 버그 수정. 개인사용 건은 반드시 셋 중 하나를
+  선택해야 제출 가능하도록 제출 전 검증에 차단 로직 추가. 임시저장 복원 시 "나중에 첨부"를
+  선택했던 상태도 함께 복원되도록 doRestoreDraft() 보정(파일 자체는 기존과 동일하게 복원 불가 —
+  재첨부 또는 "나중에 첨부" 재선택 필요) | 변경: submitDirectInput(), doRestoreDraft()
+
   [2026-08-17] "내 제출 기록 수정" 화면 2건 수정. ① 개인사용(주말·공휴일) 기록에서 최초 제출 시
   "나중에 첨부"를 선택해 영수증을 첨부하지 못한 건을 이 화면에서 실제로 첨부할 수 있는 버튼이
   없던 문제 → 개인사용 체크된 기록 카드에 촬영/앨범 첨부 버튼과 OCR 인식(금액·일자·영수증
@@ -7504,6 +7510,15 @@ async function submitDirectInput(){
     if(!r.dest){ showUserFormErr(`${i+1}번 운행기록: 행선지를 입력해 주세요.`); return; }
     if(r.isDaeCha && !r.daeChaPate){ showUserFormErr(`${i+1}번 운행기록: 대차인수/대차반납 체크 시 대차 차량번호를 반드시 입력해 주세요.`); return; }
     if(r.isPersonal && !r.fuel){ showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유비를 입력해 주세요.`); return; }
+    // 개인사용 체크 시 영수증 첨부 3버튼(촬영/앨범/나중에 첨부) 중 하나도 선택하지 않은 채
+    // 그대로 제출되던 버그 수정 — 반드시 셋 중 하나를 선택해야 제출 가능하도록 차단.
+    if(r.isPersonal){
+      const fileAttached = window._receiptFileMap && window._receiptFileMap[r.id];
+      if(!r.receiptDeferred && !fileAttached){
+        showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유영수증 "촬영", "앨범에서 선택", "나중에 첨부" 중 하나를 반드시 선택해 주세요.`);
+        return;
+      }
+    }
     if(r.status==='점검요망' && !r.note){ showUserFormErr(`${i+1}번 운행기록: 점검요청 선택 시 비고(사유)를 입력해 주세요.`); return; }
     if(r.distance >= MAX_TRIP_DISTANCE_KM){ showUserFormErr(`${i+1}번 운행기록: 주행거리가 ${r.distance.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`); return; }
     if(r.fuel >= MAX_FUEL_AMOUNT){ showUserFormErr(`${i+1}번 운행기록: 주유비가 ${Number(r.fuel).toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`); return; }
@@ -7953,6 +7968,9 @@ async function doRestoreDraft(draft){
       if(r.isPersonal){
         const pChk=card.querySelector('.tr-personal-chk');
         if(pChk){pChk.checked=true;togglePersonalUse(pChk,card.id);}
+        // 임시저장 당시 "나중에 첨부"를 선택했던 경우, 그 선택 자체는 복원 가능(파일은 복원 불가하므로
+        // 촬영/앨범으로 첨부했던 건은 재첨부 안내만 표시하고 상태는 초기값으로 둠 — resetReceiptState 참고)
+        if(r.receiptDeferred) onReceiptAttachLater(card.id);
       }
       if(r.fuel){
         card.querySelector('.tr-fuel-chk').checked=true;
