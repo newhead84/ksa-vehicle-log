@@ -35,6 +35,11 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-18] "영수증 첨부해서 제출했는데 대기중으로 표시된다"는 재현 테스트 보고에 따라
+  doSubmit() 영수증 업로드 로직 보강. ① 일시적 통신 오류 대응을 위해 1회 재시도 추가.
+  ② "나중에 첨부"가 아닌데도 실제 File 참조가 비어있는 경우(모바일 카메라 앱 전환 중
+  페이지 새로고침 등)도 동일하게 실패로 기록해 경고 팝업이 뜨도록 함 | 변경: doSubmit()
+
   [2026-08-18] 통신 상태가 나쁠 때 "사업장을 선택해도 차량번호 목록이 안 나타남"(체감상 사업장
   목록 자체가 한참 이따가 뜸) 버그 수정. 원인: 사업장 드롭다운(buildVehicleDropdown())이
   loadData()(Firebase 로드, 최대 15초 타임아웃) 완료 후에야 채워지도록 되어 있었는데, 사업장
@@ -8091,20 +8096,32 @@ async function doSubmit(submitter, plate, rows){
     // 개인사용 영수증: 지금 첨부를 선택한 건은 여기서 압축+업로드를 수행.
     // OCR(금액/일자) 판정 결과는 이미 첨부 시점에 계산되어 r에 담겨 있음(collectRows() 참고).
     // 업로드 실패 시에도 전체 제출은 막지 않고 "나중에 첨부"와 동일하게 receiptPath=null로 저장.
+    // 일시적 통신 오류 대응을 위해 1회 재시도 후에도 실패하면 최종 실패로 처리.
     let receiptPath = null, receiptUploadedAt = null;
     if(r.isPersonal && !r.receiptDeferred){
       const file = window._receiptFileMap && window._receiptFileMap[r.id];
       if(file){
-        try{
-          const fileName = buildReceiptFileName(r.user, isoDate, r.fuel);
-          const compressed = await compressReceiptImage(file);
-          receiptPath = await uploadReceiptToStorage(compressed, fileName);
-          receiptUploadedAt = new Date().toISOString();
-        }catch(e){
-          console.error('[영수증 업로드 실패]', e);
-          receiptPath = null; // 업로드 실패해도 운행정보 제출 자체는 정상 진행
+        let lastErr = null;
+        for(let attempt=0; attempt<2 && !receiptPath; attempt++){
+          try{
+            const fileName = buildReceiptFileName(r.user, isoDate, r.fuel);
+            const compressed = await compressReceiptImage(file);
+            receiptPath = await uploadReceiptToStorage(compressed, fileName);
+            receiptUploadedAt = new Date().toISOString();
+          }catch(e){
+            lastErr = e;
+            console.error(`[영수증 업로드 실패${attempt===0?' - 재시도 예정':''}]`, e);
+          }
+        }
+        if(!receiptPath){
           receiptUploadFailures.push({isoDate, dateDisplay});
         }
+      } else {
+        // "나중에 첨부"를 선택하지 않았는데도 실제 File 참조가 남아있지 않은 경우(모바일에서
+        // 카메라 앱 전환 중 저사양 기기가 페이지를 새로고침해 메모리가 초기화된 경우 등) —
+        // 제출 전 검증(submitDirectInput)에서 대부분 걸러지지만, 만일을 대비해 여기서도
+        // 동일하게 첨부 실패로 간주해 사용자에게 알린다(기존엔 조용히 receiptPath=null로만 저장됨).
+        receiptUploadFailures.push({isoDate, dateDisplay});
       }
     }
 
