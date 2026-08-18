@@ -35,6 +35,11 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-18] 대차 인수/대차반납 체크 시 개인사용·주유비입력 체크박스와 출퇴근사용 버튼을
+  비활성화(이미 체크·선택되어 있었다면 자동 해제)하고, 운행자명을 "롯데렌탈"로 자동 표시(원래
+  입력값은 보관). 대차 체크를 모두 해제하면 비활성화 해제 및 운행자명 원복 | 신규:
+  applyDaeChaAuxRestrictions() | 변경: toggleDaeChaPickup(), toggleDaeChaReturn()
+
   [2026-08-18] 지역본부 카드 헤더의 "N대 · 평균 가동율 X%"가 그 아래 개별 차량 카드들의 평균가동율과
   맞지 않고 비정상적으로 높게 표시되던 버그 수정(예: 카드별 0/82/18/45%인데 헤더는 89%). 원인:
   헤더 평균은 vehicleStatsOf().util.rate(=구형 calcUtilization, 최초~최종 운행일 사이 업무일수 기준)를
@@ -7411,6 +7416,7 @@ function toggleDaeChaPickup(chk, id){
   const card = document.getElementById(id);
   setDaeChaCheckboxDisabled(card?.querySelector('.tr-daecha-return-chk'), chk.checked);
   applyDaeChaActiveState(id);
+  applyDaeChaAuxRestrictions(id);
   applyDaeChaDestAutofill(id);
 }
 
@@ -7421,6 +7427,7 @@ function toggleDaeChaReturn(chk, id){
   const card = document.getElementById(id);
   setDaeChaCheckboxDisabled(card?.querySelector('.tr-daecha-pickup-chk'), chk.checked);
   applyDaeChaActiveState(id);
+  applyDaeChaAuxRestrictions(id);
   applyDaeChaDestAutofill(id);
   applyDaeChaReturnPrefill(id, chk.checked);
 }
@@ -7549,6 +7556,46 @@ function applyDaeChaActiveState(id){
       delete card.dataset.savedStart;
       delete card.dataset.savedStartAuto;
       calcRowDist(id);
+    }
+  }
+  scheduleDraft();
+}
+
+// 대차인수/대차반납 체크 시: 개인사용·주유비입력 체크박스와 출퇴근사용 버튼은 대차 운행에는
+// 해당되지 않으므로 비활성화하고(이미 체크·선택되어 있었다면 해제), 운행자명은 "롯데렌탈"로
+// 자동 표시한다(원 입력값은 보관). 대차 체크를 모두 해제하면 비활성화를 풀고 운행자명도 원복한다.
+function applyDaeChaAuxRestrictions(id){
+  const card = document.getElementById(id);
+  if(!card) return;
+  const active = isRowDaeChaActive(card);
+  const personalChk = card.querySelector('.tr-personal-chk');
+  const fuelChk = card.querySelector('.tr-fuel-chk');
+  const commuteBtns = card.querySelectorAll('.commute-btn');
+  const userInp = card.querySelector('.tr-user');
+  if(active){
+    if(personalChk && personalChk.checked){ personalChk.checked = false; togglePersonalUse(personalChk, id); }
+    card.querySelectorAll('.commute-btn.active-commute').forEach(b=>setCommuteDirection(b, id));
+    if(fuelChk && fuelChk.checked){ fuelChk.checked = false; toggleFuelField(fuelChk, id); }
+    setDaeChaCheckboxDisabled(personalChk, true);
+    setDaeChaCheckboxDisabled(fuelChk, true);
+    commuteBtns.forEach(b=>b.disabled = true);
+    if(userInp && userInp.dataset.daechaUserAutoFilled !== 'true'){
+      userInp.dataset.beforeDaechaUser = userInp.value;
+      userInp.value = '롯데렌탈';
+      userInp.dataset.daechaUserAutoFilled = 'true';
+      userInp.disabled = true;
+      userInp.classList.add('auto-filled');
+    }
+  } else {
+    setDaeChaCheckboxDisabled(personalChk, false);
+    setDaeChaCheckboxDisabled(fuelChk, false);
+    commuteBtns.forEach(b=>b.disabled = false);
+    if(userInp && userInp.dataset.daechaUserAutoFilled === 'true'){
+      userInp.disabled = false;
+      userInp.classList.remove('auto-filled');
+      userInp.value = userInp.dataset.beforeDaechaUser || '';
+      userInp.dataset.daechaUserAutoFilled = 'false';
+      delete userInp.dataset.beforeDaechaUser;
     }
   }
   scheduleDraft();
