@@ -186,6 +186,10 @@
   .ded-card .stat-cell .v{font-family:'Outfit',sans-serif; font-size:24px; color:var(--ded-beige); font-weight:500; line-height:1.2; text-align:right;}
   .ded-card .stat-cell .v-sub{font-size:14px; color:var(--ded-muted); font-weight:400;}
 
+  /* 모바일 전용 압축 요약줄 + 상세보기 토글 — 데스크탑에서는 항상 숨김(기존 4칸 통계 그대로 노출) */
+  .ded-card .card-summary-mobile{display:none;}
+  .ded-card .card-detail-toggle{display:none;}
+
   .ded-card .qr-btn{
     margin-top:26px; width:100%; padding:13px; background:transparent;
     border:1px solid var(--ded-beige); border-radius:0; color:var(--ded-beige);
@@ -329,10 +333,9 @@
     .topbar-slogan-mark{width:96px;}
     .ded-topbar .ded-wordmark{width:96px;}
     .ded-topbar .sess{
-      flex-wrap:nowrap; overflow-x:auto; justify-content:flex-start; gap:8px;
-      padding-bottom:4px; -webkit-overflow-scrolling:touch;
+      flex-wrap:wrap; justify-content:flex-start; gap:7px;
     }
-    .ded-exit{flex:0 0 auto; white-space:nowrap; font-size:12.5px; padding:9px 14px;}
+    .ded-exit{flex:0 0 auto; white-space:nowrap; font-size:11.5px; padding:8px 11px;}
 
     .ded-main{padding:26px 16px 60px;}
     .ded-main h1{font-size:19px;}
@@ -345,23 +348,41 @@
     .ded-stat-card .val{font-size:21px;}
     .ded-stat-card .val .unit{font-size:12px;}
 
-    /* ── 차량 카드: 과대 폰트 축소 + 여백 정리 ── */
-    .ded-cards{grid-template-columns:1fr; margin-bottom:28px;}
-    .ded-card{padding:22px 18px;}
-    .ded-card.active{padding-top:20px;}
-    /* 상단(역할/조직 + 차량번호/모델) 좁은 화면에서 가로 넘침 방지 — 컬럼으로 쌓아 배지가 항상 우측 정렬 유지 */
-    .ded-card .card-top{flex-direction:column; align-items:stretch; gap:8px; margin-bottom:18px;}
-    .ded-card .role{font-size:16px; margin-bottom:3px;}
-    .ded-card .org{font-size:13px;}
-    .ded-card .card-plate{width:100%; text-align:right; flex-shrink:1; min-width:0;}
-    .ded-card .plate-badge{font-size:15px; padding:6px 12px;}
-    .ded-card .model-line{font-size:13px; white-space:normal; overflow-wrap:break-word;}
-    .ded-card .contract-period{font-size:12px;}
-    .ded-card .card-stats{grid-template-columns:1fr 1fr; row-gap:16px; column-gap:12px; padding-top:16px;}
+    /* ── 차량 카드: 한눈에 보이도록 핵심 정보만 요약, 상세 통계는 탭해서 펼침 ── */
+    .ded-cards{grid-template-columns:1fr; gap:1px; margin-bottom:28px;}
+    .ded-card{padding:16px 18px;}
+    .ded-card.active{padding-top:15px;}
+    /* 상단(역할/조직 + 차량번호/모델) 좁은 화면에서 가로 넘침 방지 — 한 줄에 나란히, 배지는 항상 우측 정렬 유지 */
+    .ded-card .card-top{align-items:center; gap:8px; margin-bottom:0;}
+    .ded-card .role{font-size:15px; margin-bottom:2px; line-height:1.25;}
+    .ded-card .org{font-size:12px;}
+    .ded-card .card-plate{flex-shrink:0; min-width:0;}
+    .ded-card .plate-badge{font-size:13px; padding:5px 10px;}
+    .ded-card .model-line{font-size:11px; white-space:normal; overflow-wrap:break-word; margin-top:4px;}
+    .ded-card .contract-period{font-size:10.5px;}
+
+    /* 압축 요약줄: 이번달 주행거리 · 주유비 누계만 한 줄로, 우측에 상세보기 토글 */
+    .ded-card .card-summary-mobile{
+      display:flex; align-items:center; gap:14px; margin-top:12px; padding-top:12px;
+      border-top:1px solid var(--ded-line); font-size:12.5px; color:var(--ded-muted);
+    }
+    .ded-card .card-summary-mobile b{font-family:'Outfit',sans-serif; font-weight:500; color:var(--ded-beige); font-size:13.5px;}
+    .ded-card .card-detail-toggle{
+      display:flex; align-items:center; gap:3px; margin-left:auto; flex-shrink:0;
+      background:none; border:none; color:var(--ded-muted); font-size:12px;
+      font-family:'Pretendard',sans-serif; cursor:pointer; padding:4px 0 4px 8px;
+    }
+    .ded-card .card-detail-toggle .chev{display:inline-block; transition:transform .15s ease; font-size:10px;}
+    .ded-card.expanded .card-detail-toggle .chev{transform:rotate(180deg);}
+
+    /* 상세 통계: 기본 숨김, 상세보기 탭 시(expanded) 펼침 */
+    .ded-card .card-stats{display:none; grid-template-columns:1fr 1fr; row-gap:14px; column-gap:12px; padding-top:14px; margin-top:12px;}
+    .ded-card.expanded .card-stats{display:grid;}
     .ded-card .stat-cell .l{font-size:12px; margin-bottom:5px;}
     .ded-card .stat-cell .v{font-size:17px;}
     .ded-card .stat-cell .v-sub{font-size:11px;}
-    .ded-card .qr-btn{margin-top:18px; padding:11px; font-size:13px;}
+    .ded-card .qr-btn{display:none; margin-top:14px; padding:11px; font-size:13px;}
+    .ded-card.expanded .qr-btn{display:block;}
 
     /* ── 필터탭: 가로 스크롤 ── */
     .ded-tabs{overflow-x:auto; flex-wrap:nowrap; -webkit-overflow-scrolling:touch;}
@@ -548,6 +569,7 @@ const VEHICLES = [
 let TRIPS = [];
 
 let currentFilter = 'all';
+const dedExpandedCards = new Set(); // 모바일 카드 "상세보기" 펼침 상태(차량 key 단위) — renderCards() 재호출에도 유지
 
 // ============================================================
 // ★ Firebase 연동 (index.html과 동일한 프로젝트/인증 방식) ★
@@ -959,8 +981,9 @@ function renderCards(){
     const usageMonths = v.contractStartDate ? currentUsageMonths(v) : 0;
     const rentalTotalWithMonths = v.contractStartDate ? `${rentalTotal} <span class="v-sub">(${usageMonths}개월)</span>` : rentalTotal;
     const contractPeriod = (v.contractStartDate && v.contractEndDate) ? `${shortDate(v.contractStartDate)} ~ ${shortDate(v.contractEndDate)}` : '';
+    const isExpanded = dedExpandedCards.has(v.key);
     return `
-    <div class="ded-card ${currentFilter===v.key?'active':''}" onclick="setFilter('${v.key}')" title="클릭하여 이 차량의 운행기록만 보기">
+    <div class="ded-card ${currentFilter===v.key?'active':''} ${isExpanded?'expanded':''}" onclick="setFilter('${v.key}')" title="클릭하여 이 차량의 운행기록만 보기">
       <div class="card-top">
         <div>
           <div class="role">${v.role}</div>
@@ -971,6 +994,11 @@ function renderCards(){
           <div class="model-line">${v.modelFull || v.model}</div>
           ${contractPeriod ? `<div class="contract-period">${contractPeriod}</div>` : ''}
         </div>
+      </div>
+      <div class="card-summary-mobile">
+        <span>이번달 <b>${m.km.toLocaleString()}km</b></span>
+        <span>주유비 <b>${vFuel.toLocaleString()}원</b></span>
+        <button class="card-detail-toggle" onclick="event.stopPropagation(); toggleCardDetail('${v.key}')">상세 <span class="chev">▾</span></button>
       </div>
       <div class="card-stats">
         <div class="stat-cell"><div class="l">이번달 주행거리</div><div class="v">${m.km.toLocaleString()}km</div></div>
@@ -997,6 +1025,13 @@ function setFilter(key){
   renderCards();
   renderTabs();
   renderTrips();
+}
+
+// 모바일 카드 "상세보기" 토글 — 카드 클릭(필터 선택)과 분리된 별도 동작이라 이벤트 버블링을 막고 호출됨
+function toggleCardDetail(key){
+  if(dedExpandedCards.has(key)) dedExpandedCards.delete(key);
+  else dedExpandedCards.add(key);
+  renderCards();
 }
 
 function renderTrips(){
