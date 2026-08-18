@@ -35,6 +35,10 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-18] 롱프레스 시 텍스트 선택/콜아웃 메뉴 방지 적용(dedicated-driver-input.html에
+  이미 있던 패턴을 이식) — body에 user-select:none/-webkit-touch-callout:none, input/
+  textarea/select는 user-select:text로 예외 처리 | 변경: <style> body/input 규칙 추가
+
   [2026-08-18] 대차인수/반납 체크 표시된 행이 원 차량 가동율 계산에 포함되던 문제 수정. 대차
   기간에는 원 차량이 정비 등으로 운행 불가 상태였으므로 해당 행(인수/반납 체크 건)을 가동율
   산정 대상에서 제외(개인사용·출퇴근사용과 동일 방식). 단, 대차기간 중 별도로 제출된(인수/반납
@@ -208,16 +212,6 @@
   unresolveAccidentAsUser(), deleteBranchHistoryEntry(), deleteAccidentRecord(),
   applyTripRecordImport(), applyContractImport(), removeTripRow(), cancelAccidentReport(),
   submitDirectInput() 등 다수 함수의 confirm/alert 호출부
-  [2026-08-13] 점검요청/사고접수 완료 처리를 관리자뿐 아니라 일반 사용자(지역본부 등 현장에서
-  직접 차량을 관리하는 담당자)도 처리할 수 있도록 확장. 안내 배너("이전 종료거리" 아래) 각
-  미해결 항목 옆에 "🔧 점검·정비 완료" 버튼을 추가해, 로그인 여부와 무관하게 운행기록 입력
-  화면에서 바로 완료 처리 가능. 완료된 항목에는 "취소"(되돌리기) 링크도 함께 노출. 관리자
-  상세보기 모달이 열려있을 때만 모달도 함께 갱신하고, 일반 사용자 화면에서는 배너만 갱신해
-  의도치 않게 관리자 모달이 열리지 않도록 분리(refreshAfterResolveAction). 완료 이력의 처리자
-  구분은 currentRole 기준 관리자/사용자로 기록 | 신규: resolveAccidentAsUser(),
-  unresolveAccidentAsUser(), refreshAfterResolveAction() | 변경: renderVehicleAlertPanel()
-  항목별 idx/accId 추적 및 버튼 렌더링, resolveMaintenance()/unresolveMaintenance() 컨텍스트
-  인지형 갱신으로 수정
 -->
 
 <head>
@@ -261,6 +255,15 @@
   html{height:100%;}
   html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:'Paperlogy',sans-serif;font-size:16px;-webkit-font-smoothing:antialiased;}
   body{min-height:100%;overscroll-behavior:none;}
+  /* 롱프레스 시 텍스트 선택/콜아웃 메뉴 방지 (입력창 등은 아래에서 예외 처리) */
+  body{
+    -webkit-user-select:none; user-select:none;
+    -webkit-touch-callout:none;
+  }
+  input, textarea, select{
+    -webkit-user-select:text; user-select:text;
+    -webkit-touch-callout:default;
+  }
   h1,h2,h3{font-family:'Paperlogy',sans-serif;margin:0;letter-spacing:-0.01em;}
   .mono{font-family:'Paperlogy',monospace;}
   .muted{color:var(--muted);}
