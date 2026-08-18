@@ -35,6 +35,15 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-18] 차량카드·차량상세 모달 상단 "가동율"을 "평균가동율"로 명칭 변경하고 계산 방식 교체.
+  기존 calcUtilization()(최초~최종 운행일 사이 업무일 기준)은 운행기록이 짧은 기간에 몰려있으면
+  실제보다 훨씬 높게(최악 100%) 표시되는 문제가 있었음(예: 8월 들어 1건만 입력된 차량이 100%로
+  표시). 월별 실제 업무일수 대비 비율을 월 단위로 평균하는 방식(ytdAvgUtilRate 신규)으로 교체하되,
+  SYSTEM_LIVE_YM(2026-08, 실사용 개시월) 이후 달은 무운행이어도 "데이터없음"으로 제외하지 않고
+  0%로 반영해 저조/미운행 신호가 가려지지 않게 하고, 진행 중인 이번 달은 그 달 전체 업무일이 아닌
+  "오늘까지 경과한 업무일"을 분모로 사용 | 신규: ytdAvgUtilRate(), SYSTEM_LIVE_YM | 변경:
+  vcardHtml(), openVehicle() 모달 상단 통계부
+
   [2026-08-18] Google Cloud Vision OCR 월간 무료 한도(1,000건) 소프트 캡 추가 — 개인 명의로
   결제계정이 걸려있어 "혹시라도 1원이라도" 과금되는 상황을 막기 위함. Vision API 호출 직전에
   이번 달 누적 호출 건수를 Firebase(system-meta/ocrUsage/{yyyy-mm})에서 확인 후 1건씩
@@ -3222,6 +3231,42 @@ function plateAnnualAvg(plate,year){
   const validMonths=monthlyUtilForPlate(plate,year).filter(m=>!m.beforeService&&!m.futureMonth&&!m.noData);
   return hasAnyTrip&&validMonths.length?validMonths.reduce((s,m)=>s+m.rate,0)/validMonths.length:0;
 }
+// 실사용(QR입력) 개시월 — 이 달 이전은 시스템 미사용으로 간주해 무운행 달을 "데이터없음"으로 제외한다
+// (수기 운행일지 업로드분은 예외적으로 포함). 이 달 이후는 무운행이어도 0%로 반영해 저조/미운행
+// 신호가 평균에서 가려지지 않게 한다.
+const SYSTEM_LIVE_YM = '2026-08';
+// 2026-08-18: 차량카드·차량상세 모달 상단 "평균가동율" 전용 계산.
+// 기존 calcUtilization()(최초~최종 운행일 사이 업무일 기준)은 운행기록이 적은 기간에 몰려있으면
+// 실제보다 훨씬 높게(최악 100%) 표시되는 문제가 있었음(예: 8월 들어 1건만 입력된 차량이 100%로 표시).
+// 월별표/연평균(plateAnnualAvg)과 같이 "그 달 실제 업무일수 대비 비율을 월 단위로 평균"하는 방식으로
+// 통일하되, plateAnnualAvg와 달리 SYSTEM_LIVE_YM 이후 달은 무운행이어도 "데이터없음"으로 제외하지
+// 않고 0%로 반영하며, 진행 중인 이번 달은 그 달 전체 업무일이 아니라 "오늘까지 경과한 업무일"을
+// 분모로 사용한다(아직 오지 않은 영업일 때문에 억울하게 낮아지는 것을 방지).
+function ytdAvgUtilRate(plate){
+  const v=data.vehicles[plate]||{};
+  const trips=v.trips||[];
+  const allDates=trips.filter(t=>!t.isCommute&&!t.isPersonal).flatMap(t=>t.usageDates||[]);
+  const svcStart=v.serviceStartDate||null;
+  const todayIso=todayLocalISO();
+  const year=Number(todayIso.slice(0,4));
+  const curM=Number(todayIso.slice(5,7));
+  const rates=[];
+  for(let m=1;m<=curM;m++){
+    const ym=`${year}-${String(m).padStart(2,'0')}`;
+    const{startIso:monStart,endIso:monEnd}=monthRangeIso(year,m);
+    if(svcStart&&monEnd<svcStart) continue; // 차량개시일 이전 월 제외
+    const manual=(v.manualMonthly&&v.manualMonthly[year]&&v.manualMonthly[year][m])||null;
+    if(manual){ rates.push(Number(manual.rate)||0); continue; }
+    if(ym<SYSTEM_LIVE_YM) continue; // 실사용 개시 이전 & 수기기록 없음 → 데이터없음으로 제외
+    const effStart=(svcStart&&svcStart>monStart)?svcStart:monStart;
+    const effEnd=(ym===`${year}-${String(curM).padStart(2,'0')}`)?todayIso:monEnd;
+    if(effEnd<effStart) continue; // 개시일이 오늘보다 나중인 경우 등 방어
+    const total=countBizDays(effStart,effEnd);
+    const used=new Set(allDates.filter(d=>d>=effStart&&d<=effEnd&&isBizDay(new Date(d+'T00:00:00')))).size;
+    rates.push(total>0?Math.min(100,(used/total)*100):0);
+  }
+  return rates.length?rates.reduce((s,r)=>s+r,0)/rates.length:null; // null: 아직 표시할 데이터 자체가 없음
+}
 // 2026-08-12: "1월 시작거리(수기)"가 입력된 차량에 한해, 1~7월 수기기록 거리 합계를 더한
 // 예상 오도미터가 시스템 실제 운행기록(8월 이후 등 수기기록 이후 최초 건)의 시작거리와
 // 끊김 없이 이어지는지 대조한다. 시작거리 미입력 차량은 null(대조 UI 자체를 숨김).
@@ -4480,7 +4525,8 @@ function renderCommuteUseList(){
 }
 
 function vcardHtml(p){
-  const{v,trips,totalDist,totalFuel,issues,lastDate,util,idleDays}=vehicleStatsOf(p,true);
+  const{v,trips,totalDist,totalFuel,issues,lastDate,idleDays}=vehicleStatsOf(p,true);
+  const avgRate=ytdAvgUtilRate(p);
   const inactive=v.active===false;
   const lastTrip=trips.length?trips.slice().sort(tripChronoCompare)[trips.length-1]:null;
   const lastDriverName=lastTrip?(lastTrip.user||'').trim():'';
@@ -4515,7 +4561,7 @@ function vcardHtml(p){
       <div>주행거리<b>${totalDist.toLocaleString()}km</b></div>
       <div>주유비<b>${totalFuel.toLocaleString()}원</b></div>
       <div>건수<b>${trips.length}</b></div>
-      <div>가동율<b style="color:${inactive?'var(--muted)':utilColor(util.rate)};">${inactive?'–':util.rate.toFixed(0)+'%'}</b></div>
+      <div>평균가동율<b style="color:${(inactive||avgRate===null)?'var(--muted)':utilColor(avgRate)};">${(inactive||avgRate===null)?'–':avgRate.toFixed(0)+'%'}</b></div>
     </div>${badge}</div></div>`;
 }
 
@@ -4626,7 +4672,7 @@ function openVehicle(plate){
     return `${line}<text x="${x}" y="${h-4}" font-size="7" fill="var(--ink)" text-anchor="start">${mi+1}월</text>`;
   }).join('');
   const sparkDotsSvg=distances.map((d,i)=>`<circle cx="${xs[i]}" cy="${yOf(d)}" r="2.5" fill="var(--accent)"/>`).join('');
-  const util={rate:plateAnnualAvg(plate,monthlyYear||new Date().getFullYear())};
+  const avgRate=ytdAvgUtilRate(plate);
   const allBranches=Array.from(new Set(FLEET_REGISTRY.map(r=>r.branch).concat(Object.values(data.vehicles).map(x=>x.branch||'')))).filter(Boolean).sort(compareByOrg);
   document.getElementById('modalBody').innerHTML=`
     <div class="modal-head">
@@ -4680,7 +4726,7 @@ function openVehicle(plate){
       <div>총 주행거리<b>${totalDist.toLocaleString()} km</b></div>
       <div>총 주유비<b>${totalFuel.toLocaleString()} 원</b></div>
       <div>운행 건수<b>${trips.length}</b></div>
-      <div>가동율<b style="color:${utilColor(util.rate)};">${util.rate.toFixed(0)}%</b></div>
+      <div>평균가동율<b style="color:${avgRate===null?'var(--muted)':utilColor(avgRate)};">${avgRate===null?'–':avgRate.toFixed(0)+'%'}</b></div>
       ${v.fee!=null?`<div>월 대여료<b>${Number(v.fee).toLocaleString()} 원</b></div>`:''}
       ${v.contractStartDate?`<div>계약기간<b>${shortYMD(v.contractStartDate)} ~ ${shortYMD(v.contractEndDate)||''}</b></div>`:''}
     </div>
