@@ -35,6 +35,16 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-18] Google Cloud Vision OCR 월간 무료 한도(1,000건) 소프트 캡 추가 — 개인 명의로
+  결제계정이 걸려있어 "혹시라도 1원이라도" 과금되는 상황을 막기 위함. Vision API 호출 직전에
+  이번 달 누적 호출 건수를 Firebase(system-meta/ocrUsage/{yyyy-mm})에서 확인 후 1건씩
+  증가시켜 저장하고, 900건 도달 시 관리자에게 EmailJS로 1회 경고 이메일 발송, 1,000건 도달
+  시 그 이후 호출은 API 자체를 건너뛰어 무료 한도 초과(과금)를 원천 차단. 한도 도달 후에도
+  영수증 첨부(업로드)는 정상 동작하며 금액/일자 자동인식만 비활성화되어 기존 "OCR 인식 실패"
+  흐름(담당자 수기 확인)으로 자연스럽게 전환됨. Google Cloud Console의 API 할당량 하드캡을
+  최종 방어선으로 병행 설정 권장 | 신규: ocrMonthKey(), checkAndIncrementOcrUsage(),
+  notifyOcrUsageWarning() | 변경: callVisionOcr()
+
   [2026-08-18] "영수증 첨부해서 제출했는데 대기중으로 표시된다"는 재현 테스트 보고에 따라
   doSubmit() 영수증 업로드 로직 보강. ① 일시적 통신 오류 대응을 위해 1회 재시도 추가.
   ② "나중에 첨부"가 아닌데도 실제 File 참조가 비어있는 경우(모바일 카메라 앱 전환 중
@@ -1663,6 +1673,21 @@ const FIREBASE_STORAGE_BUCKET = "ksa-vehicle-log.firebasestorage.app"; // 콘솔
 const RECEIPT_DATE_TOLERANCE_DAYS = 10; // 영수증 일자와 운행일 허용 오차(±일)
 
 // ============================================================
+// ★ Vision API 월간 무료 한도 소프트 캡 (2026-08-18 추가) ★
+// ------------------------------------------------------------
+// Google Cloud Vision은 "월 1,000건 무료"이지만, 사용량과 무관하게 결제계정(Blaze)이
+// 활성화되어 있어야만 호출 가능한 종량제 API입니다. 만에 하나 사용량이 무료 한도를
+// 넘어가면 실제 청구로 이어질 수 있으므로, 클라이언트에서 이번 달 누적 호출 건수를
+// Firebase에 기록해두었다가 한도(OCR_MONTHLY_SOFT_LIMIT) 도달 시 더 이상 API를
+// 호출하지 않도록 선제 차단합니다. (Google Cloud Console의 API 할당량 설정이 최종
+// 방어선이며, 이 카운터는 그 이전에 관리자에게 조기 경고를 주기 위한 1차 방어선입니다.)
+// 한도에 도달해도 영수증 첨부(업로드) 자체는 계속 가능하며, 자동 금액/일자 인식만
+// 비활성화되고 담당자가 수기로 확인하는 기존 "인식 실패" 흐름으로 자연스럽게 전환됩니다.
+const OCR_MONTHLY_SOFT_LIMIT = 1000;   // Vision API 무료 등급 월간 한도와 동일하게 설정
+const OCR_MONTHLY_WARN_THRESHOLD = 900; // 이 건수 도달 시 관리자에게 1회 경고 이메일 발송
+const OCR_USAGE_NODE = 'system-meta/ocrUsage'; // Firebase 경로: {yyyy-mm: {count, warned}}
+
+// ============================================================
 // ★ 개인사용 증빙/주유 모니터링 (관리자 대시보드) 기준값 ★
 // FUEL_UNDERPAID_TOLERANCE_WON : 과소주유 판정 시 허용 오차. 예상 최소 유류비(estimateMinFuelCost)
 //                                보다 이 금액 이내로 적게 낸 경우는 오차 범위로 보고 "적정"으로 인정.
@@ -1787,6 +1812,68 @@ function normalizeReceiptOrientation(file){
   });
 }
 
+// 이번 달을 "YYYY-MM" 형식(로컬/KST 기준)으로 반환 — localDateKey()와 동일한 방식으로
+// UTC 기준 toISOString()의 자정 전후 하루 밀림 문제를 피합니다.
+function ocrMonthKey(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+// Vision API 호출 직전에 호출: 이번 달 누적 건수를 확인하고, 한도 미만이면 카운트를
+// 1 증가시켜 저장합니다. { allowed, count } 반환 — allowed=false면 API를 호출하지 않습니다.
+// 읽기→쓰기 사이 미세한 동시성 오차는 있을 수 있으나(여러 사용자가 같은 순간 첨부하는
+// 경우), 이 카운터는 조기 경고용 1차 방어선이고 Cloud Console 할당량이 최종 방어선이므로
+// 카운터 자체의 완벽한 원자성보다는 "호출 전 항상 확인한다"는 동작이 더 중요합니다.
+async function checkAndIncrementOcrUsage(){
+  const monthKey = ocrMonthKey();
+  const path = `${OCR_USAGE_NODE}/${monthKey}`;
+  let rec;
+  try{
+    rec = await fbGet(path);
+  }catch(e){
+    console.warn('[OCR 사용량] 카운터 조회 실패 — 안전하게 OCR 호출은 허용합니다.', e);
+    return {allowed:true, count:null};
+  }
+  const count = (rec && typeof rec.count==='number') ? rec.count : 0;
+  if(count >= OCR_MONTHLY_SOFT_LIMIT){
+    console.warn(`[OCR 사용량] 이번 달(${monthKey}) 소프트 캡(${OCR_MONTHLY_SOFT_LIMIT}건) 도달 — OCR 호출을 건너뜁니다.`);
+    return {allowed:false, count};
+  }
+  const newCount = count + 1;
+  const alreadyWarned = !!(rec && rec.warned);
+  const shouldWarnNow = !alreadyWarned && newCount>=OCR_MONTHLY_WARN_THRESHOLD;
+  try{
+    await fbSet(path, { count:newCount, warned: alreadyWarned || shouldWarnNow });
+  }catch(e){
+    console.warn('[OCR 사용량] 카운터 저장 실패 — 이번 호출은 계속 진행합니다.', e);
+    return {allowed:true, count:newCount};
+  }
+  if(shouldWarnNow) notifyOcrUsageWarning(monthKey, newCount).catch(()=>{});
+  return {allowed:true, count:newCount};
+}
+
+// OCR 월간 사용량이 경고 임계치(기본 900건)에 처음 도달했을 때만 관리자에게 1회 발송합니다.
+// 기존 관리자 알림(2차 인증 OTP 등)과 동일한 EmailJS 템플릿/필드를 재사용합니다.
+async function notifyOcrUsageWarning(monthKey, count){
+  if(!window.emailjs || !EMAILJS_PUBLIC_KEY || EMAILJS_PUBLIC_KEY.startsWith('YOUR_')){
+    console.warn('[OCR 사용량 경고] EmailJS 설정이 완료되지 않아 이메일을 발송하지 않았습니다.');
+    return;
+  }
+  try{
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: ADMIN_EMAIL,
+      plate: '-',
+      branch: '영수증 OCR 월간 사용량 경고',
+      submitter: '(시스템)',
+      status: `${monthKey} 누적 ${count}건 / 무료한도 ${OCR_MONTHLY_SOFT_LIMIT}건`,
+      detail: `Google Cloud Vision OCR 호출이 이번 달 무료 등급 한도(${OCR_MONTHLY_SOFT_LIMIT}건)에 근접했습니다.\n${OCR_MONTHLY_SOFT_LIMIT}건에 도달하면 시스템이 자동으로 OCR 호출을 중단해 과금을 차단합니다. 이 경우에도 영수증 첨부 자체는 계속 가능하며, 금액/일자 자동인식만 비활성화되어 담당자가 수기로 확인하는 흐름으로 전환됩니다.`,
+      submitted_at: new Date().toLocaleString('ko-KR')
+    });
+  }catch(e){
+    console.error('[OCR 사용량 경고] 이메일 발송 실패:', e);
+  }
+}
+
 // Google Cloud Vision TEXT_DETECTION 호출 → {text, debug} 반환.
 // text: 인식된 전체 텍스트(실패 시 null). debug: 실패 원인 진단용 문자열(성공 시 null) —
 // 2026-08-11 OCR 인식률 이슈 진단을 위해 임시로 추가, 원인 확인 후 제거 예정.
@@ -1794,6 +1881,10 @@ async function callVisionOcr(file){
   if(!GOOGLE_VISION_API_KEY || GOOGLE_VISION_API_KEY.includes('여기에')){
     console.warn('[영수증 OCR] GOOGLE_VISION_API_KEY가 설정되지 않았습니다.');
     return {text:null, debug:'API 키 미설정'};
+  }
+  const usage = await checkAndIncrementOcrUsage();
+  if(!usage.allowed){
+    return {text:null, debug:`이번 달 OCR 무료 한도(${OCR_MONTHLY_SOFT_LIMIT}건) 도달로 자동 중단됨(과금 방지) — 영수증은 정상 첨부되며, 금액/일자는 담당자가 확인해주세요.`};
   }
   try{
     const base64 = await fileToBase64(file);
