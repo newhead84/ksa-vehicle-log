@@ -43,11 +43,24 @@ jobs:
             for YEAR in "$THIS_YEAR" "$NEXT_YEAR"; do
               for MONTH in 01 02 03 04 05 06 07 08 09 10 11 12; do
                 echo "[data.go.kr] Fetching ${YEAR}-${MONTH}..."
-                RES=$(curl -sf "http://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo?serviceKey=${DATA_GO_KR_API_KEY}&solYear=${YEAR}&solMonth=${MONTH}&_type=json&numOfRows=50") || { echo "data.go.kr 호출 실패(${YEAR}-${MONTH})"; PRIMARY_OK=false; break 2; }
+                # serviceKey는 URL 특수문자(+,/,= 등) 포함 가능성이 있어 반드시 percent-encode해서 전달
+                ENCODED_KEY=$(python3 -c "import urllib.parse,os,sys; print(urllib.parse.quote(os.environ['DATA_GO_KR_API_KEY'], safe=''))")
+                # -f 제거(에러여도 본문을 버리지 않고 확인하기 위함) + -L로 https 리다이렉트 추적 + HTTP status 별도 캡처
+                set +e
+                HTTP_STATUS=$(curl -sL -o /tmp/dgk_res.json -w "%{http_code}" "https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo?serviceKey=${ENCODED_KEY}&solYear=${YEAR}&solMonth=${MONTH}&_type=json&numOfRows=50")
+                CURL_EXIT=$?
+                set -e
+                RES=$(cat /tmp/dgk_res.json 2>/dev/null || echo "")
+
+                if [ "$CURL_EXIT" -ne 0 ] || [ "$HTTP_STATUS" -ge 400 ]; then
+                  echo "data.go.kr 호출 실패(${YEAR}-${MONTH}), curl_exit=${CURL_EXIT}, http_status=${HTTP_STATUS}. 응답 원문: $(echo "$RES" | head -c 500)"
+                  PRIMARY_OK=false
+                  break 2
+                fi
 
                 RESULT_CODE=$(echo "$RES" | jq -r '.response.header.resultCode // "ERR"' 2>/dev/null || echo "ERR")
                 if [ "$RESULT_CODE" != "00" ]; then
-                  echo "data.go.kr 응답 오류(${YEAR}-${MONTH}), resultCode=${RESULT_CODE}. 응답 원문: $(echo "$RES" | head -c 300)"
+                  echo "data.go.kr 응답 오류(${YEAR}-${MONTH}), http_status=${HTTP_STATUS}, resultCode=${RESULT_CODE}. 응답 원문: $(echo "$RES" | head -c 500)"
                   PRIMARY_OK=false
                   break 2
                 fi
