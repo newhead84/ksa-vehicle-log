@@ -1,0 +1,149 @@
+name: Update KR Holidays (data.go.kr 특일정보 + Nager.Date 폴백)
+
+# 주 소스: 공공데이터포털(data.go.kr) 한국천문연구원_특일 정보 서비스의
+# getRestDeInfo(관공서 공휴일에 관한 정보) — 실제 쉬는 날 기준이라 대체공휴일·임시공휴일까지 반영됨.
+# 보조/폴백 소스: Nager.Date(date.nager.at, 무료·API키 불필요) — data.go.kr 호출이
+# 인증오류/네트워크 오류 등으로 실패하거나 응답이 비어있는 경우에만 사용.
+#
+# 두 소스 모두 실패해도 index.html의 수기 목록(KR_HOLIDAYS)이 폴백으로 계속 동작하므로
+# 이 워크플로우 실패가 즉시 서비스 장애로 이어지지는 않는다.
+#
+# 필요 GitHub Secret: DATA_GO_KR_API_KEY (공공데이터포털에서 발급받은 서비스키, Decoding 값 그대로 등록)
+#                      FIREBASE_URL (기존과 동일)
+#
+# 주의(한계): data.go.kr도 선거일 등 정부가 그때그때 개별 지정하는 임시공휴일은
+# 등록이 늦을 수 있다. 그런 예외 건은 index.html의 KR_HOLIDAYS(수기 목록)에 계속 수동으로 추가할 것.
+
+on:
+  schedule:
+    # 매일 05:00 KST(=전날 20:00 UTC) 실행. 실행 비용이 낮은 작업이라 매일 실행해도 무방.
+    - cron: '0 20 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  update-kr-holidays:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch KR public holidays (data.go.kr 우선, 실패시 Nager.Date 폴백)
+        id: fetch
+        env:
+          DATA_GO_KR_API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
+        run: |
+          set -e
+          THIS_YEAR=$(TZ='Asia/Seoul' date +"%Y")
+          NEXT_YEAR=$((THIS_YEAR + 1))
+
+          PRIMARY_OK=true
+          ALL_ITEMS="[]"
+
+          if [ -z "${DATA_GO_KR_API_KEY:-}" ]; then
+            echo "DATA_GO_KR_API_KEY Secret이 설정되어 있지 않습니다. data.go.kr 호출을 건너뛰고 Nager.Date로 폴백합니다."
+            PRIMARY_OK=false
+          else
+            for YEAR in "$THIS_YEAR" "$NEXT_YEAR"; do
+              for MONTH in 01 02 03 04 05 06 07 08 09 10 11 12; do
+                echo "[data.go.kr] Fetching ${YEAR}-${MONTH}..."
+                # serviceKey는 URL 특수문자(+,/,= 등) 포함 가능성이 있어 반드시 percent-encode해서 전달
+                ENCODED_KEY=$(python3 -c "import urllib.parse,os,sys; print(urllib.parse.quote(os.environ['DATA_GO_KR_API_KEY'], safe=''))")
+                # -f 제거(에러여도 본문을 버리지 않고 확인하기 위함) + -L로 https 리다이렉트 추적 + HTTP status 별도 캡처
+                set +e
+                HTTP_STATUS=$(curl -sL -o /tmp/dgk_res.json -w "%{http_code}" "https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo?serviceKey=${ENCODED_KEY}&solYear=${YEAR}&solMonth=${MONTH}&_type=json&numOfRows=50")
+                CURL_EXIT=$?
+                set -e
+                RES=$(cat /tmp/dgk_res.json 2>/dev/null || echo "")
+
+                if [ "$CURL_EXIT" -ne 0 ] || [ "$HTTP_STATUS" -ge 400 ]; then
+                  echo "data.go.kr 호출 실패(${YEAR}-${MONTH}), curl_exit=${CURL_EXIT}, http_status=${HTTP_STATUS}. 응답 원문: $(echo "$RES" | head -c 500)"
+                  PRIMARY_OK=false
+                  break 2
+                fi
+
+                RESULT_CODE=$(echo "$RES" | jq -r '.response.header.resultCode // "ERR"' 2>/dev/null || echo "ERR")
+                if [ "$RESULT_CODE" != "00" ]; then
+                  echo "data.go.kr 응답 오류(${YEAR}-${MONTH}), http_status=${HTTP_STATUS}, resultCode=${RESULT_CODE}. 응답 원문: $(echo "$RES" | head -c 500)"
+                  PRIMARY_OK=false
+                  break 2
+                fi
+
+                ITEMS=$(echo "$RES" | jq -c '(.response.body.items.item // []) | if type=="array" then . else [.] end')
+                ALL_ITEMS=$(jq -c -s '.[0] + .[1]' <(echo "$ALL_ITEMS") <(echo "$ITEMS"))
+              done
+            done
+          fi
+
+          if [ "$PRIMARY_OK" = true ]; then
+            COUNT=$(echo "$ALL_ITEMS" | jq 'length')
+            if [ "$COUNT" -eq 0 ]; then
+              echo "data.go.kr 응답은 성공했지만 항목이 0건입니다. 안전을 위해 Nager.Date로 폴백합니다."
+              PRIMARY_OK=false
+            fi
+          fi
+
+          if [ "$PRIMARY_OK" = true ]; then
+            echo "data.go.kr 특일정보를 주 소스로 사용합니다. (총 ${COUNT}건 중 공휴일만 필터링)"
+            BODY=$(echo "$ALL_ITEMS" | jq '
+              map(select(.isHoliday=="Y"))
+              | map({(( .locdate|tostring|.[0:4]+"-"+.[4:6]+"-"+.[6:8] )): .dateName})
+              | add // {}
+            ')
+            SOURCE="data.go.kr"
+          else
+            echo "Nager.Date로 폴백합니다."
+            RES_THIS=$(curl -sf "https://date.nager.at/api/v3/PublicHolidays/${THIS_YEAR}/KR")
+            RES_NEXT=$(curl -sf "https://date.nager.at/api/v3/PublicHolidays/${NEXT_YEAR}/KR" || echo "[]")
+            BODY=$(jq -s '
+              (.[0] + .[1])
+              | map({(.date): (.localName // .name)})
+              | add
+            ' <(echo "$RES_THIS") <(echo "$RES_NEXT"))
+            SOURCE="Nager.Date (fallback)"
+          fi
+
+          if [ -z "$BODY" ] || [ "$BODY" = "null" ]; then
+            echo "두 소스 모두에서 공휴일 데이터를 만들지 못했습니다."
+            exit 1
+          fi
+
+          echo "사용된 소스: ${SOURCE}"
+          echo "Merged holidays: $BODY"
+          echo "body<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$BODY" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "source=${SOURCE}" >> "$GITHUB_OUTPUT"
+
+      - name: Write to Firebase Realtime Database
+        env:
+          FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
+          BODY: ${{ steps.fetch.outputs.body }}
+        run: |
+          set -e
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X PUT "${FIREBASE_URL}/kr-holidays-remote.json" \
+            -H "Content-Type: application/json" \
+            -d "$BODY")
+
+          echo "HTTP status: $HTTP_STATUS"
+          echo "Firebase response body:"
+          cat response.json
+
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "Firebase write failed with HTTP $HTTP_STATUS"
+            exit 1
+          fi
+
+          if grep -q '"error"' response.json; then
+            echo "Firebase returned an error (likely a security rules / permission issue)"
+            exit 1
+          fi
+
+      - name: Verify the value was actually written
+        env:
+          FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
+        run: |
+          set -e
+          RESULT=$(curl -s "${FIREBASE_URL}/kr-holidays-remote.json")
+          echo "사용된 소스: ${{ steps.fetch.outputs.source }}"
+          echo "Current kr-holidays-remote value (truncated): $(echo "$RESULT" | head -c 300)"
+          if [ "$RESULT" = "null" ]; then
+            echo "kr-holidays-remote is still null after write - check database rules"
+            exit 1
+          fi
