@@ -659,6 +659,7 @@ const VEHICLES = [
 
 // Firebase에서 불러온 실제 운행기록 (평탄화된 배열, 화면표시용 필드로 매핑됨)
 let TRIPS = [];
+let VACATION_SCHEDULE = {}; // {vehicleKey: {'YYYY-MM-DD': {type:'full'|'am'|'pm', driver, updatedAt}}} — 수행기사 입력페이지의 사전 등록형 휴가 캘린더 데이터
 
 let currentFilter = 'all';
 let currentDedView = 'trips'; // 'trips' | 'workhist' — 상단 뷰 전환 탭 상태
@@ -880,6 +881,7 @@ async function loadTripsFromFirebase(){
     const vehNode = raw && raw[v.plate];
     const trips = Array.isArray(vehNode?.trips) ? vehNode.trips.filter(t=>t)
                 : (vehNode?.trips && typeof vehNode.trips==='object' ? Object.values(vehNode.trips) : []);
+    VACATION_SCHEDULE[v.key] = (vehNode && vehNode.vacationSchedule && typeof vehNode.vacationSchedule==='object') ? vehNode.vacationSchedule : {};
     trips.forEach((t,i)=>{
       flat.push({
         v: v.key,
@@ -1754,12 +1756,15 @@ function renderWorkHistory(){
     const iso = `${whYear}-${String(whMonth).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     const trips = dayMap[iso] || [];
     const isToday = iso === todayIso;
-    const isVacation = trips.some(t => !!(t.raw && t.raw.isVacation));
+    // 사전 등록형 휴가 캘린더(신규)를 우선 확인하고, 없으면 과거 데이터 호환을 위해 운행기록의 isVacation 플래그도 확인
+    const vacRec = (VACATION_SCHEDULE[whVehicleKey] || {})[iso];
+    const vacLabel = vacRec ? ({full:'연차', am:'반차(오전)', pm:'반차(오후)'}[vacRec.type] || '휴가') : null;
+    const isVacation = !!vacRec || trips.some(t => !!(t.raw && t.raw.isVacation));
     let inner = `<div class="dnum">${day}</div>`;
 
     if(isVacation){
       vacationDays++;
-      inner += `<div class="vac-badge">휴가</div>`;
+      inner += `<div class="vac-badge">${vacLabel || '휴가'}</div>`;
     } else if(trips.length){
       // 근로시작~종료가 기록된(회장차 수행기사) 항목을 우선 표시
       const timedTrip = trips.find(t => t.raw && t.raw.workStart && t.raw.workEnd);
@@ -1799,12 +1804,13 @@ function exportWorkHistoryExcel(){
   for(let day=1; day<=daysInMonth; day++){
     const iso = `${whYear}-${String(whMonth).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     const trips = dayMap[iso] || [];
-    const isVacation = trips.some(t => !!(t.raw && t.raw.isVacation));
+    const vacRec = (VACATION_SCHEDULE[whVehicleKey] || {})[iso];
+    const isVacation = !!vacRec || trips.some(t => !!(t.raw && t.raw.isVacation));
     const timedTrip = trips.find(t => t.raw && t.raw.workStart && t.raw.workEnd);
     const weekday = weekdayLabels[new Date(iso+'T00:00:00').getDay()];
     let workStart='', workEnd='', workMinsLabel='', nightMinsLabel='', note='';
     if(isVacation){
-      note = '휴가';
+      note = vacRec ? ({full:'연차', am:'반차(오전)', pm:'반차(오후)'}[vacRec.type] || '휴가') : '휴가';
     } else if(timedTrip){
       const raw = timedTrip.raw;
       workStart = raw.workStart; workEnd = raw.workEnd;
