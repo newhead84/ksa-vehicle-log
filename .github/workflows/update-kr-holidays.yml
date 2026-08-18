@@ -65,7 +65,13 @@ jobs:
                   break 2
                 fi
 
-                ITEMS=$(echo "$RES" | jq -c '(.response.body.items.item // []) | if type=="array" then . else [.] end')
+                # 해당 월 공휴일이 0건이면 data.go.kr이 .response.body.items를 객체가 아닌 빈 문자열("")로 반환하는 경우가 있어,
+                # items 자체가 object인지 먼저 확인한 뒤에만 .item에 접근하도록 방어 (jq: "Cannot index string with string" 방지)
+                ITEMS=$(echo "$RES" | jq -c '
+                  (.response.body.items // {}) as $items
+                  | ($items | if type=="object" then (.item // []) else [] end)
+                  | if type=="array" then . else [.] end
+                ')
                 ALL_ITEMS=$(jq -c -s '.[0] + .[1]' <(echo "$ALL_ITEMS") <(echo "$ITEMS"))
               done
             done
