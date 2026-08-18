@@ -35,6 +35,12 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-18] 대차인수/반납 체크 표시된 행이 원 차량 가동율 계산에 포함되던 문제 수정. 대차
+  기간에는 원 차량이 정비 등으로 운행 불가 상태였으므로 해당 행(인수/반납 체크 건)을 가동율
+  산정 대상에서 제외(개인사용·출퇴근사용과 동일 방식). 단, 대차기간 중 별도로 제출된(인수/반납
+  체크가 없는) 운행기록은 정상 운행으로 간주해 계속 포함 | 변경: calcUtilization(),
+  monthlyUtilForPlate(), ytdAvgUtilRate(), renderRegionSummary() tripsByBranch 집계
+
   [2026-08-18] 대차 인수/대차반납 체크 시 개인사용·주유비입력 체크박스와 출퇴근사용 버튼을
   비활성화(이미 체크·선택되어 있었다면 자동 해제)하고, 운행자명을 "롯데렌탈"로 자동 표시(원래
   입력값은 보관). 대차 체크를 모두 해제하면 비활성화 해제 및 운행자명 원복 | 신규:
@@ -3163,8 +3169,9 @@ function resolveBatchYears(rows,anchorDate,forcedYear){
 // 가동율 계산
 // ============================================================
 function calcUtilization(trips){
-  // 출퇴근사용(단신부임자 급여공제)·개인사용(주말·공휴일, 인접 업무일 포함) 건은 가동율 계산에서 제외
-  const all=(trips||[]).filter(t=>!t.isCommute&&!t.isPersonal).flatMap(t=>t.usageDates||[]);
+  // 출퇴근사용(단신부임자 급여공제)·개인사용(주말·공휴일, 인접 업무일 포함)·대차인수/반납 체크 건은 가동율 계산에서 제외
+  // (대차인수/반납 체크가 없는 대차기간 중 별도 운행기록은 정상 운행으로 간주해 포함)
+  const all=(trips||[]).filter(t=>!t.isCommute&&!t.isPersonal&&!t.isDaeChaPickup&&!t.isDaeChaReturn).flatMap(t=>t.usageDates||[]);
   if(all.length===0) return{opDays:0,spanDays:0,rate:0};
   const bizUsed=new Set(all.filter(ds=>isBizDay(new Date(ds+'T00:00:00'))));
   const sorted=all.slice().sort();
@@ -3199,7 +3206,8 @@ function monthlyAvgRateFromDates(dateList){
 function monthlyUtilForPlate(plate,year){
   const v=data.vehicles[plate]||{};
   const trips=v.trips||[];
-  const allDates=trips.filter(t=>!t.isCommute&&!t.isPersonal).flatMap(t=>t.usageDates||[]);
+  // 가동율 산정용 날짜: 출퇴근·개인사용·대차인수/반납 체크 건 제외(대차기간 중 별도 운행기록은 포함)
+  const allDates=trips.filter(t=>!t.isCommute&&!t.isPersonal&&!t.isDaeChaPickup&&!t.isDaeChaReturn).flatMap(t=>t.usageDates||[]);
   const manual=(v.manualMonthly&&v.manualMonthly[year])||{};
   const svcStart=v.serviceStartDate||null; // 차량개시일: 설정 시 이전 월은 제외, 개시월은 개시일부터의 업무일만 반영
   const now=new Date();
@@ -3265,7 +3273,8 @@ const SYSTEM_LIVE_YM = '2026-08';
 function ytdAvgUtilRate(plate){
   const v=data.vehicles[plate]||{};
   const trips=v.trips||[];
-  const allDates=trips.filter(t=>!t.isCommute&&!t.isPersonal).flatMap(t=>t.usageDates||[]);
+  // 출퇴근·개인사용·대차인수/반납 체크 건 제외(대차기간 중 별도 운행기록은 포함)
+  const allDates=trips.filter(t=>!t.isCommute&&!t.isPersonal&&!t.isDaeChaPickup&&!t.isDaeChaReturn).flatMap(t=>t.usageDates||[]);
   const svcStart=v.serviceStartDate||null;
   const todayIso=todayLocalISO();
   const year=Number(todayIso.slice(0,4));
@@ -4222,10 +4231,11 @@ function renderRegionSummary(){
     contractByBranch[b].periods[key].count++;
   });
   // 운행통계: branchAtTime 기준 (당시 소속)
-  // 개인사용(주말·공휴일)·출퇴근사용(단신부임자 급여공제) 건은 공식 업무용 가동현황에서 전체 제외
+  // 개인사용(주말·공휴일)·출퇴근사용(단신부임자 급여공제)·대차인수/반납 체크 건은 공식 업무용 가동현황에서 전체 제외
+  // (대차기간 중 별도 운행기록은 정상 운행으로 간주해 포함)
   const tripsByBranch={};
   plates.forEach(p=>(data.vehicles[p].trips||[]).forEach(t=>{
-    if(t.isPersonal||t.isCommute) return;
+    if(t.isPersonal||t.isCommute||t.isDaeChaPickup||t.isDaeChaReturn) return;
     const b=t.branchAtTime||data.vehicles[p].branch||'미배정';
     if(!tripsByBranch[b])tripsByBranch[b]={dist:0,fuel:0,count:0,usageDates:[]};
     tripsByBranch[b].dist+=Number(t.distance)||0;
