@@ -35,6 +35,13 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-18] 관리자 수정모드/사용자 자가수정(10일 이내) 저장 시 "종료거리가 시작거리보다 작거나
+  같습니다" 오류로 저장이 전면 차단되던 버그 수정. 원인: 저장 전 검증 루프가 수정 대상 행뿐 아니라
+  표시된 모든 행을 검사하는데, "대차인수만 하고(반납 아님) 그날 운행하지 않아 종료거리=시작거리
+  (0km)로 자동 처리된" 정상 기록(제출 단계에서는 이미 허용되는 케이스)이 같은 표에 있으면 그 행
+  때문에 다른 행 편집·저장까지 함께 막혔음. 사용자 제출 단계(submitDirectInput)와 동일한 예외를
+  두 저장 함수에도 적용 | 변경: saveTripEdits(), saveUserEdits()
+
   [2026-08-18] 차량카드·차량상세 모달 상단 "가동율"을 "평균가동율"로 명칭 변경하고 계산 방식 교체.
   기존 calcUtilization()(최초~최종 운행일 사이 업무일 기준)은 운행기록이 짧은 기간에 몰려있으면
   실제보다 훨씬 높게(최악 100%) 표시되는 문제가 있었음(예: 8월 들어 1건만 입력된 차량이 100%로
@@ -5354,6 +5361,9 @@ async function saveTripEdits(plate){
   const table=document.getElementById('tripTable-'+plate);
   if(!table||!data.vehicles[plate]) return;
 
+  // 편집 전 시점의 정렬본 (검증 단계에서 대차인수만 0km 예외 판정에 사용 — 저장 반영 단계에서도 재사용)
+  const oldTrips=data.vehicles[plate].trips.slice().sort(tripChronoCompare);
+
   // 저장 전 입력값 검증 (오타로 인한 비정상 거리/금액/일자 차단)
   for(const tr of table.querySelectorAll('tbody tr')){
     const startInp=tr.querySelector('[data-f="startOdo"]');
@@ -5373,7 +5383,13 @@ async function saveTripEdits(plate){
     const fuel=fuelInp?parseFuelAmount(fuelInp.value):0;
     const fromVal=fromInp?.value||'';
     const toVal=toInp?.value||fromVal;
-    if(e<=s){
+    // 대차인수만 하고(반납 아님) 그날 운행하지 않아 종료거리=시작거리(0km)로 자동 처리된 기록은
+    // 사용자 제출 단계(submitDirectInput, line ~8036)에서도 허용되는 정상 케이스이므로,
+    // 관리자 수정 화면에서 다른 행을 편집할 때 이 행이 그대로 있다는 이유만으로 저장 전체가
+    // 막히지 않도록 동일한 예외를 적용한다.
+    const origTrip=oldTrips[Number(tr.dataset.tripIdx)];
+    const isDaeChaPickupOnly=!!(origTrip && origTrip.isDaeChaPickup && !origTrip.isDaeChaReturn && daechaChk?.checked);
+    if(e<=s && !(isDaeChaPickupOnly && e===s)){
       showAdminToast(`저장 실패: 종료거리(${e.toLocaleString()})가 시작거리(${s.toLocaleString()})보다 작거나 같습니다. 값을 확인해 주세요.`,'bad');
       return;
     }
@@ -5399,8 +5415,7 @@ async function saveTripEdits(plate){
     }
   }
 
-  // 편집 전 시점의 정렬본 키 목록 수집
-  const oldTrips=data.vehicles[plate].trips.slice().sort(tripChronoCompare);
+  // 편집 전 시점의 정렬본 키 목록 수집 (oldTrips는 함수 상단 검증 단계에서 이미 계산됨)
   const rowKeys=[];
   table.querySelectorAll('tbody tr').forEach(tr=>{
     const idx=Number(tr.dataset.tripIdx);
@@ -9092,7 +9107,13 @@ async function saveUserEdits(name){
     const e=Number(endInp?.value)||0;
     const dist=Math.max(0, e-s);
     const fuel=fuelInp?parseFuelAmount(fuelInp.value):0;
-    if(e<=s){
+    // 대차인수만 하고(반납 아님) 그날 운행하지 않아 종료거리=시작거리(0km)로 자동 처리된 기록은
+    // 제출 단계(submitDirectInput)에서도 허용되는 정상 케이스이므로, 사용자가 다른 행을 수정할 때
+    // 이 행이 그대로 있다는 이유만으로 저장 전체가 막히지 않도록 동일한 예외를 적용한다.
+    const origTripV=(data.vehicles[tr.dataset.plate]?.trips||[]).find(x=>`${x.isoDate}|${x.startOdo}|${x.endOdo}|${x.submitter||''}`===tr.dataset.key);
+    const daechaChkForRowV=tr.querySelector('[data-f="isDaeCha"].ue-chk');
+    const isDaeChaPickupOnlyV=!!(origTripV && origTripV.isDaeChaPickup && !origTripV.isDaeChaReturn && daechaChkForRowV?.checked);
+    if(e<=s && !(isDaeChaPickupOnlyV && e===s)){
       if(err){ err.textContent=`저장 실패: 종료거리(${e.toLocaleString()})가 시작거리(${s.toLocaleString()})보다 작거나 같습니다. 값을 확인해 주세요.`; err.style.display='block'; }
       return;
     }
