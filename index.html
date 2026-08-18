@@ -35,6 +35,14 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-18] 지역본부 카드 헤더의 "N대 · 평균 가동율 X%"가 그 아래 개별 차량 카드들의 평균가동율과
+  맞지 않고 비정상적으로 높게 표시되던 버그 수정(예: 카드별 0/82/18/45%인데 헤더는 89%). 원인:
+  헤더 평균은 vehicleStatsOf().util.rate(=구형 calcUtilization, 최초~최종 운행일 사이 업무일수 기준)를
+  쓰고 있었는데, 이 방식은 짧은 기간에 운행이 몰린 차량을 실제보다 훨씬 높게(최악 100%) 계산하는
+  문제로 이미 폐기되어 카드 자체는 ytdAvgUtilRate()로 교체된 상태였음(같은 날짜 커밋) — 헤더만
+  구형 계산식이 그대로 남아있었던 것. 헤더 평균도 카드와 동일하게 ytdAvgUtilRate()를 사용하도록 통일
+  | 변경: renderVehicles() 내 region-group 평균 계산부
+
   [2026-08-18] 관리자 수정모드/사용자 자가수정(10일 이내) 저장 시 "종료거리가 시작거리보다 작거나
   같습니다" 오류로 저장이 전면 차단되던 버그 수정. 원인: 저장 전 검증 루프가 수정 대상 행뿐 아니라
   표시된 모든 행을 검사하는데, "대차인수만 하고(반납 아님) 그날 운행하지 않아 종료거리=시작거리
@@ -4612,8 +4620,15 @@ function renderVehicles(){
       return ma!==mb?ma-mb:a.localeCompare(b);
     });
     const activePsCount=ps.filter(p=>data.vehicles[p].active!==false).length;
+    // 2026-08-18: 차량카드 "평균가동율"(ytdAvgUtilRate)과 동일한 계산으로 통일.
+    // 기존에는 vehicleStatsOf().util.rate(=calcUtilization, 최초~최종 운행일 사이 업무일수 기준)를 써서
+    // 운행기록이 짧은 기간에 몰린 차량 때문에 지역본부 평균이 카드별 값들과 맞지 않고 비정상적으로
+    // 높게(예: 카드 0/82/18/45%인데 헤더 89%) 표시되는 문제가 있었음.
     let rateSum=0,withTrips=0;
-    ps.filter(p=>data.vehicles[p].active!==false).forEach(p=>{const s=vehicleStatsOf(p);if(s.trips.length>0){rateSum+=s.util.rate;withTrips++;}});
+    ps.filter(p=>data.vehicles[p].active!==false).forEach(p=>{
+      const r=ytdAvgUtilRate(p);
+      if(r!==null){rateSum+=r;withTrips++;}
+    });
     const avgRate=withTrips>0?rateSum/withTrips:0;
     return `<div class="region-group"><div class="region-group-head" data-branch="${branch.replace(/"/g,'&quot;')}"><h3>${branch}</h3><span class="rg-meta">${activePsCount}대 · 평균 가동율 ${avgRate.toFixed(0)}%</span></div><div class="vehicle-grid">${ps.map(vcardHtml).join('')}</div></div>`;
   }).join('');
