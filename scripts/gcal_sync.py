@@ -17,8 +17,14 @@ GitHub Actions에서 주기적으로 실행됩니다(수동 실행도 가능).
   Firebase(dedicated-fleet-data/googleCalendarEvents)에 캐싱합니다.
   화면(관리자 대시보드 등)에서 이 값을 읽어 참고용으로 표시할 수 있습니다.
 
+Firebase 인증: 클라이언트 HTML이 쓰는 "브라우저 API 키 + 익명 로그인" 방식은
+  API 키에 걸린 HTTP 리퍼러 제한(브라우저 요청만 허용) 때문에 서버(GitHub Actions)에서는
+  차단됩니다. 이 스크립트는 대신 Firebase 서비스 계정(관리자 자격 증명)으로 인증하며,
+  이는 보안 규칙 자체를 우회하는 서버 전용 자격 증명이라 브라우저 키와는 별개입니다.
+
 필요한 GitHub Secrets:
-  GCAL_CLIENT_ID, GCAL_CLIENT_SECRET, GCAL_REFRESH_TOKEN, FIREBASE_URL
+  GCAL_CLIENT_ID, GCAL_CLIENT_SECRET, GCAL_REFRESH_TOKEN, FIREBASE_URL,
+  FIREBASE_SERVICE_ACCOUNT_JSON (Firebase 콘솔 > 프로젝트 설정 > 서비스 계정에서 발급한 JSON 전체)
 ================================================================
 """
 
@@ -30,8 +36,10 @@ import urllib.request
 import urllib.parse
 import urllib.error
 
+from google.oauth2 import service_account
+from google.auth.transport.requests import Request as GoogleAuthRequest
+
 # ── 고정 설정 (하드코딩 값은 클라이언트 index.html/dedicated-*.html과 동일 — 공개 가능한 값) ──
-FIREBASE_API_KEY = "AIzaSyAGS2iP6VVLpsdbxGgaE1V5eIu-IHWNrH8"
 DEDICATED_STORAGE_KEY = "dedicated-fleet-data"
 CALENDAR_ID = os.environ.get("GCAL_CALENDAR_ID", "primary")  # 별도 지정 없으면 공용 계정의 기본 캘린더 사용
 
@@ -87,25 +95,33 @@ def get_google_access_token():
     return res["access_token"]
 
 
-def get_firebase_id_token():
-    # 클라이언트(HTML)와 동일한 익명 인증 방식 — dedicated-fleet-data 경로가
-    # 인증된 요청만 허용하는 규칙이어도 정상 동작하도록 함
-    url = f"https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={FIREBASE_API_KEY}"
-    res = http_json("POST", url, body={"returnSecureToken": True})
-    return res["idToken"]
+def get_firebase_admin_token():
+    # 서비스 계정(관리자 자격 증명)으로 인증 — 보안 규칙을 우회하는 서버 전용 방식.
+    # 클라이언트 HTML의 "익명 로그인"과는 별개이며, 브라우저 API 키의 리퍼러 제한과 무관하게 동작.
+    sa_json = os.environ["FIREBASE_SERVICE_ACCOUNT_JSON"]
+    info = json.loads(sa_json)
+    creds = service_account.Credentials.from_service_account_info(
+        info,
+        scopes=[
+            "https://www.googleapis.com/auth/firebase.database",
+            "https://www.googleapis.com/auth/userinfo.email",
+        ],
+    )
+    creds.refresh(GoogleAuthRequest())
+    return creds.token
 
 
 # ── Firebase RTDB ─────────────────────────────────────────
-def fb_get(firebase_url, id_token, path):
-    url = f"{firebase_url}/{path}.json?auth={id_token}"
+def fb_get(firebase_url, access_token, path):
+    url = f"{firebase_url}/{path}.json?access_token={access_token}"
     try:
         return http_json("GET", url) or {}
     except urllib.error.HTTPError:
         return {}
 
 
-def fb_put(firebase_url, id_token, path, value):
-    url = f"{firebase_url}/{path}.json?auth={id_token}"
+def fb_put(firebase_url, access_token, path, value):
+    url = f"{firebase_url}/{path}.json?access_token={access_token}"
     return http_json("PUT", url, body=value)
 
 
@@ -164,7 +180,7 @@ def iso_date(d):
 
 
 # ── 방향1: 시스템(Firebase) → 구글 캘린더 ──────────────────
-def sync_vacation_to_google(access_token, firebase_url, id_token):
+def sync_vacation_to_google(access_token, firebase_url, fb_token):
     today = datetime.date.today()
     time_min = iso_date(today - datetime.timedelta(days=WINDOW_PAST_DAYS)) + "T00:00:00Z"
     time_max = iso_date(today + datetime.timedelta(days=WINDOW_FUTURE_DAYS)) + "T00:00:00Z"
@@ -174,7 +190,7 @@ def sync_vacation_to_google(access_token, firebase_url, id_token):
     for v in VEHICLES:
         plate, driver = v["plate"], v["driver"]
         fb_path = f"{DEDICATED_STORAGE_KEY}/vehicles/{urllib.parse.quote(plate, safe='')}/vacationSchedule"
-        vacation = fb_get(firebase_url, id_token, fb_path) or {}
+        vacation = fb_get(firebase_url, fb_token, fb_path) or {}
         vacation = {k: v2 for k, v2 in vacation.items() if isinstance(v2, dict) and v2.get("type") in VACAL_LABEL}
 
         gcal_events = gcal_list_events(
@@ -230,7 +246,7 @@ def sync_vacation_to_google(access_token, firebase_url, id_token):
 
 
 # ── 방향2: 구글 캘린더 → 시스템(Firebase) ──────────────────
-def sync_general_events_from_google(access_token, firebase_url, id_token):
+def sync_general_events_from_google(access_token, firebase_url, fb_token):
     today = datetime.date.today()
     time_min = iso_date(today - datetime.timedelta(days=GENERAL_WINDOW_PAST_DAYS)) + "T00:00:00Z"
     time_max = iso_date(today + datetime.timedelta(days=GENERAL_WINDOW_FUTURE_DAYS)) + "T00:00:00Z"
@@ -251,17 +267,17 @@ def sync_general_events_from_google(access_token, firebase_url, id_token):
             "allDay": bool(start.get("date")),
         })
 
-    fb_put(firebase_url, id_token, f"{DEDICATED_STORAGE_KEY}/googleCalendarEvents", general)
+    fb_put(firebase_url, fb_token, f"{DEDICATED_STORAGE_KEY}/googleCalendarEvents", general)
     print(f"[방향2: 구글→시스템] 일반 일정 {len(general)}건 캐싱 완료")
 
 
 def main():
     firebase_url = os.environ["FIREBASE_URL"]
     access_token = get_google_access_token()
-    id_token = get_firebase_id_token()
+    fb_token = get_firebase_admin_token()
 
-    sync_vacation_to_google(access_token, firebase_url, id_token)
-    sync_general_events_from_google(access_token, firebase_url, id_token)
+    sync_vacation_to_google(access_token, firebase_url, fb_token)
+    sync_general_events_from_google(access_token, firebase_url, fb_token)
 
 
 if __name__ == "__main__":
