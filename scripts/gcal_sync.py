@@ -12,6 +12,11 @@ GitHub Actions에서 주기적으로 실행됩니다(수동 실행도 가능).
   우리가 만든 이벤트는 extendedProperties.private에
   ksaVehiclePlate/ksaVehicleDate/ksaVehicleType 마커를 남겨 식별합니다.
 
+  수행기사가 입력페이지에서 직접 등록하는 일반 일정(customEvents, 연차/반차 외
+  회의·병원 등)도 동일한 방식(방향1)으로 반영됩니다. 휴가와 달리 날짜가 아닌
+  이벤트 고유 id로 식별하며(다중일/시간 지정 일정 지원), 마커는
+  ksaVehiclePlate/ksaVehicleEventId/ksaVehicleType('custom')을 사용합니다.
+
 방향2 (구글→시스템, 구글이 원본):
   구글 캘린더의 일반 일정(위 마커가 없는 이벤트)을 읽어와
   Firebase(dedicated-fleet-data/googleCalendarEvents)에 캐싱합니다.
@@ -245,6 +250,94 @@ def sync_vacation_to_google(access_token, firebase_url, fb_token):
     print(f"[방향1: 시스템→구글] 생성 {created}건, 수정 {updated}건, 삭제 {deleted}건")
 
 
+# ── 방향1(확장): 시스템(Firebase customEvents) → 구글 캘린더 ──
+# 수행기사가 입력페이지에서 직접 등록한 일반 일정(연차/반차 외). 휴가와 달리
+# 이벤트 고유 id(ksaVehicleEventId)로 식별하며, 여러 날에 걸치거나 시간이 지정된
+# 일정도 지원한다. 재조정 방식은 휴가 동기화와 동일(멱등적, 별도 상태 미저장).
+def sync_custom_events_to_google(access_token, firebase_url, fb_token):
+    today = datetime.date.today()
+    time_min = iso_date(today - datetime.timedelta(days=WINDOW_PAST_DAYS)) + "T00:00:00Z"
+    time_max = iso_date(today + datetime.timedelta(days=WINDOW_FUTURE_DAYS)) + "T00:00:00Z"
+
+    created = updated = deleted = 0
+
+    for v in VEHICLES:
+        plate, driver = v["plate"], v["driver"]
+        fb_path = f"{DEDICATED_STORAGE_KEY}/vehicles/{urllib.parse.quote(plate, safe='')}/customEvents"
+        custom = fb_get(firebase_url, fb_token, fb_path) or {}
+        custom = {k: v2 for k, v2 in custom.items() if isinstance(v2, dict) and v2.get("title") and v2.get("startDate")}
+
+        gcal_events = gcal_list_events(
+            access_token, time_min, time_max,
+            private_extended_property=f"ksaVehiclePlate={plate}"
+        )
+        gcal_by_eventid = {}
+        for ev in gcal_events:
+            props = (ev.get("extendedProperties") or {}).get("private") or {}
+            eid = props.get("ksaVehicleEventId")
+            if eid:
+                gcal_by_eventid[eid] = ev
+
+        for event_id, rec in custom.items():
+            start_date = rec.get("startDate")
+            end_date = rec.get("endDate") or start_date
+            all_day = rec.get("allDay") is not False
+            title = rec.get("title")
+            summary = f"[일정] {rec.get('driver') or driver} · {title}"
+            try:
+                s_d = datetime.date.fromisoformat(start_date)
+                e_d = datetime.date.fromisoformat(end_date)
+            except ValueError:
+                continue
+
+            if all_day:
+                event_body = {
+                    "summary": summary,
+                    "start": {"date": start_date},
+                    "end": {"date": iso_date(e_d + datetime.timedelta(days=1))},
+                }
+            else:
+                start_time = rec.get("startTime") or "09:00"
+                end_time = rec.get("endTime") or start_time
+                event_body = {
+                    "summary": summary,
+                    "start": {"dateTime": f"{start_date}T{start_time}:00+09:00", "timeZone": "Asia/Seoul"},
+                    "end": {"dateTime": f"{end_date}T{end_time}:00+09:00", "timeZone": "Asia/Seoul"},
+                }
+            event_body["extendedProperties"] = {
+                "private": {
+                    "ksaVehiclePlate": plate,
+                    "ksaVehicleEventId": event_id,
+                    "ksaVehicleType": "custom",
+                }
+            }
+
+            existing = gcal_by_eventid.get(event_id)
+            if existing is None:
+                gcal_insert_event(access_token, event_body)
+                created += 1
+            else:
+                ex_start = existing.get("start", {})
+                ex_end = existing.get("end", {})
+                changed = (
+                    existing.get("summary") != summary
+                    or ex_start.get("date") != event_body["start"].get("date")
+                    or ex_start.get("dateTime") != event_body["start"].get("dateTime")
+                    or ex_end.get("date") != event_body["end"].get("date")
+                    or ex_end.get("dateTime") != event_body["end"].get("dateTime")
+                )
+                if changed:
+                    gcal_patch_event(access_token, existing["id"], event_body)
+                    updated += 1
+
+        for event_id, ev in gcal_by_eventid.items():
+            if event_id not in custom:
+                gcal_delete_event(access_token, ev["id"])
+                deleted += 1
+
+    print(f"[방향1 확장: 내 일정→구글] 생성 {created}건, 수정 {updated}건, 삭제 {deleted}건")
+
+
 # ── 방향2: 구글 캘린더 → 시스템(Firebase) ──────────────────
 def sync_general_events_from_google(access_token, firebase_url, fb_token):
     today = datetime.date.today()
@@ -277,6 +370,7 @@ def main():
     fb_token = get_firebase_admin_token()
 
     sync_vacation_to_google(access_token, firebase_url, fb_token)
+    sync_custom_events_to_google(access_token, firebase_url, fb_token)
     sync_general_events_from_google(access_token, firebase_url, fb_token)
 
 
