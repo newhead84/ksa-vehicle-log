@@ -9,9 +9,14 @@ name: Sync Google Calendar (전용차량 휴가 일정 양방향 동기화)
 #   GitHub Secrets에 저장해두면, 이 워크플로우가 서비스 계정처럼 자동으로 계속 갱신하며 사용합니다.
 #   (refresh token 자체는 브라우저/클라이언트 코드 어디에도 노출되지 않음)
 #
+# Firebase 쪽 인증은 클라이언트 HTML의 "브라우저 API 키 + 익명 로그인" 방식이 아니라
+#   Firebase 서비스 계정(관리자 자격 증명, 보안 규칙 우회)을 사용합니다 — 브라우저 키에
+#   걸려있는 HTTP 리퍼러 제한 때문에 서버(GitHub Actions) 요청은 그 방식으로는 차단됩니다.
+#
 # 필요한 GitHub Secrets:
 #   GCAL_CLIENT_ID, GCAL_CLIENT_SECRET, GCAL_REFRESH_TOKEN — 구글 OAuth (get_refresh_token.py로 발급)
 #   FIREBASE_URL — 기존 워크플로우(update-fuel-price 등)와 동일한 값 재사용
+#   FIREBASE_SERVICE_ACCOUNT_JSON — Firebase 콘솔 > 프로젝트 설정 > 서비스 계정 > 새 비공개 키 생성 (JSON 전체)
 # 선택 Secret:
 #   GCAL_CALENDAR_ID — 특정 캘린더를 쓰고 싶을 때만 지정(미지정 시 공용 계정의 기본 캘린더 사용)
 
@@ -32,6 +37,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install dependencies
+        run: pip install google-auth
+
       - name: Run Google Calendar sync
         env:
           GCAL_CLIENT_ID: ${{ secrets.GCAL_CLIENT_ID }}
@@ -39,4 +47,5 @@ jobs:
           GCAL_REFRESH_TOKEN: ${{ secrets.GCAL_REFRESH_TOKEN }}
           GCAL_CALENDAR_ID: ${{ secrets.GCAL_CALENDAR_ID }}
           FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: python3 scripts/gcal_sync.py
