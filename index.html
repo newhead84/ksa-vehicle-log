@@ -35,6 +35,12 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-19] 공용차량 운행정보입력: 개인사용(주말·공휴일 사용) 체크 시 실제 운행기간이 주말·
+  공휴일에 해당하는지 검증하는 로직 추가. 2일 이상 기간은 주말·공휴일 앞뒤 각 1일(퇴근 시 반출,
+  출근 시 반납)까지 허용하되, 그 외(예: 평일 하루만 선택)엔 운행기간 확인 알람과 함께 제출 차단.
+  운행기간 입력란에도 실시간 경고 색상으로 안내 | 신규: isValidPersonalWeekendRange() | 변경:
+  onDateRangeChange(), submitDirectInput()
+
   [2026-08-18] 롱프레스 시 텍스트 선택/콜아웃 메뉴 방지 적용(dedicated-driver-input.html에
   이미 있던 패턴을 이식) — body에 user-select:none/-webkit-touch-callout:none, input/
   textarea/select는 user-select:text로 예외 처리 | 변경: <style> body/input 규칙 추가
@@ -3041,6 +3047,31 @@ async function loadRemoteHolidays(){
 }
 function isBizDay(d){ return !isWeekend(d)&&!isHoliday(d); }
 function countBizDays(s,e){ let d=new Date(s+'T00:00:00'),end=new Date(e+'T00:00:00'),n=0; while(d<=end){if(isBizDay(d))n++;d=new Date(d.getTime()+86400000);} return n; }
+// 개인사용(주말·공휴일) 체크 시, 선택한 운행기간이 실제 주말·공휴일에 해당하는지 검증.
+// 2일 이상인 경우 주말·공휴일 앞뒤로 각 1일(전일 퇴근 시 반출, 익일 출근 시 반납)까지는 허용.
+// 즉 운행기간 내 실제 업무일(평일·비공휴일)은 맨 앞/맨 뒤에 최대 1일씩만 있을 수 있고,
+// 그 사이에는 반드시 1일 이상의 실제 주말·공휴일이 포함되어야 함(그렇지 않으면 false 반환).
+function isValidPersonalWeekendRange(fromStr, toStr){
+  if(!fromStr) return true; // 날짜 미입력은 다른 검증(필수값 체크)에서 처리
+  const toVal = toStr || fromStr;
+  const bizFlags = [];
+  let d = new Date(fromStr+'T00:00:00');
+  const dEnd = new Date(toVal+'T00:00:00');
+  while(d<=dEnd){
+    bizFlags.push(isBizDay(d));
+    d = new Date(d.getTime()+86400000);
+  }
+  const n = bizFlags.length;
+  if(n===0) return true;
+  if(n===1) return !bizFlags[0]; // 하루짜리 건은 그 날 자체가 주말·공휴일이어야 함
+  let lead=0; while(lead<n && bizFlags[lead]) lead++;
+  if(lead>=n) return false; // 전체가 업무일 → 실제 주말·공휴일이 전혀 없음
+  let trail=0; while(trail<(n-lead) && bizFlags[n-1-trail]) trail++;
+  const middleLen = n - lead - trail;
+  if(middleLen<=0) return false; // 앞뒤 업무일을 제외하면 남는 주말·공휴일이 없음
+  if(lead>1 || trail>1) return false; // 앞/뒤 각각 업무일 1일까지만 허용
+  return true;
+}
 // 운행기간(from~to) 내 포함된 공휴일을 '공휴일명-M/D' 또는 연속 구간 '공휴일명-M/D~M/D' 형식 문자열로 반환 (안내 문구에 표기용)
 // 연속된 날짜의 공휴일명이 같으면 하나의 구간으로 묶고, 명칭이 다르면 별개 항목으로 분리한다.
 function formatHolidayRanges(fromStr, toStr){
@@ -6869,8 +6900,15 @@ function onDateRangeChange(id){
     const isPersonalNow = !!card.querySelector('.tr-personal-chk')?.checked;
     const isCommuteNow = !!card.querySelector('.commute-btn.active-commute');
     if(isPersonalNow){
-      infoEl.textContent=`개인사용(주말·공휴일) 건은 가동율에 반영되지 않습니다. (전일·후일 인접 업무일 포함 전체 제외)`+(holidayText?`\n(공휴일 포함 : ${holidayText})`:'');
-      infoEl.style.color='#1D4ED8'; infoEl.style.background='#EFF6FF';
+      // 개인사용(주말·공휴일) 체크 시, 선택한 운행기간이 실제 주말·공휴일(및 그 전후 1일)에
+      // 해당하는지 실시간으로 검증해 안내 — 해당하지 않으면 경고 색상으로 전환(제출 시에도 별도 차단).
+      if(isValidPersonalWeekendRange(fv, tv)){
+        infoEl.textContent=`개인사용(주말·공휴일) 건은 가동율에 반영되지 않습니다. (전일·후일 인접 업무일 포함 전체 제외)`+(holidayText?`\n(공휴일 포함 : ${holidayText})`:'');
+        infoEl.style.color='#1D4ED8'; infoEl.style.background='#EFF6FF';
+      } else {
+        infoEl.textContent=`⚠ 선택하신 운행기간(${fv}${tv!==fv?' ~ '+tv:''})에 실제 주말·공휴일이 포함되어 있지 않습니다. 개인사용(주말·공휴일)은 실제 주말·공휴일 및 그 전후 1일까지만 인정됩니다. 운행기간을 다시 확인해 주세요.`;
+        infoEl.style.color='var(--bad)'; infoEl.style.background='var(--bad-soft)';
+      }
     } else if(isCommuteNow){
       infoEl.textContent=`출퇴근사용 건은 가동율에 반영되지 않습니다.`+(holidayText?`\n(공휴일 포함 : ${holidayText})`:'');
       infoEl.style.color='#7C3AED'; infoEl.style.background='#F5F3FF';
@@ -8127,6 +8165,12 @@ async function submitDirectInput(){
     if(!r.dest){ showUserFormErr(`${i+1}번 운행기록: 행선지를 입력해 주세요.`); return; }
     if(r.isDaeCha && !r.daeChaPate){ showUserFormErr(`${i+1}번 운행기록: 대차인수/대차반납 체크 시 대차 차량번호를 반드시 입력해 주세요.`); return; }
     if(r.isPersonal && !r.fuel){ showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유비를 입력해 주세요.`); return; }
+    // 개인사용(주말·공휴일) 체크 시, 실제 운행기간이 주말·공휴일(및 그 전후 1일)에 해당하는지 검증.
+    // 해당하지 않으면(예: 평일 하루만 선택) 운행기간 확인 알람과 함께 제출을 차단한다.
+    if(r.isPersonal && !isValidPersonalWeekendRange(r.dateFrom, r.dateTo)){
+      showUserFormErr(`${i+1}번 운행기록: 선택하신 운행기간(${r.dateFrom}${r.dateTo&&r.dateTo!==r.dateFrom?' ~ '+r.dateTo:''})에 실제 주말·공휴일이 포함되어 있지 않습니다. 개인사용(주말·공휴일)은 실제 주말·공휴일 및 그 전후 1일까지만 인정됩니다. 운행기간을 확인해 주세요.`);
+      return;
+    }
     // 개인사용 체크 시 영수증 첨부 3버튼(촬영/앨범/나중에 첨부) 중 하나도 선택하지 않은 채
     // 그대로 제출되던 버그 수정 — 반드시 셋 중 하나를 선택해야 제출 가능하도록 차단.
     if(r.isPersonal){
