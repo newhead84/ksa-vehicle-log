@@ -1,0 +1,42 @@
+name: Sync Google Calendar (전용차량 휴가 일정 양방향 동기화)
+
+# 방향1(시스템→구글): 수행기사 입력페이지에서 등록한 휴가 일정(연차/반차)을
+#   회사 공용 구글 캘린더에 반영합니다. Firebase가 원본(source of truth).
+# 방향2(구글→시스템): 구글 캘린더의 일반 일정(회의 등)을 Firebase에 캐싱해
+#   대시보드 등에서 참고용으로 표시할 수 있게 합니다. 구글이 원본(source of truth).
+#
+# 인증: 관리자(회사 공용 구글 계정)가 최초 1회 OAuth 동의로 발급받은 refresh token을
+#   GitHub Secrets에 저장해두면, 이 워크플로우가 서비스 계정처럼 자동으로 계속 갱신하며 사용합니다.
+#   (refresh token 자체는 브라우저/클라이언트 코드 어디에도 노출되지 않음)
+#
+# 필요한 GitHub Secrets:
+#   GCAL_CLIENT_ID, GCAL_CLIENT_SECRET, GCAL_REFRESH_TOKEN — 구글 OAuth (get_refresh_token.py로 발급)
+#   FIREBASE_URL — 기존 워크플로우(update-fuel-price 등)와 동일한 값 재사용
+# 선택 Secret:
+#   GCAL_CALENDAR_ID — 특정 캘린더를 쓰고 싶을 때만 지정(미지정 시 공용 계정의 기본 캘린더 사용)
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'   # 15분마다 실행
+  workflow_dispatch: {}
+
+jobs:
+  gcal-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Google Calendar sync
+        env:
+          GCAL_CLIENT_ID: ${{ secrets.GCAL_CLIENT_ID }}
+          GCAL_CLIENT_SECRET: ${{ secrets.GCAL_CLIENT_SECRET }}
+          GCAL_REFRESH_TOKEN: ${{ secrets.GCAL_REFRESH_TOKEN }}
+          GCAL_CALENDAR_ID: ${{ secrets.GCAL_CALENDAR_ID }}
+          FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
+        run: python3 scripts/gcal_sync.py
