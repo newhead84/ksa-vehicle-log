@@ -760,8 +760,10 @@
     display:flex; align-items:center; justify-content:space-between; cursor:pointer;
     padding:14px 0; user-select:none;
   }
+  .ded-vacal-toggle .lbl-group{display:flex; align-items:baseline; gap:10px; min-width:0;}
   .ded-vacal-toggle .lbl{font-size:15px; font-weight:500; color:var(--ded-text);}
-  .ded-vacal-toggle .chev{font-size:13px; color:var(--ded-muted); transition:transform .15s ease;}
+  .ded-vacal-toggle .vacal-email{font-family:'Outfit',sans-serif; font-size:11px; color:var(--ded-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .ded-vacal-toggle .chev{font-size:13px; color:var(--ded-muted); transition:transform .15s ease; flex:0 0 auto; margin-left:10px;}
   .ded-vacal-body{max-height:0; overflow:hidden; transition:max-height .2s ease;}
   .ded-vacal-body.open{max-height:620px; padding-bottom:16px;}
   .ded-vacal-nav{margin:0 0 10px;}
@@ -951,7 +953,7 @@
   <!-- 전무이사 차량은 수행기사가 아닌 직원 본인이 직접 운행정보를 입력하는 구조라 휴가/근무 일정 개념이 없음 → 회장차·수행기사 모드에서만 노출 -->
   <div class="ded-section ded-vacal-section" id="vacalSection">
     <div class="ded-vacal-toggle" id="vacalToggleBtn" onclick="toggleVacationCalendar()">
-      <span class="lbl">📅 일정관리</span>
+      <div class="lbl-group"><span class="lbl">📅 일정관리</span><span class="vacal-email">ksachauffeur2026@gmail.com</span></div>
       <span class="chev" id="vacalChev">▾</span>
     </div>
     <div class="ded-vacal-body" id="vacalBody">
@@ -965,7 +967,7 @@
       </div>
       <div class="ded-vacal-grid" id="vacalGrid"></div>
       <div class="ded-vacal-legend">
-        <span class="lg full">연차</span><span class="lg am">반차(오전)</span><span class="lg pm">반차(오후)</span><span class="lg gcal">구글 일정</span>
+        <span class="lg full">연차</span><span class="lg am">반차(오전)</span><span class="lg pm">반차(오후)</span><span class="lg gcal">업무 일정(Google)</span>
       </div>
       <!-- 구글 캘린더에서 가져온 일반 일정(회의 등, 방향2 동기화) 표시 -->
       <div class="ded-vacal-gcal-list" id="vacalGcalList"></div>
@@ -984,7 +986,7 @@
         <button type="button" class="ded-vacal-opt pm" onclick="saveVacationDay('pm')">반차(오후)</button>
       </div>
       <button type="button" class="ded-vacal-opt clear" id="vacalClearBtn" onclick="saveVacationDay(null)">휴가 해제</button>
-      <button type="button" class="ded-vacal-addevt-btn" onclick="openCustomEventForm()">+ 구글 일정 직접 추가</button>
+      <button type="button" class="ded-vacal-addevt-btn" onclick="openCustomEventForm()">+ 업무 일정(Google) 직접 추가</button>
       <button type="button" class="ded-vacal-cancel" onclick="closeVacalModal()">취소</button>
     </div>
   </div>
@@ -996,7 +998,7 @@
     <div class="ded-vacal-modal" onclick="event.stopPropagation()">
       <div class="ded-vacal-modal-date" id="ceModalTitle">일정 추가</div>
       <label class="ded-ce-label">제목</label>
-      <input type="text" id="ceTitleInput" class="ded-ce-input" placeholder="예: 병원 방문, 외부 미팅" maxlength="60">
+      <input type="text" id="ceTitleInput" class="ded-ce-input" placeholder="예: 행사명, 회의명 (장소)" maxlength="60">
       <label class="ded-ce-label">기간</label>
       <div class="ded-ce-daterow">
         <input type="date" id="ceStartDateInput" class="ded-ce-input">
@@ -1228,7 +1230,7 @@
           <div class="in-wrap"><input type="text" inputmode="numeric" maxlength="5" class="ded-time-input ded-readonly-input" id="workEnd" placeholder="HH:MM" readonly oninput="onTimeInput(this, calcWorkTotal)" onblur="onTimeBlur(this, calcWorkTotal)"></div>
         </div>
       </div>
-      <div class="ded-field-note" id="workTimeSyncNote">🔒 근로 시작/종료는 시작시각·종료시각과 항상 동일하게 자동 반영됩니다</div>
+      <div class="ded-field-note" id="workTimeSyncNote">근로시간은 시작/종료시각과 동일하게 반영됩니다.</div>
       <div class="ded-total-line" id="workTotalRow">
         <span>총 근로시간 <span style="opacity:.6;font-size:12px;">(휴게시간 제외)</span></span>
         <span class="val" id="workTotalVal">–</span>
@@ -1744,16 +1746,16 @@ function renderVacalGcalList(){
     .filter(ev => eventOverlapsMonth(ev, vacalYear, vacalMonth))
     .sort((a,b) => a.startDate.localeCompare(b.startDate) || (a.startTime||'').localeCompare(b.startTime||''));
   if(items.length === 0){
-    listEl.innerHTML = `<div class="gcal-title">구글 일정</div><div class="ded-vacal-gcal-empty">이번 달 구글 캘린더 일정이 없습니다.</div>`;
+    listEl.innerHTML = `<div class="gcal-title">업무 일정(Google)</div><div class="ded-vacal-gcal-empty">이번 달 구글 캘린더 일정이 없습니다.</div>`;
     return;
   }
   const rows = items.map(ev => {
     const dateLabel = formatDateRangeLabel(ev.startDate, ev.endDate);
     const timeLabel = eventTimeLabel(ev);
-    const tag = ev.source === 'custom' ? `<span class="tag mine">내 일정</span>` : '';
+    const tag = ev.source === 'custom' ? `<span class="tag mine">직접입력</span>` : '';
     return `<div class="ded-vacal-gcal-item"><span class="d">${dateLabel}${timeLabel ? ` ${timeLabel}` : ''}</span><span class="s">${tag}${escapeHtmlDed(ev.title)}</span></div>`;
   }).join('');
-  listEl.innerHTML = `<div class="gcal-title">구글 일정</div>${rows}`;
+  listEl.innerHTML = `<div class="gcal-title">업무 일정(Google)</div>${rows}`;
 }
 
 function changeVacalMonth(delta){
