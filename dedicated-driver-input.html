@@ -838,22 +838,73 @@
      .ded-accident-card와 동일 사유), 내부 텍스트는 var(--ded-text)/var(--ded-muted) 대신 고정값
      var(--ded-confirm-text)/var(--ded-confirm-muted) 사용 — 화이트골드 테마에서 연차/반차 선택
      버튼 글자(다크)가 다크 배경에 묻혀 안 보이던 문제 방지 */
-  .ded-vacal-modal-date{font-size:15px; font-weight:600; color:var(--ded-confirm-text); text-align:center; margin-bottom:16px;}
+  .ded-vacal-modal-date{font-size:15px; font-weight:600; color:var(--ded-confirm-text); text-align:center; margin-bottom:14px;}
+  /* 선택한 날짜의 일정 상세(휴가/구글일정/내 일정) — 버튼 위에 표시 */
+  .ded-vacal-modal-events{margin-bottom:14px; max-height:160px; overflow-y:auto;}
+  .ded-vacal-modal-empty{font-size:12.5px; color:var(--ded-confirm-muted); text-align:center; padding:6px 0 14px;}
+  .ded-vacal-modal-evt{
+    display:flex; align-items:center; gap:8px; padding:7px 0; font-size:13px;
+    color:var(--ded-confirm-text); border-bottom:1px solid rgba(255,255,255,.07);
+  }
+  .ded-vacal-modal-evt:last-child{border-bottom:none;}
+  .ded-vacal-modal-evt .dot{width:6px; height:6px; border-radius:50%; background:var(--ded-beige); flex:0 0 auto;}
+  .ded-vacal-modal-evt.vacation .dot{background:#5B8DEF;}
+  .ded-vacal-modal-evt .s{flex:1 1 auto; min-width:0; word-break:keep-all; overflow-wrap:break-word;}
+  .ded-vacal-modal-evt .t{color:var(--ded-confirm-muted); font-size:11px; margin-left:6px;}
+  .ded-vacal-modal-evt .evt-actions{display:flex; gap:6px; flex:0 0 auto;}
+  .ded-vacal-modal-evt .evt-actions button{
+    background:none; border:1px solid var(--ded-line); color:var(--ded-confirm-muted);
+    font-family:'Pretendard',sans-serif; font-size:10.5px; padding:3px 7px; cursor:pointer;
+  }
+  .ded-vacal-modal-evt .evt-actions button:hover{color:var(--ded-beige); border-color:var(--ded-beige);}
+  /* 연차/반차(오전)/반차(오후)를 한 줄로 배치 */
+  .ded-vacal-opt-row{display:flex; gap:6px; margin-bottom:8px;}
+  .ded-vacal-opt-row .ded-vacal-opt{flex:1 1 0; margin-bottom:0; padding:12px 4px; font-size:12.5px; text-align:center;}
   .ded-vacal-opt{
     display:block; width:100%; padding:13px; margin-bottom:8px; border:1px solid var(--ded-line);
     background:transparent; color:var(--ded-confirm-text); font-family:'Pretendard',sans-serif; font-size:14.5px; cursor:pointer;
   }
   .ded-vacal-opt:hover{border-color:var(--ded-beige); color:var(--ded-beige);}
   .ded-vacal-opt.clear{color:var(--ded-red); border-color:var(--ded-red); opacity:.85;}
+  /* 구글 일정(내가 직접 입력) 추가 버튼 — 점선 테두리로 연차/반차 버튼과 시각적으로 구분 */
+  .ded-vacal-addevt-btn{
+    display:block; width:100%; padding:12px; margin-bottom:8px; border:1px dashed var(--ded-line);
+    background:transparent; color:var(--ded-confirm-muted); font-family:'Pretendard',sans-serif; font-size:13px; cursor:pointer;
+  }
+  .ded-vacal-addevt-btn:hover{border-color:var(--ded-beige); color:var(--ded-beige);}
   .ded-vacal-cancel{
     display:block; width:100%; padding:12px; margin-top:4px; border:none; background:none;
     color:var(--ded-confirm-muted); font-family:'Pretendard',sans-serif; font-size:13.5px; cursor:pointer;
+  }
+
+  /* 구글 일정(방향2, 읽기전용) 목록에서 "내 일정"(내가 직접 등록해 방향1로 동기화되는 항목) 배지 */
+  .ded-vacal-gcal-item .tag.mine{
+    display:inline-block; font-size:9.5px; color:var(--ded-beige); border:1px solid var(--ded-beige);
+    padding:1px 4px; margin-right:6px; vertical-align:middle;
+  }
+
+  /* 일정 추가/수정 폼 모달 (연차/반차 선택 모달과 동일한 다크 고정 톤 재사용) */
+  .ded-ce-label{display:block; font-size:12px; color:var(--ded-confirm-muted); margin:10px 0 5px;}
+  .ded-ce-input{
+    width:100%; padding:10px; border:1px solid var(--ded-line); background:transparent;
+    color:var(--ded-confirm-text); font-family:'Pretendard',sans-serif; font-size:13.5px; box-sizing:border-box;
+  }
+  .ded-ce-daterow, .ded-ce-timerow{display:flex; align-items:center; gap:8px;}
+  .ded-ce-daterow input, .ded-ce-timerow input{flex:1 1 0; min-width:0;}
+  .ded-ce-daterow span, .ded-ce-timerow span{color:var(--ded-confirm-muted); flex:0 0 auto;}
+  .ded-ce-checkrow{display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ded-confirm-text); margin:14px 0 4px; cursor:pointer;}
+  .ded-ce-checkrow input{cursor:pointer;}
+  .ded-ce-btnrow{margin-top:18px;}
+  .ded-ce-save{
+    display:block; width:100%; padding:13px; margin-bottom:8px; border:1px solid var(--ded-beige); background:var(--ded-beige);
+    color:#0A0A0A; font-family:'Pretendard',sans-serif; font-size:14.5px; font-weight:700; cursor:pointer;
   }
 
   @media (max-width:400px){
     .ded-vacal-day{min-height:40px; padding:4px 3px;}
     .ded-vacal-day .dnum{font-size:10px;}
     .ded-vacal-day .badge{font-size:9px;}
+    .ded-vacal-opt-row .ded-vacal-opt{font-size:11.5px; padding:11px 2px;}
   }
 </style>
 </head>
@@ -921,15 +972,47 @@
     </div>
   </div>
 
-  <!-- 휴가 유형 선택 모달 -->
+  <!-- 휴가 유형 선택 모달: 상단에 해당 날짜의 일정 상세(휴가/구글일정/내 일정) 표시,
+       그 아래 연차/반차(오전)/반차(오후)를 한 줄로 배치 -->
   <div class="ded-vacal-modal-backdrop" id="vacalModalBackdrop" onclick="closeVacalModal(event)">
     <div class="ded-vacal-modal" onclick="event.stopPropagation()">
       <div class="ded-vacal-modal-date" id="vacalModalDate"></div>
-      <button type="button" class="ded-vacal-opt full" onclick="saveVacationDay('full')">연차</button>
-      <button type="button" class="ded-vacal-opt am" onclick="saveVacationDay('am')">반차(오전)</button>
-      <button type="button" class="ded-vacal-opt pm" onclick="saveVacationDay('pm')">반차(오후)</button>
+      <div class="ded-vacal-modal-events" id="vacalModalEvents"></div>
+      <div class="ded-vacal-opt-row">
+        <button type="button" class="ded-vacal-opt full" onclick="saveVacationDay('full')">연차</button>
+        <button type="button" class="ded-vacal-opt am" onclick="saveVacationDay('am')">반차(오전)</button>
+        <button type="button" class="ded-vacal-opt pm" onclick="saveVacationDay('pm')">반차(오후)</button>
+      </div>
       <button type="button" class="ded-vacal-opt clear" id="vacalClearBtn" onclick="saveVacationDay(null)">휴가 해제</button>
+      <button type="button" class="ded-vacal-addevt-btn" onclick="openCustomEventForm()">+ 구글 일정 직접 추가</button>
       <button type="button" class="ded-vacal-cancel" onclick="closeVacalModal()">취소</button>
+    </div>
+  </div>
+
+  <!-- 구글 일정 직접 입력/수정 모달: 수행기사가 연차/반차 외의 일반 일정(회의, 병원 등)을
+       직접 등록 — 저장 시 customEvents에 기록되고, 방향1 동기화(gcal_sync.py, 5분마다)로
+       회사 공용 구글 캘린더에도 실제 반영됨(연차/반차와 동일한 방식, marker: ksaVehicleType='custom') -->
+  <div class="ded-vacal-modal-backdrop" id="ceModalBackdrop" onclick="closeCustomEventForm(event)">
+    <div class="ded-vacal-modal" onclick="event.stopPropagation()">
+      <div class="ded-vacal-modal-date" id="ceModalTitle">일정 추가</div>
+      <label class="ded-ce-label">제목</label>
+      <input type="text" id="ceTitleInput" class="ded-ce-input" placeholder="예: 병원 방문, 외부 미팅" maxlength="60">
+      <label class="ded-ce-label">기간</label>
+      <div class="ded-ce-daterow">
+        <input type="date" id="ceStartDateInput" class="ded-ce-input">
+        <span>~</span>
+        <input type="date" id="ceEndDateInput" class="ded-ce-input">
+      </div>
+      <label class="ded-ce-checkrow"><input type="checkbox" id="ceAllDayInput" checked onchange="toggleCeTimeInputs()"> 종일</label>
+      <div class="ded-ce-timerow" id="ceTimeRow" style="display:none;">
+        <input type="time" id="ceStartTimeInput" class="ded-ce-input">
+        <span>~</span>
+        <input type="time" id="ceEndTimeInput" class="ded-ce-input">
+      </div>
+      <div class="ded-ce-btnrow">
+        <button type="button" class="ded-ce-save" onclick="saveCustomEvent()">저장</button>
+        <button type="button" class="ded-vacal-cancel" onclick="closeCustomEventForm()">취소</button>
+      </div>
     </div>
   </div>
 
@@ -1415,6 +1498,10 @@ function syncWorkTime(which){
 // 기존 "오늘은 휴가입니다" 당일 체크박스를 대체 — 미리 날짜를 선택해
 // 연차/반차(오전)/반차(오후)를 등록해두는 방식. 차량별 Firebase 노드(vacationSchedule)에 저장.
 // (trips[].isVacation 필드는 하위호환을 위해 스키마상 유지하되, 신규 운행기록에는 항상 false로 저장)
+//
+// 같은 달력 안에서 수행기사가 연차/반차 외의 "구글 일정"(회의, 병원 등)도 직접 입력할 수 있다
+// (customEvents 노드). 이 일정은 방향1 동기화(gcal_sync.py, 5분마다 실행)로 회사 공용 구글
+// 캘린더에도 실제 반영되며, 여러 날에 걸치거나 시간이 지정된 일정도 지원한다.
 // ============================================================
 let vacalOpen = false;
 let vacalYear, vacalMonth;
@@ -1423,6 +1510,10 @@ let vacalSelectedDate = null;
 // 구글 캘린더 일반 일정(회의 등) — GitHub Actions(scripts/gcal_sync.py) 방향2 동기화로
 // dedicated-fleet-data/googleCalendarEvents 에 캐싱된 값을 읽어와 참고용으로만 표시(휴가 등록과는 별개, 읽기전용)
 let vacalGcalEvents = [];
+// 수행기사가 직접 등록하는 일반 일정(연차/반차 외) — 차량별 Firebase 노드(customEvents)에 저장되며,
+// 방향1 동기화(gcal_sync.py)로 회사 공용 구글 캘린더에도 실제 반영됨. {eventId: {title, startDate, endDate, allDay, startTime, endTime, driver, updatedAt, createdAt}}
+let vacalCustomEvents = {};
+let ceEditingId = null; // 일정 추가/수정 모달에서 수정 중인 이벤트 id (신규 등록이면 null)
 
 // ── 대한민국 공휴일(달력 색상 표시용) ──
 // index.html의 KR_HOLIDAYS/KR_HOLIDAYS_REMOTE와 동일한 패턴 — 단일파일 구조상 코드는 이 파일에도
@@ -1517,6 +1608,10 @@ function vacalPath(){
   const v = VEHICLES[currentVehicleKey];
   return `${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/vacationSchedule`;
 }
+function customEventsPath(){
+  const v = VEHICLES[currentVehicleKey];
+  return `${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/customEvents`;
+}
 
 function toggleVacationCalendar(){
   vacalOpen = !vacalOpen;
@@ -1528,6 +1623,7 @@ function collapseVacationCalendar(){
   vacalOpen = false;
   vacalData = {};
   vacalGcalEvents = [];
+  vacalCustomEvents = {};
   const body = document.getElementById('vacalBody');
   if(body) body.classList.remove('open');
   const chev = document.getElementById('vacalChev');
@@ -1554,8 +1650,73 @@ async function loadAndRenderVacal(){
     console.error('[구글캘린더 일정] 조회 실패:', e);
     vacalGcalEvents = [];
   }
+  try{
+    const ce = await fbGet(customEventsPath());
+    vacalCustomEvents = (ce && typeof ce === 'object') ? ce : {};
+  }catch(e){
+    console.error('[내가 등록한 일정] 조회 실패:', e);
+    vacalCustomEvents = {};
+  }
   await loadRemoteHolidaysDed();
   renderVacalGrid();
+}
+
+// 특정 날짜(iso)에 걸쳐있는, 내가 직접 등록한 일정(customEvents) 목록 반환(id 포함)
+function customEventsForDate(iso){
+  return Object.entries(vacalCustomEvents)
+    .filter(([, ev]) => ev && ev.startDate && iso >= ev.startDate && iso <= (ev.endDate || ev.startDate))
+    .map(([id, ev]) => ({id, ...ev}));
+}
+
+// iso 날짜에 days일을 더한 날짜(로컬 기준, 타임존 이슈 없이 문자열 계산)
+function addDaysIso(iso, days){
+  const [y,m,d] = iso.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  dt.setDate(dt.getDate() + days);
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+}
+
+// 시작일~종료일을 "8/24" 또는 "8/24-25"(같은 달) 또는 "8/24~9/2"(다른 달) 형태로 표시
+function formatDateRangeLabel(startIso, endIso){
+  const [sy,sm,sd] = startIso.split('-').map(Number);
+  const [ey,em,ed] = endIso.split('-').map(Number);
+  if(startIso === endIso) return `${sm}/${sd}`;
+  if(sy===ey && sm===em) return `${sm}/${sd}-${ed}`;
+  if(sy===ey) return `${sm}/${sd}~${em}/${ed}`;
+  return `${sy}.${sm}/${sd}~${ey}.${em}/${ed}`;
+}
+
+// 구글캘린더 캐시 이벤트(direction2, {summary,start,end,allDay})를 공통 표시 포맷으로 정규화
+// allDay 이벤트의 end는 구글 API 규칙상 배타적(다음날 00:00)이므로 -1일 해서 포함 종료일로 변환
+function normalizeGcalEvent(ev){
+  if(ev.allDay){
+    const endInclusive = addDaysIso(ev.end || ev.start, -1);
+    return {source:'gcal', title: ev.summary || '(제목 없음)', startDate: ev.start, endDate: endInclusive, allDay:true};
+  }
+  const sD = String(ev.start).slice(0,10), sT = String(ev.start).slice(11,16);
+  const eRaw = ev.end || ev.start;
+  const eD = String(eRaw).slice(0,10), eT = String(eRaw).slice(11,16);
+  return {source:'gcal', title: ev.summary || '(제목 없음)', startDate: sD, endDate: eD, allDay:false, startTime: sT, endTime: eT};
+}
+// 내가 등록한 일정(customEvents)을 공통 표시 포맷으로 정규화
+function normalizeCustomEvent(ev){
+  return {
+    source:'custom', id: ev.id, title: ev.title || '(제목 없음)',
+    startDate: ev.startDate, endDate: ev.endDate || ev.startDate,
+    allDay: ev.allDay !== false, startTime: ev.startTime, endTime: ev.endTime
+  };
+}
+// 정규화된 이벤트가 해당 연/월과 겹치는지 여부(다른 달에서 시작해 이번 달로 이어지는 일정도 포함)
+function eventOverlapsMonth(ev, y, m){
+  const monthStart = `${y}-${String(m).padStart(2,'0')}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const monthEnd = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  return ev.startDate <= monthEnd && ev.endDate >= monthStart;
+}
+// 이벤트 하나의 시간 라벨(종일이면 빈 문자열, 시간 지정이면 "14:00-16:00")
+function eventTimeLabel(ev){
+  if(ev.allDay || !ev.startTime) return '';
+  return (ev.endTime && ev.endTime !== ev.startTime) ? `${ev.startTime}-${ev.endTime}` : ev.startTime;
 }
 
 // 특정 날짜(iso)에 걸쳐있는 구글 캘린더 일반 일정 목록 반환
@@ -1575,17 +1736,22 @@ function gcalEventsForDate(iso){
 function renderVacalGcalList(){
   const listEl = document.getElementById('vacalGcalList');
   if(!listEl) return;
-  const monthPrefix = `${vacalYear}-${String(vacalMonth).padStart(2,'0')}`;
-  const items = vacalGcalEvents
-    .filter(ev => ev && ev.start && String(ev.start).slice(0,7) === monthPrefix)
-    .sort((a,b) => String(a.start).localeCompare(String(b.start)));
+  // 구글 캘린더에서 읽어온 일반 일정(읽기전용) + 내가 직접 등록한 일정을 함께 표시.
+  // 이어지는(여러 날) 일정은 "8/24-25"처럼 범위로, 시간이 지정된 일정은 시간도 함께 표기한다.
+  const gcalItems = (vacalGcalEvents || []).filter(ev => ev && ev.start).map(normalizeGcalEvent);
+  const customItems = Object.entries(vacalCustomEvents).map(([id, ev]) => normalizeCustomEvent({id, ...ev}));
+  const items = [...gcalItems, ...customItems]
+    .filter(ev => eventOverlapsMonth(ev, vacalYear, vacalMonth))
+    .sort((a,b) => a.startDate.localeCompare(b.startDate) || (a.startTime||'').localeCompare(b.startTime||''));
   if(items.length === 0){
     listEl.innerHTML = `<div class="gcal-title">구글 일정</div><div class="ded-vacal-gcal-empty">이번 달 구글 캘린더 일정이 없습니다.</div>`;
     return;
   }
   const rows = items.map(ev => {
-    const d = String(ev.start).slice(8,10);
-    return `<div class="ded-vacal-gcal-item"><span class="d">${d}일</span><span class="s">${escapeHtmlDed(ev.summary || '(제목 없음)')}</span></div>`;
+    const dateLabel = formatDateRangeLabel(ev.startDate, ev.endDate);
+    const timeLabel = eventTimeLabel(ev);
+    const tag = ev.source === 'custom' ? `<span class="tag mine">내 일정</span>` : '';
+    return `<div class="ded-vacal-gcal-item"><span class="d">${dateLabel}${timeLabel ? ` ${timeLabel}` : ''}</span><span class="s">${tag}${escapeHtmlDed(ev.title)}</span></div>`;
   }).join('');
   listEl.innerHTML = `<div class="gcal-title">구글 일정</div>${rows}`;
 }
@@ -1611,7 +1777,7 @@ function renderVacalGrid(){
     let cls = 'ded-vacal-day';
     if(iso === todayIsoVal) cls += ' today';
     if(rec && VACAL_LABEL[rec.type]) cls += ` set ${rec.type}`;
-    const hasGcal = gcalEventsForDate(iso).length > 0;
+    const hasGcal = gcalEventsForDate(iso).length > 0 || customEventsForDate(iso).length > 0;
     // 요일은 그리드상 위치(일요일 시작 고정 배치)로 계산 — 날짜 계산과 무관하게 항상 열 위치와 일치
     const dow = (leadEmpty + day - 1) % 7; // 0=일 ... 6=토
     const isHol = isHolidayIso(iso);
@@ -1633,13 +1799,129 @@ function openVacalDay(iso){
   document.getElementById('vacalModalDate').textContent = m ? `${m[1]}년 ${parseInt(m[2],10)}월 ${parseInt(m[3],10)}일` : iso;
   const rec = vacalData[iso];
   document.getElementById('vacalClearBtn').style.display = (rec && VACAL_LABEL[rec.type]) ? '' : 'none';
+  renderVacalModalEvents(iso);
   document.getElementById('vacalModalBackdrop').classList.add('open');
+}
+
+// 선택한 날짜의 일정 상세(휴가 등록 여부 + 구글 일정 + 내가 등록한 일정)를 모달 상단에 표시
+function renderVacalModalEvents(iso){
+  const box = document.getElementById('vacalModalEvents');
+  if(!box) return;
+  const rec = vacalData[iso];
+  const gcalItems = gcalEventsForDate(iso).map(normalizeGcalEvent);
+  const customItems = customEventsForDate(iso).map(ev => normalizeCustomEvent(ev));
+  let html = '';
+  if(rec && VACAL_LABEL[rec.type]){
+    html += `<div class="ded-vacal-modal-evt vacation"><span class="dot"></span><span class="s">${escapeHtmlDed(VACAL_LABEL[rec.type])}</span></div>`;
+  }
+  gcalItems.forEach(ev => {
+    const timeLabel = eventTimeLabel(ev);
+    const rangeLabel = ev.startDate !== ev.endDate ? formatDateRangeLabel(ev.startDate, ev.endDate) : '';
+    html += `<div class="ded-vacal-modal-evt"><span class="dot"></span><span class="s">${escapeHtmlDed(ev.title)}${timeLabel ? `<span class="t">${timeLabel}</span>` : ''}${rangeLabel ? `<span class="t">(${rangeLabel})</span>` : ''}</span></div>`;
+  });
+  customItems.forEach(ev => {
+    const timeLabel = eventTimeLabel(ev);
+    const rangeLabel = ev.startDate !== ev.endDate ? formatDateRangeLabel(ev.startDate, ev.endDate) : '';
+    html += `<div class="ded-vacal-modal-evt mine"><span class="dot"></span><span class="s">${escapeHtmlDed(ev.title)}${timeLabel ? `<span class="t">${timeLabel}</span>` : ''}${rangeLabel ? `<span class="t">(${rangeLabel})</span>` : ''}</span><span class="evt-actions"><button type="button" onclick="editCustomEvent('${ev.id}')">수정</button><button type="button" onclick="deleteCustomEvent('${ev.id}')">삭제</button></span></div>`;
+  });
+  box.innerHTML = html || `<div class="ded-vacal-modal-empty">등록된 일정이 없습니다.</div>`;
 }
 
 function closeVacalModal(e){
   if(e) e.preventDefault();
   document.getElementById('vacalModalBackdrop').classList.remove('open');
   vacalSelectedDate = null;
+}
+
+// ── 구글 일정 직접 입력(연차/반차 외 일반 일정) ──
+// 저장 시 customEvents에 기록되고, gcal_sync.py 방향1 확장으로 회사 공용 구글 캘린더에도 실제 반영됨.
+function openCustomEventForm(){
+  ceEditingId = null;
+  document.getElementById('ceModalTitle').textContent = '일정 추가';
+  document.getElementById('ceTitleInput').value = '';
+  document.getElementById('ceStartDateInput').value = vacalSelectedDate || todayIso();
+  document.getElementById('ceEndDateInput').value = vacalSelectedDate || todayIso();
+  document.getElementById('ceAllDayInput').checked = true;
+  document.getElementById('ceStartTimeInput').value = '';
+  document.getElementById('ceEndTimeInput').value = '';
+  toggleCeTimeInputs();
+  document.getElementById('vacalModalBackdrop').classList.remove('open');
+  document.getElementById('ceModalBackdrop').classList.add('open');
+}
+
+function editCustomEvent(id){
+  const ev = vacalCustomEvents[id];
+  if(!ev) return;
+  ceEditingId = id;
+  document.getElementById('ceModalTitle').textContent = '일정 수정';
+  document.getElementById('ceTitleInput').value = ev.title || '';
+  document.getElementById('ceStartDateInput').value = ev.startDate;
+  document.getElementById('ceEndDateInput').value = ev.endDate || ev.startDate;
+  document.getElementById('ceAllDayInput').checked = ev.allDay !== false;
+  document.getElementById('ceStartTimeInput').value = ev.startTime || '';
+  document.getElementById('ceEndTimeInput').value = ev.endTime || '';
+  toggleCeTimeInputs();
+  document.getElementById('vacalModalBackdrop').classList.remove('open');
+  document.getElementById('ceModalBackdrop').classList.add('open');
+}
+
+function toggleCeTimeInputs(){
+  const allDay = document.getElementById('ceAllDayInput').checked;
+  document.getElementById('ceTimeRow').style.display = allDay ? 'none' : 'flex';
+}
+
+function closeCustomEventForm(e){
+  if(e) e.preventDefault();
+  document.getElementById('ceModalBackdrop').classList.remove('open');
+  ceEditingId = null;
+}
+
+async function saveCustomEvent(){
+  const title = document.getElementById('ceTitleInput').value.trim();
+  const startDate = document.getElementById('ceStartDateInput').value;
+  const endDate = document.getElementById('ceEndDateInput').value || startDate;
+  const allDay = document.getElementById('ceAllDayInput').checked;
+  const startTime = document.getElementById('ceStartTimeInput').value;
+  const endTime = document.getElementById('ceEndTimeInput').value;
+  if(!title){ showToast('제목을 입력해주세요.', true); return; }
+  if(!startDate){ showToast('시작일을 입력해주세요.', true); return; }
+  if(endDate < startDate){ showToast('종료일이 시작일보다 빠를 수 없습니다.', true); return; }
+  if(!allDay && (!startTime || !endTime)){ showToast('시작/종료 시간을 입력해주세요.', true); return; }
+  const v = VEHICLES[currentVehicleKey];
+  const id = ceEditingId || `cev_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+  const prevCreatedAt = (ceEditingId && vacalCustomEvents[ceEditingId] && vacalCustomEvents[ceEditingId].createdAt) || new Date().toISOString();
+  const record = {
+    title, startDate, endDate, allDay,
+    startTime: allDay ? null : startTime,
+    endTime: allDay ? null : endTime,
+    driver: (document.getElementById('driverName').value.trim() || v.driver),
+    updatedAt: new Date().toISOString(),
+    createdAt: prevCreatedAt
+  };
+  try{
+    await fbSet(`${customEventsPath()}/${id}`, record);
+    vacalCustomEvents[id] = record;
+    closeCustomEventForm();
+    renderVacalGrid();
+    if(vacalSelectedDate) renderVacalModalEvents(vacalSelectedDate);
+    showToast(ceEditingId ? '일정이 수정되었습니다.' : '일정이 등록되었습니다.');
+  }catch(e){
+    showToast('저장 중 오류가 발생했습니다: ' + e.message, true);
+  }
+}
+
+async function deleteCustomEvent(id){
+  const ok = await appConfirm('이 일정을 삭제하시겠습니까?\n(구글 캘린더에서도 함께 삭제됩니다)', {danger:true, okText:'삭제'});
+  if(!ok) return;
+  try{
+    await fbSet(`${customEventsPath()}/${id}`, null);
+    delete vacalCustomEvents[id];
+    if(vacalSelectedDate) renderVacalModalEvents(vacalSelectedDate);
+    renderVacalGrid();
+    showToast('일정이 삭제되었습니다.');
+  }catch(e){
+    showToast('삭제 중 오류가 발생했습니다: ' + e.message, true);
+  }
 }
 
 async function saveVacationDay(type){
