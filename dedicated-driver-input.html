@@ -793,13 +793,18 @@
   .ded-vacal-day .dnum.sat{color:#5B8DEF;}
   /* 대한민국 공휴일 — 일요일과 동일하게 빨강으로 표시(토요일 색상보다 우선) */
   .ded-vacal-day .dnum.holiday{color:var(--ded-red); font-weight:600;}
+  /* 공휴일명 라벨 — 구글 캘린더처럼 날짜 숫자 바로 아래 작은 글씨로 표시. 셀 폭이 좁아(모바일 기준
+     7열 그리드) 긴 이름(예: 부처님오신날)은 말줄임(ellipsis) 처리한다. */
+  .ded-vacal-day .holname{
+    font-size:8px; line-height:1.15; color:var(--ded-red); margin-top:1px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
+  }
   .ded-vacal-day .badge{margin-top:auto; font-size:10px; font-weight:600; color:var(--ded-beige);}
   .ded-vacal-day.set{background:color-mix(in srgb, var(--ded-beige) 16%, var(--ded-bg));}
   .ded-vacal-day.set.am .badge, .ded-vacal-day.set.pm .badge{color:var(--ded-muted);}
   /* 요일 헤더(일~토)도 동일한 색상 규칙 적용 */
   .ded-wh-cal-head .sun{color:var(--ded-red);}
   .ded-wh-cal-head .sat{color:#5B8DEF;}
-  .ded-vacal-weekend-note{font-size:10.5px; color:var(--ded-muted-2); margin:-4px 0 10px;}
   .ded-vacal-legend{display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--ded-muted);}
   .ded-vacal-legend .lg{position:relative; padding-left:14px;}
   .ded-vacal-legend .lg::before{
@@ -908,7 +913,6 @@
         <div class="sun">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="sat">토</div>
       </div>
       <div class="ded-vacal-grid" id="vacalGrid"></div>
-      <div class="ded-vacal-weekend-note">일요일·공휴일은 빨간색, 토요일은 파란색 숫자로 표시됩니다.</div>
       <div class="ded-vacal-legend">
         <span class="lg full">연차</span><span class="lg am">반차(오전)</span><span class="lg pm">반차(오후)</span><span class="lg gcal">구글 일정</span>
       </div>
@@ -1439,14 +1443,63 @@ const KR_HOLIDAYS_DED = new Set([
   '2028-05-02','2028-05-05','2028-06-06','2028-08-15',
   '2028-10-02','2028-10-03','2028-10-04','2028-10-09','2028-12-25',
 ]);
+// KR_HOLIDAYS_DED의 각 날짜에 대응하는 공휴일명 — index.html의 KR_HOLIDAY_NAMES와 동일한 데이터를
+// 단일파일 구조상 이 파일에도 그대로 보유(달력에 "공휴일명" 라벨 표기용, 구글 캘린더 스타일).
+const KR_HOLIDAY_NAMES_DED = {
+  '2025-01-01':'신정',
+  '2025-01-27':'설날 연휴','2025-01-28':'설날 연휴','2025-01-29':'설날 연휴','2025-01-30':'설날 연휴',
+  '2025-03-03':'3·1절 대체',
+  '2025-05-05':'어린이날','2025-05-06':'어린이날 대체',
+  '2025-06-06':'현충일',
+  '2025-08-15':'광복절',
+  '2025-10-03':'개천절','2025-10-05':'추석 연휴','2025-10-06':'추석 연휴','2025-10-07':'추석 연휴','2025-10-09':'한글날',
+  '2025-12-25':'크리스마스',
+  '2026-01-01':'신정',
+  '2026-02-16':'설날 연휴','2026-02-17':'설날 연휴','2026-02-18':'설날 연휴',
+  '2026-03-02':'3·1절 대체',
+  '2026-05-01':'근로자의날',
+  '2026-05-05':'어린이날','2026-05-24':'부처님오신날','2026-05-25':'부처님오신날 대체',
+  '2026-06-03':'지방선거','2026-06-06':'현충일',
+  '2026-07-17':'제헌절',
+  '2026-08-15':'광복절','2026-08-17':'광복절 대체',
+  '2026-09-24':'추석 연휴','2026-09-25':'추석 연휴','2026-09-26':'추석 연휴',
+  '2026-10-03':'개천절','2026-10-05':'개천절 대체','2026-10-09':'한글날',
+  '2026-12-25':'크리스마스',
+  '2027-01-01':'신정',
+  '2027-02-06':'설날 연휴','2027-02-07':'설날 연휴','2027-02-08':'설날 연휴','2027-02-09':'설날 연휴',
+  '2027-03-01':'3·1절',
+  '2027-05-05':'어린이날','2027-05-13':'부처님오신날',
+  '2027-06-06':'현충일',
+  '2027-08-15':'광복절','2027-08-16':'광복절 대체',
+  '2027-09-14':'추석 연휴','2027-09-15':'추석 연휴','2027-09-16':'추석 연휴',
+  '2027-10-03':'개천절','2027-10-04':'개천절 대체','2027-10-09':'한글날',
+  '2027-12-25':'크리스마스',
+  '2028-01-01':'신정',
+  '2028-01-26':'설날 연휴','2028-01-27':'설날 연휴','2028-01-28':'설날 연휴',
+  '2028-03-01':'3·1절',
+  '2028-05-01':'근로자의날',
+  '2028-05-02':'부처님오신날',
+  '2028-05-05':'어린이날',
+  '2028-06-06':'현충일',
+  '2028-08-15':'광복절',
+  '2028-10-02':'추석 연휴','2028-10-03':'추석 연휴','2028-10-04':'추석 연휴','2028-10-09':'한글날',
+  '2028-12-25':'크리스마스',
+};
 // Firebase(kr-holidays-remote)에서 로드되는 원격 목록(공공데이터포털/Nager.Date 자동 갱신, index.html과 동일 경로 공유)
 let KR_HOLIDAYS_REMOTE_DED = new Set();
+// Firebase에서 받아온 {"날짜":"공휴일명"} 원본(이름 조회용으로 별도 보관 — index.html의 KR_HOLIDAYS_REMOTE_NAMES와 동일 패턴)
+let KR_HOLIDAYS_REMOTE_NAMES_DED = {};
 function isHolidayIso(iso){ return KR_HOLIDAYS_DED.has(iso) || KR_HOLIDAYS_REMOTE_DED.has(iso); }
+// iso(YYYY-MM-DD)에 해당하는 공휴일명을 반환. 원격 데이터를 우선하고, 없으면 수기 목록, 그래도 없으면 '공휴일'.
+function holidayNameForIso(iso){
+  return KR_HOLIDAYS_REMOTE_NAMES_DED[iso] || KR_HOLIDAY_NAMES_DED[iso] || '공휴일';
+}
 async function loadRemoteHolidaysDed(){
   try{
     const remote = await fbGet('kr-holidays-remote');
     if(remote && typeof remote === 'object'){
       KR_HOLIDAYS_REMOTE_DED = new Set(Object.keys(remote));
+      KR_HOLIDAYS_REMOTE_NAMES_DED = remote;
     }
   }catch(e){
     console.warn('[공휴일] 원격 데이터 로드 실패 (수기 목록으로 계속 동작):', e.message);
@@ -1566,7 +1619,9 @@ function renderVacalGrid(){
     if(isHol) dnumCls += ' holiday';
     else if(dow === 0) dnumCls += ' sun';
     else if(dow === 6) dnumCls += ' sat';
-    html += `<div class="${cls}" onclick="openVacalDay('${iso}')"><div class="${dnumCls}">${day}</div>${hasGcal ? `<div class="gcal-dot"></div>` : ''}${(rec && VACAL_LABEL[rec.type]) ? `<div class="badge">${VACAL_SHORT[rec.type]}</div>` : ''}</div>`;
+    // 공휴일명 라벨(구글 캘린더처럼 날짜 숫자 아래 표기) — 셀 폭이 좁아 title 속성으로 전체 이름도 함께 노출
+    const holLabel = isHol ? `<div class="holname" title="${escapeHtmlDed(holidayNameForIso(iso))}">${escapeHtmlDed(holidayNameForIso(iso))}</div>` : '';
+    html += `<div class="${cls}" onclick="openVacalDay('${iso}')"><div class="${dnumCls}">${day}</div>${holLabel}${hasGcal ? `<div class="gcal-dot"></div>` : ''}${(rec && VACAL_LABEL[rec.type]) ? `<div class="badge">${VACAL_SHORT[rec.type]}</div>` : ''}</div>`;
   }
   document.getElementById('vacalGrid').innerHTML = html;
   renderVacalGcalList();
