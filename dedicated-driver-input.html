@@ -1624,7 +1624,7 @@ const VACAL_SHORT = { full:'연차', am:'오전반차', pm:'오후반차' };
 // 방향2(구글→시스템, 일반 일정 표시) 실시간 조회용 Apps Script 웹앱 프록시 URL.
 // 미배포 상태(빈 문자열)면 자동으로 기존 Firebase 5분 캐시(googleCalendarEvents)로 폴백한다.
 // 배포 방법: scripts/gas-calendar-proxy/README.md 참고
-const GAS_WEBAPP_URL = ''; // 예: 'https://script.google.com/macros/s/AKfycb.../exec'
+const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyCdx1x5KjCis9YFQrahQolnVtnXsAzfoWWudvoU74iPauIaQJnyLuxmhdQlgDr5d8z/exec';
 
 // GAS_WEBAPP_URL에서 y년 m월 기준 앞뒤 한 달씩(달력에 걸치는 전월/차월 날짜까지 포함) 범위로
 // 일반 일정을 실시간 조회. 실패/미배포 시 null 반환(호출부에서 Firebase 캐시로 폴백 처리).
