@@ -35,6 +35,10 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-19] 개인사용(주말·공휴일 사용) 체크 시, 실제 운행기간이 주말·공휴일에 해당하지 않는
+  경우(운행기간 입력란 하단 경고 문구만으로는 화면에 안 보여 문제없는 것으로 오인할 수 있음)
+  운행기간 입력란으로 자동 스크롤 이동하여 즉시 보여주도록 개선 | 변경: togglePersonalUse()
+
   [2026-08-19] 공용차량 운행정보입력: 개인사용(주말·공휴일 사용) 체크 시 실제 운행기간이 주말·
   공휴일에 해당하는지 검증하는 로직 추가. 2일 이상 기간은 주말·공휴일 앞뒤 각 1일(퇴근 시 반출,
   출근 시 반납)까지 허용하되, 그 외(예: 평일 하루만 선택)엔 운행기간 확인 알람과 함께 제출 차단.
@@ -7674,6 +7678,16 @@ function togglePersonalUse(chk, id){
   }
   checkFuelVsDistance(id);
   onDateRangeChange(id); // 운행기간 안내문구를 "가동율 미반영" 상태로 즉시 갱신 (scheduleDraft 포함)
+  // 개인사용 체크 시 실제 운행기간이 주말·공휴일에 해당하지 않으면, 체크박스 근처엔 별도 오류가
+  // 보이지 않아 사용자가 문제없는 것으로 오인할 수 있으므로 운행기간 입력란으로 자동 스크롤해 보여줌
+  if(chk.checked){
+    const fromVal = card?.querySelector('.tr-date-from')?.value || '';
+    const toVal = card?.querySelector('.tr-date-to')?.value || fromVal;
+    if(fromVal.length===10 && toVal.length===10 && !isValidPersonalWeekendRange(fromVal, toVal)){
+      const rangeInfo = document.getElementById('daterange-'+id);
+      (rangeInfo || card?.querySelector('.tr-date-from'))?.scrollIntoView({behavior:'smooth', block:'center'});
+    }
+  }
   // 개인사용 해제 시 영수증 첨부 상태도 함께 초기화 (다시 체크하면 처음부터 다시 진행)
   if(!chk.checked) resetReceiptState(id);
 }
