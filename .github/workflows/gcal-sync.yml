@@ -22,7 +22,9 @@ name: Sync Google Calendar (전용차량 휴가 일정 양방향 동기화)
 
 on:
   schedule:
-    - cron: '*/15 * * * *'   # 15분마다 실행
+    # GitHub Actions 예약 워크플로우의 최소 간격은 5분 — 이보다 짧게 지정해도(예: */1)
+    # GitHub가 실제로는 5분 미만으로 실행해주지 않으므로 5분이 실질적인 하한선.
+    - cron: '*/5 * * * *'    # 5분마다 실행
   workflow_dispatch: {}
 
 jobs:
