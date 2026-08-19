@@ -776,11 +776,16 @@
     background:var(--ded-bg); min-height:48px; padding:5px 4px; display:flex; flex-direction:column;
     cursor:pointer; position:relative;
   }
-  /* 구글 캘린더 일반 일정(휴가 아닌 회의 등) 표시 점 — 방향2(구글→시스템) 동기화 데이터 */
-  .ded-vacal-day .gcal-dot{
-    position:absolute; top:5px; right:5px; width:6px; height:6px; border-radius:50%;
-    background:var(--ded-beige);
+  /* 업무 일정(구글, 방향2 동기화 데이터)과 휴가(연차/반차)를 우상단 원형 점으로 표시.
+     둘 다 있는 날짜는 나란히 배치(업무일정 점이 왼쪽, 휴가 점이 오른쪽/모서리 쪽)해 구분한다.
+     컨테이너를 right:5px에 고정하고 flex로 배치하면 점 개수와 무관하게 항상 우측 모서리에
+     맞춰지고, 추가되는 점은 왼쪽으로 이어붙는다. */
+  .ded-vacal-day .dot-row{
+    position:absolute; top:5px; right:5px; display:flex; align-items:center; gap:3px;
   }
+  .ded-vacal-day .dot-row .dot{width:6px; height:6px; border-radius:50%; flex:0 0 auto;}
+  .ded-vacal-day .dot-row .dot.gcal{background:var(--ded-beige);}
+  .ded-vacal-day .dot-row .dot.vac{background:var(--ded-red);}
   .ded-vacal-day.empty{background:transparent; cursor:default;}
   /* 전월/차월 날짜(당월 앞뒤 빈칸을 채우는 용도) — 음영 처리로 당월과 구분, 클릭은 그대로 가능 */
   .ded-vacal-day.adj{opacity:.4;}
@@ -805,7 +810,9 @@
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
   }
   .ded-vacal-day .badge{margin-top:auto; font-size:9px; font-weight:600; color:var(--ded-beige); line-height:1.15;}
-  .ded-vacal-day.set{background:color-mix(in srgb, var(--ded-beige) 16%, var(--ded-bg));}
+  /* 2026-08-19: 전월/차월 음영(.adj, opacity)과 휴가 음영이 비슷해 보여 헷갈린다는 피드백으로
+     배경 음영을 제거하고 우상단 붉은 원형 점(.dot-row .dot.vac)으로 대체 — 아래 .set 규칙은
+     배경 없이 am/pm 배지 색상 구분 용도로만 유지 */
   .ded-vacal-day.set.am .badge, .ded-vacal-day.set.pm .badge{color:var(--ded-muted);}
   /* 요일 헤더(일~토)도 동일한 색상 규칙 적용 */
   .ded-wh-cal-head .sun{color:var(--ded-red);}
@@ -818,6 +825,9 @@
   }
   .ded-vacal-legend .lg.gcal::before{
     background:var(--ded-beige); border:none; border-radius:50%; width:7px; height:7px; top:4px;
+  }
+  .ded-vacal-legend .lg.vac::before{
+    background:var(--ded-red); border:none; border-radius:50%; width:7px; height:7px; top:4px;
   }
   /* 구글 캘린더에서 가져온 일반 일정(방향2) 목록 — 휴가 등록형(월간 그리드)과 별도로 하단에 노출 */
   .ded-vacal-gcal-list{margin-top:12px; padding-top:12px; border-top:1px solid var(--ded-line);}
@@ -972,7 +982,7 @@
       </div>
       <div class="ded-vacal-grid" id="vacalGrid"></div>
       <div class="ded-vacal-legend">
-        <span class="lg gcal">업무 일정(Google)</span><span class="lg full">연차</span>
+        <span class="lg gcal">업무 일정(Google)</span><span class="lg vac">연차</span>
       </div>
       <!-- 구글 캘린더에서 가져온 일반 일정(회의 등, 방향2 동기화) 표시 -->
       <div class="ded-vacal-gcal-list" id="vacalGcalList"></div>
@@ -1611,6 +1621,50 @@ async function loadRemoteHolidaysDed(){
 const VACAL_LABEL = { full:'연차', am:'반차(오전)', pm:'반차(오후)' };
 const VACAL_SHORT = { full:'연차', am:'오전반차', pm:'오후반차' };
 
+// 방향2(구글→시스템, 일반 일정 표시) 실시간 조회용 Apps Script 웹앱 프록시 URL.
+// 미배포 상태(빈 문자열)면 자동으로 기존 Firebase 5분 캐시(googleCalendarEvents)로 폴백한다.
+// 배포 방법: scripts/gas-calendar-proxy/README.md 참고
+const GAS_WEBAPP_URL = ''; // 예: 'https://script.google.com/macros/s/AKfycb.../exec'
+
+// GAS_WEBAPP_URL에서 y년 m월 기준 앞뒤 한 달씩(달력에 걸치는 전월/차월 날짜까지 포함) 범위로
+// 일반 일정을 실시간 조회. 실패/미배포 시 null 반환(호출부에서 Firebase 캐시로 폴백 처리).
+async function fetchGcalEventsLive(y, m){
+  if(!GAS_WEBAPP_URL) return null;
+  try{
+    const rangeStartD = new Date(y, m-2, 1);        // 전달 1일
+    const rangeEndD = new Date(y, m+1, 0);           // 다음달 말일
+    const pad = n => String(n).padStart(2, '0');
+    const rangeStart = `${rangeStartD.getFullYear()}-${pad(rangeStartD.getMonth()+1)}-${pad(rangeStartD.getDate())}`;
+    const rangeEnd = `${rangeEndD.getFullYear()}-${pad(rangeEndD.getMonth()+1)}-${pad(rangeEndD.getDate())}`;
+    const url = `${GAS_WEBAPP_URL}?start=${rangeStart}&end=${rangeEnd}`;
+    const res = await fetch(url);
+    if(!res.ok) return null;
+    const data = await res.json();
+    if(data && data.error){ console.error('[구글캘린더 실시간 조회] 오류:', data.error); return null; }
+    return Array.isArray(data) ? data : null;
+  }catch(e){
+    console.error('[구글캘린더 실시간 조회] 실패(Firebase 캐시로 폴백):', e);
+    return null;
+  }
+}
+
+// vacalGcalEvents를 최신화(실시간 프록시 우선, 실패 시 Firebase 캐시로 폴백)
+async function reloadVacalGcalEvents(){
+  const live = await fetchGcalEventsLive(vacalYear, vacalMonth);
+  if(live){
+    vacalGcalEvents = live;
+    return;
+  }
+  try{
+    // 전 차량 공용 회사 구글 캘린더를 캐싱한 값이라 차량과 무관하게 동일한 경로에서 조회
+    const gcal = await fbGet(`${DEDICATED_STORAGE_KEY}/googleCalendarEvents`);
+    vacalGcalEvents = Array.isArray(gcal) ? gcal.filter(Boolean) : [];
+  }catch(e){
+    console.error('[구글캘린더 일정] 조회 실패:', e);
+    vacalGcalEvents = [];
+  }
+}
+
 function vacalPath(){
   const v = VEHICLES[currentVehicleKey];
   return `${DEDICATED_STORAGE_KEY}/vehicles/${encodeURIComponent(v.plate)}/vacationSchedule`;
@@ -1649,14 +1703,7 @@ async function loadAndRenderVacal(){
     console.error('[휴가일정] 조회 실패:', e);
     vacalData = {};
   }
-  try{
-    // 전 차량 공용 회사 구글 캘린더를 캐싱한 값이라 차량과 무관하게 동일한 경로에서 조회
-    const gcal = await fbGet(`${DEDICATED_STORAGE_KEY}/googleCalendarEvents`);
-    vacalGcalEvents = Array.isArray(gcal) ? gcal.filter(Boolean) : [];
-  }catch(e){
-    console.error('[구글캘린더 일정] 조회 실패:', e);
-    vacalGcalEvents = [];
-  }
+  await reloadVacalGcalEvents();
   try{
     const ce = await fbGet(customEventsPath());
     vacalCustomEvents = (ce && typeof ce === 'object') ? ce : {};
@@ -1772,10 +1819,13 @@ function renderVacalGcalList(){
   listEl.innerHTML = rows;
 }
 
-function changeVacalMonth(delta){
+async function changeVacalMonth(delta){
   let m = vacalMonth + delta, y = vacalYear;
   if(m < 1){ m = 12; y -= 1; } else if(m > 12){ m = 1; y += 1; }
   vacalMonth = m; vacalYear = y;
+  // 실시간 프록시 사용 시 조회 범위가 월 단위라 달을 넘길 때마다 재조회 필요
+  // (Firebase 캐시 폴백 시에는 이미 전체 캐시를 들고 있어 중복 조회지만 비용은 미미함)
+  await reloadVacalGcalEvents();
   renderVacalGrid();
 }
 
@@ -1797,7 +1847,13 @@ function buildVacalDayCell(y, m, day, dow, isAdjacent, todayIsoVal){
   else if(dow === 6) dnumCls += ' sat';
   // 공휴일명 라벨(구글 캘린더처럼 날짜 숫자 아래 표기) — 셀 폭이 좁아 title 속성으로 전체 이름도 함께 노출
   const holLabel = isHol ? `<div class="holname" title="${escapeHtmlDed(holidayNameForIso(iso))}">${escapeHtmlDed(holidayNameForIso(iso))}</div>` : '';
-  return `<div class="${cls}" onclick="openVacalDay('${iso}')"><div class="${dnumCls}">${day}</div>${holLabel}${hasGcal ? `<div class="gcal-dot"></div>` : ''}${(rec && VACAL_LABEL[rec.type]) ? `<div class="badge">${VACAL_SHORT[rec.type]}</div>` : ''}</div>`;
+  // 우상단 점 표시: 업무일정(구글)은 베이지, 휴가(연차/반차)는 빨강. 둘 다 있으면 업무일정 점을
+  // 먼저 넣어 왼쪽에, 휴가 점을 뒤에 넣어 오른쪽(모서리 쪽)에 나란히 표시한다.
+  const isVac = !!(rec && VACAL_LABEL[rec.type]);
+  const dotsHtml = (hasGcal || isVac)
+    ? `<div class="dot-row">${hasGcal ? '<span class="dot gcal"></span>' : ''}${isVac ? '<span class="dot vac"></span>' : ''}</div>`
+    : '';
+  return `<div class="${cls}" onclick="openVacalDay('${iso}')"><div class="${dnumCls}">${day}</div>${holLabel}${dotsHtml}${isVac ? `<div class="badge">${VACAL_SHORT[rec.type]}</div>` : ''}</div>`;
 }
 
 function renderVacalGrid(){
