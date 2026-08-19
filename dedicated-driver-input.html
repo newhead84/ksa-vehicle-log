@@ -1626,35 +1626,59 @@ const VACAL_SHORT = { full:'연차', am:'오전반차', pm:'오후반차' };
 // 배포 방법: scripts/gas-calendar-proxy/README.md 참고
 const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyCdx1x5KjCis9YFQrahQolnVtnXsAzfoWWudvoU74iPauIaQJnyLuxmhdQlgDr5d8z/exec';
 
+// 월별 구글캘린더 실시간 조회 결과 캐시 — 같은 달을 재방문(전월↔차월 왕복 등)할 때 GAS 재호출 없이
+// 즉시 표시하기 위함. Apps Script는 콜드스타트 등으로 응답이 느릴 수 있어 캐시 효과가 크다.
+// TTL을 짧게(3분) 둬서 실시간성과 속도를 절충한다.
+const VACAL_GCAL_CACHE_TTL_MS = 3 * 60 * 1000;
+const vacalGcalCache = {};     // {'y-m': {events, ts}}
+const vacalGcalInflight = {};  // {'y-m': Promise} — 동일 달에 대한 동시 중복요청(프리페치↔실사용) 방지
+function vacalCacheKey(y, m){ return `${y}-${m}`; }
+
 // GAS_WEBAPP_URL에서 y년 m월 기준 앞뒤 한 달씩(달력에 걸치는 전월/차월 날짜까지 포함) 범위로
 // 일반 일정을 실시간 조회. 실패/미배포 시 null 반환(호출부에서 Firebase 캐시로 폴백 처리).
+// 캐시에 신선한 데이터가 있으면 네트워크 호출 없이 즉시 반환한다.
 async function fetchGcalEventsLive(y, m){
   if(!GAS_WEBAPP_URL) return null;
-  try{
-    const rangeStartD = new Date(y, m-2, 1);        // 전달 1일
-    const rangeEndD = new Date(y, m+1, 0);           // 다음달 말일
-    const pad = n => String(n).padStart(2, '0');
-    const rangeStart = `${rangeStartD.getFullYear()}-${pad(rangeStartD.getMonth()+1)}-${pad(rangeStartD.getDate())}`;
-    const rangeEnd = `${rangeEndD.getFullYear()}-${pad(rangeEndD.getMonth()+1)}-${pad(rangeEndD.getDate())}`;
-    const url = `${GAS_WEBAPP_URL}?start=${rangeStart}&end=${rangeEnd}`;
-    const res = await fetch(url);
-    if(!res.ok) return null;
-    const data = await res.json();
-    if(data && data.error){ console.error('[구글캘린더 실시간 조회] 오류:', data.error); return null; }
-    return Array.isArray(data) ? data : null;
-  }catch(e){
-    console.error('[구글캘린더 실시간 조회] 실패(Firebase 캐시로 폴백):', e);
-    return null;
-  }
+  const key = vacalCacheKey(y, m);
+  const cached = vacalGcalCache[key];
+  if(cached && (Date.now() - cached.ts) < VACAL_GCAL_CACHE_TTL_MS) return cached.events;
+  if(vacalGcalInflight[key]) return vacalGcalInflight[key];
+  const p = (async () => {
+    try{
+      const rangeStartD = new Date(y, m-2, 1);        // 전달 1일
+      const rangeEndD = new Date(y, m+1, 0);           // 다음달 말일
+      const pad = n => String(n).padStart(2, '0');
+      const rangeStart = `${rangeStartD.getFullYear()}-${pad(rangeStartD.getMonth()+1)}-${pad(rangeStartD.getDate())}`;
+      const rangeEnd = `${rangeEndD.getFullYear()}-${pad(rangeEndD.getMonth()+1)}-${pad(rangeEndD.getDate())}`;
+      const url = `${GAS_WEBAPP_URL}?start=${rangeStart}&end=${rangeEnd}`;
+      const res = await fetch(url);
+      if(!res.ok) return null;
+      const data = await res.json();
+      if(data && data.error){ console.error('[구글캘린더 실시간 조회] 오류:', data.error); return null; }
+      const events = Array.isArray(data) ? data : null;
+      if(events) vacalGcalCache[key] = {events, ts: Date.now()};
+      return events;
+    }catch(e){
+      console.error('[구글캘린더 실시간 조회] 실패(Firebase 캐시로 폴백):', e);
+      return null;
+    }finally{
+      delete vacalGcalInflight[key];
+    }
+  })();
+  vacalGcalInflight[key] = p;
+  return p;
 }
 
 // vacalGcalEvents를 최신화(실시간 프록시 우선, 실패 시 Firebase 캐시로 폴백)
-async function reloadVacalGcalEvents(){
-  const live = await fetchGcalEventsLive(vacalYear, vacalMonth);
+// targetY/targetM 생략 시 현재 표시 중인 달(vacalYear/vacalMonth) 기준. applyToState=false로 호출하면
+// 조회 결과를 캐시에만 채워두고 화면 상태(vacalGcalEvents)는 건드리지 않는다 — 백그라운드 프리페치용.
+async function reloadVacalGcalEvents(targetY = vacalYear, targetM = vacalMonth, applyToState = true){
+  const live = await fetchGcalEventsLive(targetY, targetM);
   if(live){
-    vacalGcalEvents = live;
-    return;
+    if(applyToState) vacalGcalEvents = live;
+    return live;
   }
+  if(!applyToState) return null; // 프리페치는 실패해도 Firebase 폴백까지 갈 필요 없음(현재 달 조회 시에만 폴백)
   try{
     // 전 차량 공용 회사 구글 캘린더를 캐싱한 값이라 차량과 무관하게 동일한 경로에서 조회
     const gcal = await fbGet(`${DEDICATED_STORAGE_KEY}/googleCalendarEvents`);
@@ -1663,6 +1687,17 @@ async function reloadVacalGcalEvents(){
     console.error('[구글캘린더 일정] 조회 실패:', e);
     vacalGcalEvents = [];
   }
+  return vacalGcalEvents;
+}
+
+// 현재 표시 중인 달 렌더 후 백그라운드에서 전월/차월 데이터를 미리 캐시에 채워둔다.
+// 사용자가 버튼을 누르지 않아도 매번 실행되어 GAS 호출량은 늘지만, 실제로 전/차월 버튼을 누르면
+// 캐시 히트로 거의 즉시 반응한다(await 하지 않는 fire-and-forget).
+function prefetchAdjacentVacalMonths(y, m){
+  let py = y, pm = m - 1; if(pm < 1){ pm = 12; py -= 1; }
+  let ny = y, nm = m + 1; if(nm > 12){ nm = 1; ny += 1; }
+  reloadVacalGcalEvents(py, pm, false).catch(()=>{});
+  reloadVacalGcalEvents(ny, nm, false).catch(()=>{});
 }
 
 function vacalPath(){
@@ -1696,23 +1731,18 @@ function collapseVacationCalendar(){
 }
 
 async function loadAndRenderVacal(){
-  try{
-    const data = await fbGet(vacalPath());
-    vacalData = (data && typeof data === 'object') ? data : {};
-  }catch(e){
-    console.error('[휴가일정] 조회 실패:', e);
-    vacalData = {};
-  }
-  await reloadVacalGcalEvents();
-  try{
-    const ce = await fbGet(customEventsPath());
-    vacalCustomEvents = (ce && typeof ce === 'object') ? ce : {};
-  }catch(e){
-    console.error('[내가 등록한 일정] 조회 실패:', e);
-    vacalCustomEvents = {};
-  }
-  await loadRemoteHolidaysDed();
+  // 서로 의존관계 없는 4개 요청을 병렬로 실행(기존에는 순차 await라 지연이 그대로 누적됐음)
+  const [dataRaw, , customRaw] = await Promise.all([
+    fbGet(vacalPath()).catch(e => { console.error('[휴가일정] 조회 실패:', e); return null; }),
+    reloadVacalGcalEvents(), // 실시간 프록시 실패 시 자체적으로 Firebase 캐시 폴백까지 처리
+    fbGet(customEventsPath()).catch(e => { console.error('[내가 등록한 일정] 조회 실패:', e); return null; }),
+    loadRemoteHolidaysDed()  // 실패해도 수기 공휴일 목록으로 계속 동작(자체 처리)
+  ]);
+  vacalData = (dataRaw && typeof dataRaw === 'object') ? dataRaw : {};
+  vacalCustomEvents = (customRaw && typeof customRaw === 'object') ? customRaw : {};
   renderVacalGrid();
+  // 화면을 그린 뒤 백그라운드로 전월/차월 데이터를 미리 캐시해둔다(프리페치)
+  prefetchAdjacentVacalMonths(vacalYear, vacalMonth);
 }
 
 // 특정 날짜(iso)에 걸쳐있는, 내가 직접 등록한 일정(customEvents) 목록 반환(id 포함)
@@ -1823,10 +1853,12 @@ async function changeVacalMonth(delta){
   let m = vacalMonth + delta, y = vacalYear;
   if(m < 1){ m = 12; y -= 1; } else if(m > 12){ m = 1; y += 1; }
   vacalMonth = m; vacalYear = y;
-  // 실시간 프록시 사용 시 조회 범위가 월 단위라 달을 넘길 때마다 재조회 필요
-  // (Firebase 캐시 폴백 시에는 이미 전체 캐시를 들고 있어 중복 조회지만 비용은 미미함)
+  // 직전 화면에서 prefetchAdjacentVacalMonths()로 이미 캐시돼 있으면 네트워크 호출 없이 즉시 반영된다.
+  // (캐시 미스 시에만 실제로 GAS를 호출하며, Firebase 캐시 폴백은 reloadVacalGcalEvents 내부에서 처리)
   await reloadVacalGcalEvents();
   renderVacalGrid();
+  // 새로 이동한 달을 기준으로 다음 전월/차월도 미리 캐시해둔다
+  prefetchAdjacentVacalMonths(vacalYear, vacalMonth);
 }
 
 // 달력 셀 하나를 렌더링(당월/전월/차월 공통 사용) — isAdjacent가 true면 전월·차월 날짜로
