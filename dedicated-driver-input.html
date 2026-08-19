@@ -782,6 +782,9 @@
     background:var(--ded-beige);
   }
   .ded-vacal-day.empty{background:transparent; cursor:default;}
+  /* 전월/차월 날짜(당월 앞뒤 빈칸을 채우는 용도) — 음영 처리로 당월과 구분, 클릭은 그대로 가능 */
+  .ded-vacal-day.adj{opacity:.4;}
+  .ded-vacal-day.adj.today{opacity:1;}
   .ded-vacal-day .dnum{font-family:'Outfit',sans-serif; font-size:11.5px; color:var(--ded-muted);}
   /* 오늘 날짜를 더 명확히 강조 — 셀 자체에 테두리(inset box-shadow, 그리드 레이아웃에 영향 없음) +
      배경 틴트 추가. 기존에는 날짜 숫자 색상만 바뀌어 눈에 잘 안 띄었음. */
@@ -801,7 +804,7 @@
     font-size:8px; line-height:1.15; color:var(--ded-red); margin-top:1px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
   }
-  .ded-vacal-day .badge{margin-top:auto; font-size:10px; font-weight:600; color:var(--ded-beige);}
+  .ded-vacal-day .badge{margin-top:auto; font-size:9px; font-weight:600; color:var(--ded-beige); line-height:1.15;}
   .ded-vacal-day.set{background:color-mix(in srgb, var(--ded-beige) 16%, var(--ded-bg));}
   .ded-vacal-day.set.am .badge, .ded-vacal-day.set.pm .badge{color:var(--ded-muted);}
   /* 요일 헤더(일~토)도 동일한 색상 규칙 적용 */
@@ -823,6 +826,8 @@
     display:flex; gap:10px; align-items:baseline; padding:6px 0; font-size:12.5px; color:var(--ded-text);
   }
   .ded-vacal-gcal-item .d{flex:0 0 auto; font-family:'Outfit',sans-serif; color:var(--ded-beige); min-width:34px;}
+  /* 시간 정보 — 날짜(.d, beige/12.5px)와 구분되도록 더 작고 흐린 톤으로 표시 */
+  .ded-vacal-gcal-item .d .t{font-size:10px; color:var(--ded-muted); font-weight:400; margin-left:2px;}
   .ded-vacal-gcal-item .s{flex:1 1 auto; min-width:0; word-break:keep-all; overflow-wrap:break-word;}
   .ded-vacal-gcal-empty{font-size:12px; color:var(--ded-muted-2);}
 
@@ -967,7 +972,7 @@
       </div>
       <div class="ded-vacal-grid" id="vacalGrid"></div>
       <div class="ded-vacal-legend">
-        <span class="lg full">연차</span><span class="lg am">반차(오전)</span><span class="lg pm">반차(오후)</span><span class="lg gcal">업무 일정(Google)</span>
+        <span class="lg gcal">업무 일정(Google)</span><span class="lg full">연차</span>
       </div>
       <!-- 구글 캘린더에서 가져온 일반 일정(회의 등, 방향2 동기화) 표시 -->
       <div class="ded-vacal-gcal-list" id="vacalGcalList"></div>
@@ -1604,7 +1609,7 @@ async function loadRemoteHolidaysDed(){
   vacalMonth = t.getMonth() + 1;
 })();
 const VACAL_LABEL = { full:'연차', am:'반차(오전)', pm:'반차(오후)' };
-const VACAL_SHORT = { full:'연차', am:'오전', pm:'오후' };
+const VACAL_SHORT = { full:'연차', am:'오전반차', pm:'오후반차' };
 
 function vacalPath(){
   const v = VEHICLES[currentVehicleKey];
@@ -1678,14 +1683,21 @@ function addDaysIso(iso, days){
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
 }
 
-// 시작일~종료일을 "8/24" 또는 "8/24-25"(같은 달) 또는 "8/24~9/2"(다른 달) 형태로 표시
+// 요일 약자(일~토) — 날짜 라벨에 괄호로 함께 표기하기 위함
+const DOW_KR_DED = ['일','월','화','수','목','금','토'];
+function dowLabelForIso(iso){
+  const [y,m,d] = iso.split('-').map(Number);
+  return DOW_KR_DED[new Date(y, m-1, d).getDay()];
+}
+// 시작일~종료일을 "8/24(월)" 또는 "8/24(월)-25(화)"(같은 달) 또는 "8/24(월)~9/2(화)"(다른 달) 형태로 표시
 function formatDateRangeLabel(startIso, endIso){
   const [sy,sm,sd] = startIso.split('-').map(Number);
   const [ey,em,ed] = endIso.split('-').map(Number);
-  if(startIso === endIso) return `${sm}/${sd}`;
-  if(sy===ey && sm===em) return `${sm}/${sd}-${ed}`;
-  if(sy===ey) return `${sm}/${sd}~${em}/${ed}`;
-  return `${sy}.${sm}/${sd}~${ey}.${em}/${ed}`;
+  const sDow = dowLabelForIso(startIso), eDow = dowLabelForIso(endIso);
+  if(startIso === endIso) return `${sm}/${sd}(${sDow})`;
+  if(sy===ey && sm===em) return `${sm}/${sd}(${sDow})-${ed}(${eDow})`;
+  if(sy===ey) return `${sm}/${sd}(${sDow})~${em}/${ed}(${eDow})`;
+  return `${sy}.${sm}/${sd}(${sDow})~${ey}.${em}/${ed}(${eDow})`;
 }
 
 // 구글캘린더 캐시 이벤트(direction2, {summary,start,end,allDay})를 공통 표시 포맷으로 정규화
@@ -1746,16 +1758,18 @@ function renderVacalGcalList(){
     .filter(ev => eventOverlapsMonth(ev, vacalYear, vacalMonth))
     .sort((a,b) => a.startDate.localeCompare(b.startDate) || (a.startTime||'').localeCompare(b.startTime||''));
   if(items.length === 0){
-    listEl.innerHTML = `<div class="gcal-title">업무 일정(Google)</div><div class="ded-vacal-gcal-empty">이번 달 구글 캘린더 일정이 없습니다.</div>`;
+    listEl.innerHTML = `<div class="ded-vacal-gcal-empty">이번 달 구글 캘린더 일정이 없습니다.</div>`;
     return;
   }
   const rows = items.map(ev => {
     const dateLabel = formatDateRangeLabel(ev.startDate, ev.endDate);
     const timeLabel = eventTimeLabel(ev);
+    // 시간 정보는 날짜와 색상/크기를 구분해 별도 span(.t)으로 표시(날짜보다 작고 흐린 톤)
+    const timeHtml = timeLabel ? ` <span class="t">${timeLabel}</span>` : '';
     const tag = ev.source === 'custom' ? `<span class="tag mine">직접입력</span>` : '';
-    return `<div class="ded-vacal-gcal-item"><span class="d">${dateLabel}${timeLabel ? ` ${timeLabel}` : ''}</span><span class="s">${tag}${escapeHtmlDed(ev.title)}</span></div>`;
+    return `<div class="ded-vacal-gcal-item"><span class="d">${dateLabel}${timeHtml}</span><span class="s">${tag}${escapeHtmlDed(ev.title)}</span></div>`;
   }).join('');
-  listEl.innerHTML = `<div class="gcal-title">업무 일정(Google)</div>${rows}`;
+  listEl.innerHTML = rows;
 }
 
 function changeVacalMonth(delta){
@@ -1765,31 +1779,57 @@ function changeVacalMonth(delta){
   renderVacalGrid();
 }
 
+// 달력 셀 하나를 렌더링(당월/전월/차월 공통 사용) — isAdjacent가 true면 전월·차월 날짜로
+// 음영(dimmed) 처리한다. 전월/차월 날짜도 당월과 동일하게 휴가뱃지·구글일정점·공휴일 표시를 그대로 노출해
+// 현재 보이는 달력 범위의 일정이 모두 표시되도록 한다.
+function buildVacalDayCell(y, m, day, dow, isAdjacent, todayIsoVal){
+  const iso = `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  const rec = vacalData[iso];
+  let cls = 'ded-vacal-day';
+  if(isAdjacent) cls += ' adj';
+  if(iso === todayIsoVal) cls += ' today';
+  if(rec && VACAL_LABEL[rec.type]) cls += ` set ${rec.type}`;
+  const hasGcal = gcalEventsForDate(iso).length > 0 || customEventsForDate(iso).length > 0;
+  const isHol = isHolidayIso(iso);
+  let dnumCls = 'dnum';
+  if(isHol) dnumCls += ' holiday';
+  else if(dow === 0) dnumCls += ' sun';
+  else if(dow === 6) dnumCls += ' sat';
+  // 공휴일명 라벨(구글 캘린더처럼 날짜 숫자 아래 표기) — 셀 폭이 좁아 title 속성으로 전체 이름도 함께 노출
+  const holLabel = isHol ? `<div class="holname" title="${escapeHtmlDed(holidayNameForIso(iso))}">${escapeHtmlDed(holidayNameForIso(iso))}</div>` : '';
+  return `<div class="${cls}" onclick="openVacalDay('${iso}')"><div class="${dnumCls}">${day}</div>${holLabel}${hasGcal ? `<div class="gcal-dot"></div>` : ''}${(rec && VACAL_LABEL[rec.type]) ? `<div class="badge">${VACAL_SHORT[rec.type]}</div>` : ''}</div>`;
+}
+
 function renderVacalGrid(){
   document.getElementById('vacalMonthLabel').textContent = `${vacalYear}년 ${vacalMonth}월`;
   const firstOfMonth = new Date(vacalYear, vacalMonth-1, 1);
   const daysInMonth = new Date(vacalYear, vacalMonth, 0).getDate();
-  const leadEmpty = firstOfMonth.getDay();
+  const leadEmpty = firstOfMonth.getDay(); // 0=일 ... 6=토, 당월 1일 앞 빈칸 수
+  // 그리드 총 셀수를 7의 배수로 맞춰 마지막 주까지 완전히 채움(빈칸이 남지 않도록)
+  const totalCells = Math.ceil((leadEmpty + daysInMonth) / 7) * 7;
+  const trailEmpty = totalCells - leadEmpty - daysInMonth;
   const todayIsoVal = todayIso();
+
+  // 전월 마지막 날짜(선행 빈칸을 채울 실제 날짜 계산용)
+  const prevMonthLast = new Date(vacalYear, vacalMonth-1, 0);
+  const prevY = prevMonthLast.getFullYear(), prevM = prevMonthLast.getMonth()+1, prevDays = prevMonthLast.getDate();
+  // 차월 1일(후행 빈칸을 채울 실제 날짜 계산용)
+  const nextMonthFirst = new Date(vacalYear, vacalMonth, 1);
+  const nextY = nextMonthFirst.getFullYear(), nextM = nextMonthFirst.getMonth()+1;
+
   let html = '';
-  for(let i=0;i<leadEmpty;i++) html += `<div class="ded-vacal-day empty"></div>`;
+  for(let i=0;i<leadEmpty;i++){
+    const day = prevDays - leadEmpty + 1 + i;
+    html += buildVacalDayCell(prevY, prevM, day, i, true, todayIsoVal);
+  }
   for(let day=1; day<=daysInMonth; day++){
-    const iso = `${vacalYear}-${String(vacalMonth).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const rec = vacalData[iso];
-    let cls = 'ded-vacal-day';
-    if(iso === todayIsoVal) cls += ' today';
-    if(rec && VACAL_LABEL[rec.type]) cls += ` set ${rec.type}`;
-    const hasGcal = gcalEventsForDate(iso).length > 0 || customEventsForDate(iso).length > 0;
     // 요일은 그리드상 위치(일요일 시작 고정 배치)로 계산 — 날짜 계산과 무관하게 항상 열 위치와 일치
     const dow = (leadEmpty + day - 1) % 7; // 0=일 ... 6=토
-    const isHol = isHolidayIso(iso);
-    let dnumCls = 'dnum';
-    if(isHol) dnumCls += ' holiday';
-    else if(dow === 0) dnumCls += ' sun';
-    else if(dow === 6) dnumCls += ' sat';
-    // 공휴일명 라벨(구글 캘린더처럼 날짜 숫자 아래 표기) — 셀 폭이 좁아 title 속성으로 전체 이름도 함께 노출
-    const holLabel = isHol ? `<div class="holname" title="${escapeHtmlDed(holidayNameForIso(iso))}">${escapeHtmlDed(holidayNameForIso(iso))}</div>` : '';
-    html += `<div class="${cls}" onclick="openVacalDay('${iso}')"><div class="${dnumCls}">${day}</div>${holLabel}${hasGcal ? `<div class="gcal-dot"></div>` : ''}${(rec && VACAL_LABEL[rec.type]) ? `<div class="badge">${VACAL_SHORT[rec.type]}</div>` : ''}</div>`;
+    html += buildVacalDayCell(vacalYear, vacalMonth, day, dow, false, todayIsoVal);
+  }
+  for(let i=0;i<trailEmpty;i++){
+    const dow = (leadEmpty + daysInMonth + i) % 7;
+    html += buildVacalDayCell(nextY, nextM, i+1, dow, true, todayIsoVal);
   }
   document.getElementById('vacalGrid').innerHTML = html;
   renderVacalGcalList();
