@@ -41,7 +41,7 @@ from google.auth.transport.requests import Request as GoogleAuthRequest
 
 # ── 고정 설정 (하드코딩 값은 클라이언트 index.html/dedicated-*.html과 동일 — 공개 가능한 값) ──
 DEDICATED_STORAGE_KEY = "dedicated-fleet-data"
-CALENDAR_ID = os.environ.get("GCAL_CALENDAR_ID", "primary")  # 별도 지정 없으면 공용 계정의 기본 캘린더 사용
+CALENDAR_ID = os.environ.get("GCAL_CALENDAR_ID") or "primary"  # 별도 지정 없으면(빈 값 포함) 공용 계정의 기본 캘린더 사용
 
 VACAL_LABEL = {"full": "연차", "am": "반차(오전)", "pm": "반차(오후)"}
 
