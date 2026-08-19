@@ -1651,12 +1651,15 @@ function switchDedView(view){
 }
 
 // 차량(=수행기사) 선택 드롭다운을 최초 1회 채운다
+// 근무이력은 수행기사(회장차) 전용 개념 — 전무이사 차량은 수행기사 없이 직원이 직접 운행정보를 입력하는 구조라 대상에서 제외
 function initWorkHistoryControls(){
   const sel = document.getElementById('whDriverSelect');
   if(!sel || sel.dataset.inited) return;
-  sel.innerHTML = VEHICLES.map(v=>`<option value="${v.key}">${_appModalEsc(v.role)} · ${_appModalEsc(v.driver)}</option>`).join('');
+  const whVehicles = VEHICLES.filter(v=>v.chairman);
+  sel.innerHTML = whVehicles.map(v=>`<option value="${v.key}">${_appModalEsc(v.role)} · ${_appModalEsc(v.driver)}</option>`).join('');
+  sel.style.display = whVehicles.length > 1 ? '' : 'none'; // 대상이 1대뿐이면 선택할 필요가 없으므로 드롭다운 자체를 숨김
   sel.dataset.inited = '1';
-  whVehicleKey = VEHICLES[0].key;
+  whVehicleKey = whVehicles.length ? whVehicles[0].key : (VEHICLES[0] ? VEHICLES[0].key : null);
   sel.value = whVehicleKey;
 }
 function onWhDriverChange(){

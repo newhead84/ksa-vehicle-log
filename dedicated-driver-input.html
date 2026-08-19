@@ -737,7 +737,21 @@
   .ded-df-row #fuelCostRow label{flex:0 0 auto;}
   .ded-df-row #fuelCostRow input{text-align:right;}
 
-  /* ── 휴가 일정: 사전 등록형 월간 캘린더 (숨김/펼침) ── */
+  /* ── 일정관리(수행기사 전용): 사전 등록형 월간 캘린더 (숨김/펼침) ── */
+  /* 요일 헤더(일~토)·월 이동 네비게이션의 기본 레이아웃은 원래 admin-dashboard의 근무이력 탭 전용 CSS로,
+     이 파일에는 정의가 없어 grid가 적용되지 않고 세로로 깨져 보이던 문제를 아래 3개 규칙으로 보완한다. */
+  .ded-wh-month-nav{display:flex; align-items:center; gap:14px;}
+  .ded-wh-nav-btn{
+    background:none; border:1px solid var(--ded-line); color:var(--ded-beige);
+    width:32px; height:32px; font-size:16px; cursor:pointer; line-height:1;
+  }
+  .ded-wh-nav-btn:hover{border-color:var(--ded-beige);}
+  .ded-wh-month-label{font-family:'Outfit',sans-serif; font-size:17px; letter-spacing:.03em; min-width:110px; text-align:center;}
+  .ded-wh-cal-head{
+    display:grid; grid-template-columns:repeat(7,1fr);
+    font-family:'Outfit',sans-serif; font-size:11.5px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--ded-muted); text-align:center; padding:0 0 10px;
+  }
   .ded-vacal-section{padding:0; border-bottom:1px solid var(--ded-line); margin-bottom:8px;}
   .ded-vacal-toggle{
     display:flex; align-items:center; justify-content:space-between; cursor:pointer;
@@ -838,10 +852,11 @@
     </div>
   </div>
 
-  <!-- 휴가 일정: 사전 등록형 월간 캘린더 (오늘은 휴가입니다 당일 체크박스를 대체) -->
-  <div class="ded-section ded-vacal-section">
+  <!-- 일정관리(수행기사 전용): 사전 등록형 월간 캘린더 (오늘은 휴가입니다 당일 체크박스를 대체) -->
+  <!-- 전무이사 차량은 수행기사가 아닌 직원 본인이 직접 운행정보를 입력하는 구조라 휴가/근무 일정 개념이 없음 → 회장차·수행기사 모드에서만 노출 -->
+  <div class="ded-section ded-vacal-section" id="vacalSection">
     <div class="ded-vacal-toggle" id="vacalToggleBtn" onclick="toggleVacationCalendar()">
-      <span class="lbl">📅 휴가 일정</span>
+      <span class="lbl">📅 일정관리</span>
       <span class="chev" id="vacalChev">▾</span>
     </div>
     <div class="ded-vacal-body" id="vacalBody">
@@ -1547,6 +1562,14 @@ async function refreshHoegjangLayout(){
   const isHoegjang = currentVehicleKey === 'hoegjang';
   const chauffeur = isChauffeurMode();
   document.getElementById('hoegjangModeBar').style.display = isHoegjang ? 'block' : 'none';
+
+  // 일정관리(휴가 캘린더)는 수행기사(회장차·수행기사 모드) 전용 — 전무이사 차량, 회장차 KSA직원 모드에서는 숨김
+  const showVacal = isHoegjang && hoegjangMode === 'driver';
+  const vacalSectionEl = document.getElementById('vacalSection');
+  if(vacalSectionEl){
+    vacalSectionEl.style.display = showVacal ? '' : 'none';
+    if(!showVacal) collapseVacationCalendar();
+  }
 
   // 운행자명 입력창은 항상 노출한다(숨기지 않음) — KSA직원 모드에서는 기본값만 비워서 직접 입력받는다
   const effChairman = v.chairman && !(isHoegjang && hoegjangMode === 'staff');
