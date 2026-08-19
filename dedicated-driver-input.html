@@ -752,10 +752,13 @@
     font-family:'Outfit',sans-serif; font-size:11.5px; letter-spacing:.08em; text-transform:uppercase;
     color:var(--ded-muted); text-align:center; padding:0 0 10px;
   }
-  .ded-vacal-section{padding:0; border-bottom:1px solid var(--ded-line); margin-bottom:8px;}
+  /* 좌우 여백을 22px로 지정 — 아래 이용자 구분(수행기사/KSA직원) 버튼 등 다른 .ded-section 요소들과
+     동일한 기준선에 맞춤(기존 padding:0이 .ded-section의 padding:14px 22px 6px를 덮어써 화면 좌측에
+     여백 없이 붙어 보이던 문제 수정) */
+  .ded-vacal-section{padding:0 22px; border-bottom:1px solid var(--ded-line); margin-bottom:8px;}
   .ded-vacal-toggle{
     display:flex; align-items:center; justify-content:space-between; cursor:pointer;
-    padding:14px 2px; user-select:none;
+    padding:14px 0; user-select:none;
   }
   .ded-vacal-toggle .lbl{font-size:15px; font-weight:500; color:var(--ded-text);}
   .ded-vacal-toggle .chev{font-size:13px; color:var(--ded-muted); transition:transform .15s ease;}
@@ -769,7 +772,12 @@
   }
   .ded-vacal-day{
     background:var(--ded-bg); min-height:48px; padding:5px 4px; display:flex; flex-direction:column;
-    cursor:pointer;
+    cursor:pointer; position:relative;
+  }
+  /* 구글 캘린더 일반 일정(휴가 아닌 회의 등) 표시 점 — 방향2(구글→시스템) 동기화 데이터 */
+  .ded-vacal-day .gcal-dot{
+    position:absolute; top:5px; right:5px; width:6px; height:6px; border-radius:50%;
+    background:var(--ded-beige);
   }
   .ded-vacal-day.empty{background:transparent; cursor:default;}
   .ded-vacal-day .dnum{font-family:'Outfit',sans-serif; font-size:11.5px; color:var(--ded-muted);}
@@ -783,6 +791,18 @@
     content:''; position:absolute; left:0; top:3px; width:9px; height:9px;
     background:color-mix(in srgb, var(--ded-beige) 16%, var(--ded-bg)); border:1px solid var(--ded-line);
   }
+  .ded-vacal-legend .lg.gcal::before{
+    background:var(--ded-beige); border:none; border-radius:50%; width:7px; height:7px; top:4px;
+  }
+  /* 구글 캘린더에서 가져온 일반 일정(방향2) 목록 — 휴가 등록형(월간 그리드)과 별도로 하단에 노출 */
+  .ded-vacal-gcal-list{margin-top:12px; padding-top:12px; border-top:1px solid var(--ded-line);}
+  .ded-vacal-gcal-list .gcal-title{font-size:11.5px; letter-spacing:.04em; color:var(--ded-muted); margin-bottom:8px;}
+  .ded-vacal-gcal-item{
+    display:flex; gap:10px; align-items:baseline; padding:6px 0; font-size:12.5px; color:var(--ded-text);
+  }
+  .ded-vacal-gcal-item .d{flex:0 0 auto; font-family:'Outfit',sans-serif; color:var(--ded-beige); min-width:34px;}
+  .ded-vacal-gcal-item .s{flex:1 1 auto; min-width:0; word-break:keep-all; overflow-wrap:break-word;}
+  .ded-vacal-gcal-empty{font-size:12px; color:var(--ded-muted-2);}
 
   /* 휴가 유형 선택 모달 */
   .ded-vacal-modal-backdrop{
@@ -794,16 +814,20 @@
     background:#111111; border:1px solid var(--ded-line); width:100%; max-width:420px;
     padding:22px 20px 26px;
   }
-  .ded-vacal-modal-date{font-size:15px; font-weight:600; color:var(--ded-text); text-align:center; margin-bottom:16px;}
+  /* .ded-vacal-modal도 배경(#111111)이 테마 전환과 무관하게 항상 다크 고정이므로(위 .ded-confirm-card/
+     .ded-accident-card와 동일 사유), 내부 텍스트는 var(--ded-text)/var(--ded-muted) 대신 고정값
+     var(--ded-confirm-text)/var(--ded-confirm-muted) 사용 — 화이트골드 테마에서 연차/반차 선택
+     버튼 글자(다크)가 다크 배경에 묻혀 안 보이던 문제 방지 */
+  .ded-vacal-modal-date{font-size:15px; font-weight:600; color:var(--ded-confirm-text); text-align:center; margin-bottom:16px;}
   .ded-vacal-opt{
     display:block; width:100%; padding:13px; margin-bottom:8px; border:1px solid var(--ded-line);
-    background:transparent; color:var(--ded-text); font-family:'Pretendard',sans-serif; font-size:14.5px; cursor:pointer;
+    background:transparent; color:var(--ded-confirm-text); font-family:'Pretendard',sans-serif; font-size:14.5px; cursor:pointer;
   }
   .ded-vacal-opt:hover{border-color:var(--ded-beige); color:var(--ded-beige);}
   .ded-vacal-opt.clear{color:var(--ded-red); border-color:var(--ded-red); opacity:.85;}
   .ded-vacal-cancel{
     display:block; width:100%; padding:12px; margin-top:4px; border:none; background:none;
-    color:var(--ded-muted); font-family:'Pretendard',sans-serif; font-size:13.5px; cursor:pointer;
+    color:var(--ded-confirm-muted); font-family:'Pretendard',sans-serif; font-size:13.5px; cursor:pointer;
   }
 
   @media (max-width:400px){
@@ -870,8 +894,10 @@
       </div>
       <div class="ded-vacal-grid" id="vacalGrid"></div>
       <div class="ded-vacal-legend">
-        <span class="lg full">연차</span><span class="lg am">반차(오전)</span><span class="lg pm">반차(오후)</span>
+        <span class="lg full">연차</span><span class="lg am">반차(오전)</span><span class="lg pm">반차(오후)</span><span class="lg gcal">구글 일정</span>
       </div>
+      <!-- 구글 캘린더에서 가져온 일반 일정(회의 등, 방향2 동기화) 표시 -->
+      <div class="ded-vacal-gcal-list" id="vacalGcalList"></div>
     </div>
   </div>
 
@@ -1374,6 +1400,9 @@ let vacalOpen = false;
 let vacalYear, vacalMonth;
 let vacalData = {}; // {'YYYY-MM-DD': {type:'full'|'am'|'pm', driver, updatedAt}}
 let vacalSelectedDate = null;
+// 구글 캘린더 일반 일정(회의 등) — GitHub Actions(scripts/gcal_sync.py) 방향2 동기화로
+// dedicated-fleet-data/googleCalendarEvents 에 캐싱된 값을 읽어와 참고용으로만 표시(휴가 등록과는 별개, 읽기전용)
+let vacalGcalEvents = [];
 (function(){
   const t = new Date();
   vacalYear = t.getFullYear();
@@ -1396,12 +1425,15 @@ function toggleVacationCalendar(){
 function collapseVacationCalendar(){
   vacalOpen = false;
   vacalData = {};
+  vacalGcalEvents = [];
   const body = document.getElementById('vacalBody');
   if(body) body.classList.remove('open');
   const chev = document.getElementById('vacalChev');
   if(chev) chev.textContent = '▾';
   const grid = document.getElementById('vacalGrid');
   if(grid) grid.innerHTML = '';
+  const gcalList = document.getElementById('vacalGcalList');
+  if(gcalList) gcalList.innerHTML = '';
 }
 
 async function loadAndRenderVacal(){
@@ -1412,7 +1444,47 @@ async function loadAndRenderVacal(){
     console.error('[휴가일정] 조회 실패:', e);
     vacalData = {};
   }
+  try{
+    // 전 차량 공용 회사 구글 캘린더를 캐싱한 값이라 차량과 무관하게 동일한 경로에서 조회
+    const gcal = await fbGet(`${DEDICATED_STORAGE_KEY}/googleCalendarEvents`);
+    vacalGcalEvents = Array.isArray(gcal) ? gcal.filter(Boolean) : [];
+  }catch(e){
+    console.error('[구글캘린더 일정] 조회 실패:', e);
+    vacalGcalEvents = [];
+  }
   renderVacalGrid();
+}
+
+// 특정 날짜(iso)에 걸쳐있는 구글 캘린더 일반 일정 목록 반환
+// - 종일 일정: start(포함) ~ end(배타적, 구글 API 기본 규칙)
+// - 시간 지정 일정: 시작 시각의 날짜만 비교(다중일 시간지정 일정은 방향2 캐싱 대상에서 단순화)
+function gcalEventsForDate(iso){
+  return vacalGcalEvents.filter(ev => {
+    if(!ev || !ev.start) return false;
+    if(ev.allDay){
+      const s = ev.start, e = ev.end || ev.start;
+      return iso >= s && iso < e;
+    }
+    return String(ev.start).slice(0,10) === iso;
+  });
+}
+
+function renderVacalGcalList(){
+  const listEl = document.getElementById('vacalGcalList');
+  if(!listEl) return;
+  const monthPrefix = `${vacalYear}-${String(vacalMonth).padStart(2,'0')}`;
+  const items = vacalGcalEvents
+    .filter(ev => ev && ev.start && String(ev.start).slice(0,7) === monthPrefix)
+    .sort((a,b) => String(a.start).localeCompare(String(b.start)));
+  if(items.length === 0){
+    listEl.innerHTML = `<div class="gcal-title">구글 일정</div><div class="ded-vacal-gcal-empty">이번 달 구글 캘린더 일정이 없습니다.</div>`;
+    return;
+  }
+  const rows = items.map(ev => {
+    const d = String(ev.start).slice(8,10);
+    return `<div class="ded-vacal-gcal-item"><span class="d">${d}일</span><span class="s">${escapeHtmlDed(ev.summary || '(제목 없음)')}</span></div>`;
+  }).join('');
+  listEl.innerHTML = `<div class="gcal-title">구글 일정</div>${rows}`;
 }
 
 function changeVacalMonth(delta){
@@ -1436,9 +1508,11 @@ function renderVacalGrid(){
     let cls = 'ded-vacal-day';
     if(iso === todayIsoVal) cls += ' today';
     if(rec && VACAL_LABEL[rec.type]) cls += ` set ${rec.type}`;
-    html += `<div class="${cls}" onclick="openVacalDay('${iso}')"><div class="dnum">${day}</div>${(rec && VACAL_LABEL[rec.type]) ? `<div class="badge">${VACAL_SHORT[rec.type]}</div>` : ''}</div>`;
+    const hasGcal = gcalEventsForDate(iso).length > 0;
+    html += `<div class="${cls}" onclick="openVacalDay('${iso}')"><div class="dnum">${day}</div>${hasGcal ? `<div class="gcal-dot"></div>` : ''}${(rec && VACAL_LABEL[rec.type]) ? `<div class="badge">${VACAL_SHORT[rec.type]}</div>` : ''}</div>`;
   }
   document.getElementById('vacalGrid').innerHTML = html;
+  renderVacalGcalList();
 }
 
 function openVacalDay(iso){
