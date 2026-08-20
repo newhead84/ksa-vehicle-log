@@ -507,6 +507,10 @@
   .ded-add-btn:hover{border-color:var(--ded-beige); color:var(--ded-beige);}
   /* 근로종료가 22:00 이전이라 심야시간을 추가할 수 없는 상태 */
   .ded-add-btn.ded-disabled{opacity:.35; pointer-events:none; cursor:not-allowed;}
+  /* 대기시간 구간 추가 버튼 + 대기시간 없음 버튼을 한 줄에 배치 */
+  .ded-add-row{display:flex; gap:8px;}
+  .ded-add-row .ded-add-btn{width:auto; flex:1; padding-left:6px; padding-right:6px; white-space:nowrap;}
+  .ded-add-btn--none.active{border-style:solid; border-color:var(--ded-beige); color:var(--ded-beige); background:rgba(203,178,149,.12);}
   /* 휴게시간 법정 최소 충족여부 안내문구 */
   .ded-field-note.ded-restmin-ok{color:var(--ded-muted);}
   .ded-field-note.ded-restmin-short{color:var(--ded-red); font-weight:500;}
@@ -1259,11 +1263,11 @@
       <div class="ded-eyebrow">WORK HOURS</div>
       <div class="ded-odo-split compact" id="workTimeSplitRow">
         <div class="ded-line-field">
-          <label>근로 시작<span class="req">*</span></label>
+          <label>근로 시작</label>
           <div class="in-wrap"><input type="text" inputmode="numeric" maxlength="5" class="ded-time-input ded-readonly-input" id="workStart" placeholder="HH:MM" readonly oninput="onTimeInput(this, calcWorkTotal)" onblur="onTimeBlur(this, calcWorkTotal)"></div>
         </div>
         <div class="ded-line-field" id="workEndRow">
-          <label>근로 종료<span class="req">*</span></label>
+          <label>근로 종료</label>
           <div class="in-wrap"><input type="text" inputmode="numeric" maxlength="5" class="ded-time-input ded-readonly-input" id="workEnd" placeholder="HH:MM" readonly oninput="onTimeInput(this, calcWorkTotal)" onblur="onTimeBlur(this, calcWorkTotal)"></div>
         </div>
       </div>
@@ -1276,7 +1280,10 @@
       <div id="standbyRestSection">
         <div class="ded-subhead">대기시간<span class="req">*</span></div>
         <div class="ded-period-list" id="waitPeriodsList"></div>
-        <button type="button" class="ded-add-btn" onclick="addPeriod('waitPeriodsList')">+ 대기시간 구간 추가</button>
+        <div class="ded-add-row">
+          <button type="button" class="ded-add-btn" id="waitAddBtn" onclick="addPeriod('waitPeriodsList')">+ 대기시간 구간 추가</button>
+          <button type="button" class="ded-add-btn ded-add-btn--none" id="waitNoneBtn" onclick="toggleNoWaitPeriod()">대기시간 없음</button>
+        </div>
         <div class="ded-inline-err" id="waitPeriodErr">대기시간을 1개 이상, 시작·종료 모두 입력해 주세요.</div>
         <div class="ded-inline-err" id="waitTimingErr">대기시간은 출발 시작 최소 30분 이후 ~ 도착 등록 최소 30분 전 구간에서만 입력할 수 있습니다.</div>
 
@@ -1294,7 +1301,7 @@
         <div class="ded-period-list" id="overtimePeriodsList"></div>
         <div class="ded-field-note" id="overtimeAutoNote" style="display:none;">⏱ 근로시간 기준으로 심야시간이 자동 계산되었습니다. 실제와 다르면 시간을 수정하거나 구간을 삭제해 주세요.</div>
         <button type="button" class="ded-add-btn" id="overtimeAddBtn" onclick="addOvertimePeriodUI()">+ 심야시간 구간 추가(해당하는경우)</button>
-        <div class="ded-field-note" id="overtimeIneligibleNote" style="display:none;">🔒 근로 종료가 22:00 이전이면 심야시간을 추가할 수 없습니다</div>
+        <div class="ded-field-note" id="overtimeIneligibleNote" style="display:none;">🔒 근로종료 22:00 이전엔 추가 불가</div>
         <div class="ded-inline-err" id="overtimePeriodErr">심야시간 구간은 실제 근로시간 범위 안, 22:00~06:00 사이여야 합니다.</div>
       </div>
     </div>
@@ -1324,7 +1331,7 @@
   </div>
 
   <!-- 운행기록 확인/수정: 단독 한 줄 배치 -->
-  <div class="ded-section">
+  <div class="ded-section" id="myRecordsSection">
     <button type="button" class="ded-maint-btn ded-maint-btn--beige ded-maint-btn--full" id="myRecordsBtn" onclick="toggleMyRecords()">운행기록 확인수정</button>
     <div class="ded-conditional" id="myRecordsPanel">
       <div class="ded-myrecords-desc">최근 운행기록 · 항목을 눌러 수정</div>
@@ -3059,6 +3066,27 @@ function collectPeriods(listId){
   return out;
 }
 
+// '대기시간 없음' 버튼: 대기시간 구간이 존재하지 않는 운행(예: 대기 없이 바로 이동)을 위한 토글.
+// 활성화하면 기존 구간을 모두 지우고 구간 추가 버튼을 잠가, 대기시간 필수 검증을 통과시킨다.
+function isNoWaitPeriodActive(){
+  return document.getElementById('waitNoneBtn')?.classList.contains('active') || false;
+}
+function toggleNoWaitPeriod(){
+  const btn = document.getElementById('waitNoneBtn');
+  const addBtn = document.getElementById('waitAddBtn');
+  if(!btn) return;
+  const activating = !btn.classList.contains('active');
+  btn.classList.toggle('active', activating);
+  if(activating){
+    document.getElementById('waitPeriodsList').innerHTML = '';
+    if(addBtn) addBtn.classList.add('ded-disabled');
+    document.getElementById('waitPeriodErr')?.classList.remove('show');
+    document.getElementById('waitTimingErr')?.classList.remove('show');
+  } else {
+    if(addBtn) addBtn.classList.remove('ded-disabled');
+  }
+}
+
 // 대기/휴게시간 구간 검증: 완전히 입력된(시작+종료 모두 채워진) 행만 유효로 인정.
 // 부분입력(한쪽만 채움) 행이 있으면 invalid, 완전입력 행이 하나도 없으면 missing.
 function validatePeriodList(listId){
@@ -3079,6 +3107,12 @@ function validatePeriodList(listId){
 // 회장차 · 수행기사 모드(수정 중이 아닐 때)에서만 출발/도착 2단계 등록을 사용
 function isChauffeurMode(){
   return currentVehicleKey === 'hoegjang' && hoegjangMode === 'driver' && editingIndex === null;
+}
+// 수행기사 여부(수정 중인지와 무관) — 명언 노출 여부 등 "이 사람이 수행기사인가"만 판단할 때 사용.
+// isChauffeurMode()는 editingIndex===null까지 요구하므로 수정 중에는 항상 false가 되어,
+// 수행기사가 기존 기록을 수정·제출할 때 명언이 잘못 노출되는 문제가 있었다.
+function isChauffeurPerson(){
+  return currentVehicleKey === 'hoegjang' && hoegjangMode === 'driver';
 }
 
 async function submitLog(){
@@ -3171,7 +3205,7 @@ async function submitLog(){
   const restRangeErr = document.getElementById('restRangeErr');
   waitErr.classList.remove('show'); restErr.classList.remove('show'); restMinErr.classList.remove('show'); waitTimingErr.classList.remove('show');
   if(isVisible('standbyRestSection')){
-    const waitState = validatePeriodList('waitPeriodsList');
+    const waitState = isNoWaitPeriodActive() ? 'ok' : validatePeriodList('waitPeriodsList');
     const restState = validatePeriodList('restPeriodsList');
     if(waitState !== 'ok') waitErr.classList.add('show');
     if(restState !== 'ok') restErr.classList.add('show');
@@ -3309,6 +3343,7 @@ async function submitLog(){
         workStart: document.getElementById('workStart').value || base.workStart,
         workEnd: document.getElementById('workEnd').value,
         waitPeriods: collectPeriods('waitPeriodsList'),
+        noWaitPeriod: isNoWaitPeriodActive(),
         restPeriods: collectPeriods('restPeriodsList'),
         overtimePeriods: collectPeriods('overtimePeriodsList'),
         status:'complete', editedAt: new Date().toISOString(),
@@ -3383,6 +3418,7 @@ async function submitLog(){
         trip.workStart = document.getElementById('workStart').value;
         trip.workEnd = document.getElementById('workEnd').value;
         trip.waitPeriods = collectPeriods('waitPeriodsList');
+        trip.noWaitPeriod = isNoWaitPeriodActive();
         trip.restPeriods = collectPeriods('restPeriodsList');
         trip.overtimePeriods = collectPeriods('overtimePeriodsList');
         // 구버전 호환용: 첫 심야시간 구간을 overtimeStart/overtimeEnd에도 동일하게 기록
@@ -3407,6 +3443,8 @@ async function submitLog(){
       document.getElementById('editBanner').style.display = 'none';
       const myRecordsBtnEl1 = document.getElementById('myRecordsBtn');
       if(myRecordsBtnEl1) myRecordsBtnEl1.disabled = false;
+      const myRecordsSectionEl1 = document.getElementById('myRecordsSection');
+      if(myRecordsSectionEl1) myRecordsSectionEl1.style.display = ''; // 수정 저장 완료 후 '운행기록 확인수정' 버튼 다시 노출
       resetAccidentState(); renderAccidentNotice(); updateAccidentSubmitGate();
       resetMaintenanceState(); renderMaintenanceNotice();
       resetFormAfterSubmit(trip.endOdo);
@@ -3468,6 +3506,8 @@ function resetFormAfterSubmit(carryStartOdo){
   document.getElementById('distanceVal').innerHTML = '0<span>km</span>';
   document.getElementById('workTotalVal').textContent = '–';
   document.getElementById('waitPeriodsList').innerHTML = '';
+  document.getElementById('waitNoneBtn')?.classList.remove('active');
+  document.getElementById('waitAddBtn')?.classList.remove('ded-disabled');
   document.getElementById('restPeriodsList').innerHTML = '';
   document.getElementById('overtimePeriodsList').innerHTML = '';
   addDefaultRestPeriodIfEmpty(); // 휴게시간(점심시간) 기본값 12:00~13:00 재적용
@@ -3486,6 +3526,18 @@ function toggleMyRecords(){
   if(opening) loadMyRecords();
 }
 
+// '운행기록 확인수정' 버튼을 다시 누르면 toggleMyRecords()가 이미 접어주지만,
+// 패널이 펼쳐진 상태에서 화면의 다른 곳을 터치해도 같은 방식으로 접히도록 처리
+document.addEventListener('click', function(e){
+  const panel = document.getElementById('myRecordsPanel');
+  const btn = document.getElementById('myRecordsBtn');
+  if(!panel || !btn) return;
+  if(!panel.classList.contains('open')) return;
+  if(panel.contains(e.target) || btn.contains(e.target)) return; // 패널 내부·버튼 자체 클릭은 무시(버튼은 toggleMyRecords가 처리)
+  panel.classList.remove('open');
+  btn.classList.remove('active');
+});
+
 // 다른 차량 탭·모드(수행기사/KSA직원) 등 다른 화면으로 전환할 때 운행기록 확인수정 패널과
 // 버튼의 활성 상태를 원상 복구한다(전환 전 화면 상태가 남아 다음 화면에 잘못 걸쳐 보이는 문제 방지).
 function closeMyRecordsPanel(){
@@ -3493,6 +3545,8 @@ function closeMyRecordsPanel(){
   const btn = document.getElementById('myRecordsBtn');
   if(panel) panel.classList.remove('open');
   if(btn){ btn.classList.remove('active'); btn.disabled = false; }
+  const section = document.getElementById('myRecordsSection');
+  if(section) section.style.display = '';
 }
 
 async function loadMyRecords(){
@@ -3608,11 +3662,19 @@ function startEditRecord(idx){
       ins[0].value = p.start||''; ins[1].value = p.end||'';
     });
     const waitList = document.getElementById('waitPeriodsList'); waitList.innerHTML = '';
-    (t.waitPeriods||[]).forEach(p=>{
-      addPeriod('waitPeriodsList');
-      const ins = waitList.lastElementChild.querySelectorAll('input');
-      ins[0].value = p.start||''; ins[1].value = p.end||'';
-    });
+    const waitNoneBtnEl = document.getElementById('waitNoneBtn');
+    if(waitNoneBtnEl) waitNoneBtnEl.classList.remove('active');
+    document.getElementById('waitAddBtn')?.classList.remove('ded-disabled');
+    if(t.noWaitPeriod){
+      if(waitNoneBtnEl) waitNoneBtnEl.classList.add('active');
+      document.getElementById('waitAddBtn')?.classList.add('ded-disabled');
+    } else {
+      (t.waitPeriods||[]).forEach(p=>{
+        addPeriod('waitPeriodsList');
+        const ins = waitList.lastElementChild.querySelectorAll('input');
+        ins[0].value = p.start||''; ins[1].value = p.end||'';
+      });
+    }
     const restList = document.getElementById('restPeriodsList'); restList.innerHTML = '';
     (t.restPeriods||[]).forEach(p=>{
       addPeriod('restPeriodsList');
@@ -3638,6 +3700,8 @@ function startEditRecord(idx){
   document.getElementById('submitBtnMain').textContent = '수정 저장';
   const myRecordsBtnEl = document.getElementById('myRecordsBtn');
   if(myRecordsBtnEl) myRecordsBtnEl.disabled = true; // 수정 중에는 다른 기록을 겹쳐 열지 못하도록 비활성화
+  const myRecordsSectionEl = document.getElementById('myRecordsSection');
+  if(myRecordsSectionEl) myRecordsSectionEl.style.display = 'none'; // 수정 화면에서는 '운행기록 확인수정' 버튼 자체를 숨긴다(수정 저장 후 다시 노출)
   window.scrollTo({top:0, behavior:'smooth'});
   showToast('수정할 기록을 불러왔습니다.');
 }
@@ -3996,7 +4060,7 @@ function renderRandomQuoteInto(textElId, metaElId){
 // 단, 수행기사 페이지(회장차 수행기사 모드로 제출하는 경우)에는 명언을 노출하지 않는다.
 function openSubmitConfirm(message){
   const quoteBlock = document.getElementById('confirmQuoteBlock');
-  if(isChauffeurMode()){
+  if(isChauffeurPerson()){
     quoteBlock.style.display = 'none';
   } else {
     quoteBlock.style.display = '';
