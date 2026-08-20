@@ -783,6 +783,10 @@
   .ded-vacal-day{
     background:var(--ded-bg); min-height:48px; padding:5px 4px; display:flex; flex-direction:column;
     cursor:pointer; position:relative;
+    /* min-width:0 필수: 그리드 아이템 기본값(min-width:auto)이면 안의 긴 텍스트(공휴일명 등)의
+       min-content 너비가 트랙 폭 계산에 반영되어 특정 열만 넓어지며 격자가 찌그러진다.
+       0으로 재정의해 트랙폭은 항상 1fr 균등 분할을 따르고, 내부 텍스트는 overflow로만 잘리게 한다. */
+    min-width:0;
   }
   /* 업무 일정(구글, 방향2 동기화 데이터)과 휴가(연차/반차)를 우상단 원형 점으로 표시.
      둘 다 있는 날짜는 나란히 배치(업무일정 점이 왼쪽, 휴가 점이 오른쪽/모서리 쪽)해 구분한다.
@@ -814,8 +818,8 @@
   /* 공휴일명 라벨 — 구글 캘린더처럼 날짜 숫자 바로 아래 작은 글씨로 표시. 셀 폭이 좁아(모바일 기준
      7열 그리드) 긴 이름(예: 부처님오신날)은 말줄임(ellipsis) 처리한다. */
   .ded-vacal-day .holname{
-    font-size:8px; line-height:1.15; color:var(--ded-red); margin-top:1px;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
+    font-size:7px; line-height:1.15; color:var(--ded-red); margin-top:1px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; width:100%;
   }
   .ded-vacal-day .badge{margin-top:auto; font-size:9px; font-weight:600; color:var(--ded-beige); line-height:1.15;}
   /* 2026-08-19: 전월/차월 음영(.adj, opacity)과 휴가 음영이 비슷해 보여 헷갈린다는 피드백으로
@@ -874,6 +878,8 @@
   .ded-vacal-modal-evt:last-child{border-bottom:none;}
   .ded-vacal-modal-evt .dot{width:6px; height:6px; border-radius:50%; background:var(--ded-beige); flex:0 0 auto;}
   .ded-vacal-modal-evt.vacation .dot{background:#5B8DEF;}
+  .ded-vacal-modal-evt.holiday .dot{background:var(--ded-red);}
+  .ded-vacal-modal-evt.holiday .s{color:var(--ded-red);}
   .ded-vacal-modal-evt .s{flex:1 1 auto; min-width:0; word-break:keep-all; overflow-wrap:break-word;}
   .ded-vacal-modal-evt .t{color:var(--ded-confirm-muted); font-size:11px; margin-left:6px;}
   .ded-vacal-modal-evt .evt-actions{display:flex; gap:6px; flex:0 0 auto;}
@@ -1950,6 +1956,10 @@ function renderVacalModalEvents(iso){
   const gcalItems = gcalEventsForDate(iso).map(normalizeGcalEvent);
   const customItems = customEventsForDate(iso).map(ev => normalizeCustomEvent(ev));
   let html = '';
+  // 공휴일이면 목록 맨 위에 공휴일명 표시(달력 셀에서는 폭 제한으로 말줄임 처리되므로 모달에서 전체 이름 확인 가능하도록)
+  if(isHolidayIso(iso)){
+    html += `<div class="ded-vacal-modal-evt holiday"><span class="dot"></span><span class="s">${escapeHtmlDed(holidayNameForIso(iso))}</span></div>`;
+  }
   if(rec && VACAL_LABEL[rec.type]){
     html += `<div class="ded-vacal-modal-evt vacation"><span class="dot"></span><span class="s">${escapeHtmlDed(VACAL_LABEL[rec.type])}</span></div>`;
   }
@@ -3534,7 +3544,6 @@ function startEditRecord(idx){
     // 근로 시작/종료는 시작 시각/종료 시각과 항상 동일해야 하므로 그 값을 그대로 사용한다(과거 데이터 불일치 자동 보정)
     document.getElementById('workStart').value = t.startTime || t.workStart || '';
     document.getElementById('workEnd').value = t.endTime || t.workEnd || '';
-    calcWorkTotal();
     const otList = document.getElementById('overtimePeriodsList'); otList.innerHTML = '';
     // overtimePeriods(신규 배열)가 있으면 그대로, 없으면 구버전 단일값(overtimeStart/overtimeEnd)을
     // 구간 1개로 변환해 불러온다(과거 기록 호환)
@@ -3557,6 +3566,9 @@ function startEditRecord(idx){
       const ins = restList.lastElementChild.querySelectorAll('input');
       ins[0].value = p.start||''; ins[1].value = p.end||'';
     });
+    // 대기/휴게/심야 구간을 모두 채운 뒤에 계산해야 총 근로시간·법정 최소 휴게시간 충족여부가
+    // 실제 저장된 휴게시간 합계를 반영한다(휴게시간 리스트가 비어있던 시점에 계산하면 0분으로 잘못 표시됨)
+    calcWorkTotal();
   }
 
   // 기존 기록에 사고접수/점검요망 이력이 있으면 해당 상태로 복원(공용차량 시스템이 카드 렌더링 시
