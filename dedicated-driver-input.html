@@ -456,6 +456,14 @@
     border-color:var(--ded-beige-dark); background:rgba(94,70,48,0.08); color:var(--ded-beige-dark);
   }
 
+  /* ── 전일 도착 등록 미완료 배너: 수행기사가 도착 등록을 깜빡한 채 다음날 접속한 경우,
+     새 출발 등록보다 이 미완료 건 마감을 먼저 하도록 강하게 안내(경고색) ── */
+  .ded-overdue-banner{
+    display:none; font-size:15px; padding:12px 14px; margin:0 0 14px;
+    line-height:1.6; word-break:keep-all; overflow-wrap:break-word; white-space:pre-line;
+    border:1px solid var(--ded-red); background:rgba(232,22,87,0.08); color:var(--ded-red); font-weight:700;
+  }
+
   /* ── 근태 반복 섹션 (회장차 전용) ── */
   .ded-period-list{display:flex; flex-direction:column; gap:10px; margin:10px 0 12px;}
   .ded-period-row{
@@ -1057,6 +1065,7 @@
   <!-- 운행정보: TRIP 구분 아래에 운행자를 포함해 한 섹션으로 표시(라인 절약) -->
   <div class="ded-section" id="tripSection">
     <div class="ded-eyebrow">TRIP</div>
+    <div class="ded-overdue-banner" id="overdueOpenTripBanner"></div>
     <div class="ded-daecha-active-banner" id="daeChaActiveBanner"></div>
 
     <div class="ded-line-field" id="driverNameRow">
@@ -2240,12 +2249,33 @@ async function refreshDriverPhase(mySeq){
     const trips = Array.isArray(existing)
       ? existing.map((t,i)=>({...t, _idx:i})).filter(t=>t)
       : (existing && typeof existing==='object' ? Object.keys(existing).map(k=>({...existing[k], _idx:Number(k)})) : []);
-    const openTrip = trips.find(t => t.vehicleKey==='hoegjang' && t.status==='open' && t.dateFrom===dateVal);
+    // 날짜 제한 없이 "가장 최근 미완료(open) 출발 기록"을 찾는다 — 수행기사가 도착 등록을
+    // 깜빡한 채 다음날(혹은 그 이후) 접속해도 그 기록이 그대로 남아있으면 반드시 먼저 마감하도록
+    // 게이트를 건다(전날 기록이 dateFrom!==오늘이라는 이유로 검색에서 누락되어 영구 방치되던 문제 수정).
+    // 정상적으로는 open 기록이 동시에 1건만 존재하지만, 만일을 대비해 가장 최근(_idx가 큰) 건을 사용.
+    const openTrips = trips.filter(t => t.vehicleKey==='hoegjang' && t.status==='open');
+    const openTrip = openTrips.length ? openTrips.reduce((a,b)=> b._idx > a._idx ? b : a) : null;
+    const isOverdueOpenTrip = !!(openTrip && openTrip.dateFrom !== dateVal);
     // 오늘 날짜로 출발+도착이 모두 완료(status:'complete')된 기록이 이미 있으면 당일 등록을 마감 처리한다.
     const completeTrip = trips.find(t => t.vehicleKey==='hoegjang' && t.status==='complete' && t.dateFrom===dateVal);
+    const overdueBannerEl = document.getElementById('overdueOpenTripBanner');
     if(openTrip){
       driverPhase = 'end';
       openTripIndex = openTrip._idx;
+      // 전일(혹은 그 이전) 도착 등록이 밀린 상태라면 경고 배너를 띄우고, 화면의 운행일자도
+      // 그 기록의 실제 날짜로 맞춰 보여준다(오늘 날짜가 그대로 떠 있으면 마치 오늘 건을 등록하는
+      // 것처럼 혼동될 수 있음 — 실제 저장 시에는 이 값과 무관하게 원본 기록의 날짜가 유지된다).
+      if(isOverdueOpenTrip){
+        if(overdueBannerEl){
+          overdueBannerEl.style.display = 'block';
+          overdueBannerEl.textContent = `⚠ ${formatDateRangeLabel(openTrip.dateFrom, openTrip.dateFrom)} 도착 등록이 완료되지 않았습니다.\n먼저 그날의 도착 등록을 완료해 주세요.`;
+        }
+        const sdEl = document.getElementById('singleDate');
+        if(sdEl){ sdEl.value = openTrip.dateFrom; syncSingleDateDisplay(); }
+      } else if(overdueBannerEl){
+        overdueBannerEl.style.display = 'none';
+        overdueBannerEl.textContent = '';
+      }
       // 출발 등록 시 사고접수/점검요망을 마쳐둔 기록이면 도착 등록 화면에서도 그 상태를 복원한다
       resetAccidentState();
       if(openTrip.accidentReported && openTrip.accidentId) markAccidentCompleted(openTrip.accidentId);
@@ -2255,12 +2285,14 @@ async function refreshDriverPhase(mySeq){
       renderMaintenanceNotice();
       renderDriverPhaseUI(openTrip);
     } else if(completeTrip){
+      if(overdueBannerEl){ overdueBannerEl.style.display = 'none'; overdueBannerEl.textContent = ''; }
       driverPhase = 'done';
       openTripIndex = null;
       resetAccidentState(); renderAccidentNotice(); updateAccidentSubmitGate();
       resetMaintenanceState(); renderMaintenanceNotice();
       renderDriverPhaseUI(null);
     } else {
+      if(overdueBannerEl){ overdueBannerEl.style.display = 'none'; overdueBannerEl.textContent = ''; }
       driverPhase = 'start';
       openTripIndex = null;
       resetAccidentState(); renderAccidentNotice(); updateAccidentSubmitGate();
@@ -2270,6 +2302,8 @@ async function refreshDriverPhase(mySeq){
   }catch(e){
     console.error('[전용차량] 운행 단계 확인 실패:', e);
     if(mySeq !== layoutRequestSeq) return;
+    const overdueBannerElErr = document.getElementById('overdueOpenTripBanner');
+    if(overdueBannerElErr){ overdueBannerElErr.style.display = 'none'; overdueBannerElErr.textContent = ''; }
     driverPhase = 'start';
     openTripIndex = null;
     resetAccidentState(); renderAccidentNotice(); updateAccidentSubmitGate();
@@ -3243,6 +3277,14 @@ async function submitLog(){
 
       if(!startDate || !endDate){
         showToast('운행기간을 입력해주세요.', true);
+        submitBtn.disabled = false; submitBtn.textContent = editingIndex!==null ? '수정 저장' : '운행기록 제출';
+        return;
+      }
+      // 종료일이 시작일보다 빠른 경우 저장 차단(캘린더 등록 폼(saveCustomEvent)에는 이미 있던
+      // 검증인데 운행기록 제출 경로에는 빠져 있어 추가 — 날짜 선택 실수로 역전된 기간이 그대로
+      // 저장되는 것을 방지)
+      if(endDate < startDate){
+        showToast('종료일이 시작일보다 빠를 수 없습니다.', true);
         submitBtn.disabled = false; submitBtn.textContent = editingIndex!==null ? '수정 저장' : '운행기록 제출';
         return;
       }
