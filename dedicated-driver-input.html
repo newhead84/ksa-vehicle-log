@@ -470,9 +470,16 @@
     display:flex; align-items:center; gap:10px;
     border:1px solid var(--ded-line); padding:11px 12px;
   }
+  /* 대기/휴게/심야 구간의 시간 입력창도 근로시작·종료 입력창과 동일한 다크테마를 적용
+     (기존에는 배경색 지정이 없어 브라우저 기본값인 흰 배경 박스로 노출되던 문제 수정, 2026-08-20) */
   .ded-period-row input.ded-time-input{
     border-bottom:none; padding:2px 0; font-size:16px;
+    background:transparent; color:var(--ded-text); border:none; outline:none;
+    -webkit-appearance:none; appearance:none; border-radius:0; color-scheme:dark;
   }
+  /* 휴게시간이 근로시간 범위를 벗어난 경우(오타 등) 즉시 시각적으로 표시 */
+  .ded-period-row.invalid{border-color:var(--ded-red);}
+  .ded-period-row.invalid input.ded-time-input{color:var(--ded-red);}
   /* 24시간 텍스트 시간 입력창 — 네이티브 시계바늘 피커 대신 사용 (숫자는 Outfit) */
   input.ded-time-input{
     font-family:'Outfit',sans-serif; letter-spacing:.02em;
@@ -1277,6 +1284,7 @@
         <div class="ded-period-list" id="restPeriodsList"></div>
         <button type="button" class="ded-add-btn" onclick="addPeriod('restPeriodsList')">+ 휴게시간 구간 추가</button>
         <div class="ded-inline-err" id="restPeriodErr">휴게시간을 1개 이상, 시작·종료 모두 입력해 주세요.</div>
+        <div class="ded-inline-err" id="restRangeErr">휴게시간은 근로시간(근로시작~근로종료) 범위 안에 있어야 합니다.</div>
         <div class="ded-field-note" id="restMinReqNote" style="display:none;"></div>
         <div class="ded-inline-err" id="restMinErr">법정 최소 휴게시간(4시간→30분/8시간→1시간)을 채워야 제출할 수 있습니다.</div>
       </div>
@@ -2762,6 +2770,40 @@ function validateOvertimePeriods(){
   return problems;
 }
 
+// 휴게시간 구간이 실제 근로시간(근로시작~근로종료) 범위 안에 있는지 검증.
+// 심야근로처럼 근로시간 자체가 자정을 넘기는 경우도 정상 처리되도록 근로시작일 기준으로
+// 정규화해서 비교한다(normalizePeriodToWorkDay). 이 검증이 없으면 예를 들어 23:00→13:00처럼
+// 근로시간 밖의 오타가 "자정을 넘긴 14시간짜리 구간"으로 잘못 해석되어 휴게시간 합계가
+// 근로시간보다 커지고, 총 근로시간이 조용히 0으로 계산되는 버그가 발생한다(2026-08-20 확인).
+// 문제되는 구간의 표시용 텍스트를 담은 배열을 반환(비어있으면 전부 유효). 대상 행에는
+// 'invalid' 클래스를 토글해 즉시 시각적으로 표시한다.
+function validateRestPeriodsRange(){
+  const span = getWorkSpanMins();
+  const rows = document.querySelectorAll('#restPeriodsList .ded-period-row');
+  const problems = [];
+  rows.forEach(row=>{
+    const inputs = row.querySelectorAll('input.ded-period-time');
+    const startStr = inputs[0]?.value, endStr = inputs[1]?.value;
+    row.classList.remove('invalid');
+    if(!span || !startStr || !endStr) return; // 미완성 행/근로시간 미입력 시엔 다른 검증에서 처리
+    const norm = normalizePeriodToWorkDay(startStr, endStr, span.startMin);
+    const within = norm && norm.start >= span.startMin && norm.end <= span.endMin;
+    if(!within){
+      row.classList.add('invalid');
+      problems.push(`${startStr}~${endStr}`);
+    }
+  });
+  return problems;
+}
+
+// 휴게시간 범위 오류 안내문구를 값이 바뀔 때마다(제출 전이라도) 즉시 갱신한다.
+function updateRestRangeUI(){
+  const err = document.getElementById('restRangeErr');
+  if(!err) return;
+  const problems = validateRestPeriodsRange();
+  err.classList.toggle('show', problems.length > 0);
+}
+
 // 대기시간 구간이 (1) 출발(근로시작) 시각으로부터 최소 30분 이후에 시작하는지,
 // (2) 도착(근로종료) 시각까지 최소 30분 여유를 두고 종료하는지 검증한다.
 // (도착 등록 전이라 근로종료가 비어있으면 종료 쪽 조건은 검사하지 않음)
@@ -2861,6 +2903,7 @@ function calcWorkTotal(){
     out.textContent = '–';
     updateNightEligibilityUI();
     updateRestMinReqNote(null);
+    updateRestRangeUI();
     syncAutoOvertimePeriod();
     return;
   }
@@ -2873,6 +2916,7 @@ function calcWorkTotal(){
   clearPeriodErrorsIfValid();
   updateNightEligibilityUI();
   updateRestMinReqNote(grossMins);
+  updateRestRangeUI();
   syncAutoOvertimePeriod();
 }
 
@@ -3124,6 +3168,7 @@ async function submitLog(){
   const restErr = document.getElementById('restPeriodErr');
   const restMinErr = document.getElementById('restMinErr');
   const waitTimingErr = document.getElementById('waitTimingErr');
+  const restRangeErr = document.getElementById('restRangeErr');
   waitErr.classList.remove('show'); restErr.classList.remove('show'); restMinErr.classList.remove('show'); waitTimingErr.classList.remove('show');
   if(isVisible('standbyRestSection')){
     const waitState = validatePeriodList('waitPeriodsList');
@@ -3132,6 +3177,14 @@ async function submitLog(){
     if(restState !== 'ok') restErr.classList.add('show');
     if(waitState !== 'ok' || restState !== 'ok'){
       showToast('대기시간·휴게시간을 입력해주세요.', true);
+      return;
+    }
+    // 휴게시간 구간이 근로시간(근로시작~근로종료) 범위를 벗어나면 제출 차단
+    // (자정 넘김으로 잘못 해석되어 총 근로시간이 0으로 계산되는 오타를 여기서 걸러낸다)
+    const restRangeProblems = validateRestPeriodsRange();
+    if(restRangeProblems.length > 0){
+      if(restRangeErr) restRangeErr.classList.add('show');
+      showToast('휴게시간이 근로시간 범위를 벗어났습니다. 확인해 주세요: ' + restRangeProblems.join(', '), true);
       return;
     }
     // 대기시간 구간이 출발 시작 최소 30분 이후 ~ 도착 등록 최소 30분 전 범위를 벗어나면 제출 차단
