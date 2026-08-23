@@ -119,6 +119,31 @@
     --ded-muted-2:rgba(27,23,16,0.55);
   }
   body{transition:background-color .25s ease, color .25s ease;}
+  /* 2026-08-23: 전용차량 모바일 운행 연동 정지 안내 오버레이 — 테마 전환과 무관하게 항상 다크 고정 */
+  .ded-suspend-overlay{
+    position:fixed; inset:0; z-index:99999;
+    background:#0A0A0A;
+    display:flex; align-items:center; justify-content:center;
+    padding:32px 24px;
+  }
+  .ded-suspend-card{
+    max-width:420px; width:100%; text-align:center;
+  }
+  .ded-suspend-mark{
+    font-family:'Outfit',sans-serif; font-size:11px; letter-spacing:.25em;
+    color:#CBB295; margin-bottom:18px; text-transform:uppercase;
+  }
+  .ded-suspend-title{
+    font-size:20px; font-weight:600; color:#F5F3EF; margin-bottom:14px;
+    word-break:keep-all; overflow-wrap:break-word; line-height:1.5;
+  }
+  .ded-suspend-body{
+    font-size:14.5px; line-height:1.7; color:rgba(245,243,239,0.78);
+    word-break:keep-all; overflow-wrap:break-word; white-space:pre-line;
+  }
+  .ded-suspend-divider{
+    width:36px; height:1px; background:#5E4630; margin:20px auto;
+  }
   *{box-sizing:border-box;}
   html{font-size:17px;}
   html,body{margin:0;padding:0;background:var(--ded-bg);color:var(--ded-text);}
@@ -951,6 +976,19 @@
 </style>
 </head>
 <body>
+
+<!-- 2026-08-23: 전용차량 모바일 운행 연동 정지 안내 — 전체 화면 오버레이로 입력 기능 완전 차단(읽기전용 전환). 재개 시 이 블록만 제거하면 기존 기능 그대로 복원됨 -->
+<div class="ded-suspend-overlay" id="dedSuspendOverlay">
+  <div class="ded-suspend-card">
+    <div class="ded-suspend-mark">EXECUTIVE VEHICLE LOG</div>
+    <div class="ded-suspend-title">전용차량 모바일 운행기록 서비스가<br>일시 중지되었습니다</div>
+    <div class="ded-suspend-divider"></div>
+    <div class="ded-suspend-body">전용차량(회장차·전무이사 차량) 모바일 운행정보 입력 및 캘린더 연동이 중지되었습니다.
+운행기록은 기존 방식으로 관리해 주시기 바랍니다.
+
+문의사항은 총무팀으로 연락 바랍니다.</div>
+  </div>
+</div>
 
 <div class="ded-demo-bar" id="demoBar">
   <span class="ded-demo-label">PREVIEW</span>
