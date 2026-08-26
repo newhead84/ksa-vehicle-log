@@ -35,6 +35,10 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-26] 지역본부별 열람URL 모달에 "전체 지역본부 통합" 링크 1건 추가 — 10개 지역본부
+  (강원지부·충남지부 포함)를 하나의 링크로 합쳐서 열람. DT센터/퓨처캠/국가기술표준원(파견)은
+  기존 개별 지역 링크와 동일하게 제외됨 | 신규: REGION_ALL_TOKEN | 변경: openRegionUrlModal()
+
   [2026-08-19] 개인사용(주말·공휴일 사용) 체크 시, 실제 운행기간이 주말·공휴일에 해당하지 않는
   경우(운행기간 입력란 하단 경고 문구만으로는 화면에 안 보여 문제없는 것으로 오인할 수 있음)
   운행기간 입력란으로 자동 스크롤 이동하여 즉시 보여주도록 개선 | 변경: togglePersonalUse()
@@ -2377,6 +2381,16 @@ const REGION_GROUPS = {
 };
 const REGION_ORDER = ['cfa9cb007059','278ad79fc9e5','8449f098f9ab','d7759acdceb1','e250c9b702fd','3ab3ef255dd7','9c8fd52fd6a5','8818d6cfa99d','b466a8a22b85','8e5eb3fa6472'];
 
+// 전체 지역본부 통합 열람 링크 (요청: 2026-08-26)
+// - 위 10개 지역본부 개별 링크와 별개로, 10개 지역본부(및 소속 지부)를 모두 합쳐서 한 링크로 보여주는 특수 항목.
+// - branches는 REGION_ORDER를 순회해 계산하므로, 이후 지역이 추가/변경돼도 이 목록을 별도로 손볼 필요가 없다.
+// - DT센터/퓨처캠/국가기술표준원(파견)은 REGION_GROUPS 자체에 없으므로 이 통합 링크에서도 자동으로 제외된다.
+const REGION_ALL_TOKEN = '146fa36c468d';
+REGION_GROUPS[REGION_ALL_TOKEN] = {
+  label: '전체 지역본부 통합',
+  branches: REGION_ORDER.reduce((acc,t)=>acc.concat(REGION_GROUPS[t].branches), [])
+};
+
 // ============================================================
 // 역할 관리
 // ============================================================
@@ -2789,10 +2803,16 @@ function copyReadonlyUrl(){
   copyTextToClipboard(url, '열람전용 URL이 클립보드에 복사되었습니다.', '클립보드 복사에 실패했습니다. 주소를 직접 복사해 주세요: ');
 }
 
-// '지역별 열람URL' 버튼 클릭 시: 10개 지역본부 목록을 모달로 보여주고,
+// '지역별 열람URL' 버튼 클릭 시: 10개 지역본부 목록 + "전체 지역본부 통합" 1건을 모달로 보여주고,
 // 지역별로 ?view=readonly&r=토큰 형태의 링크를 개별 복사할 수 있게 한다.
 // 각 지역 링크는 해당 지역본부(및 소속 지부)의 차량/운행정보만 노출되고 다른 사업장 정보는 보이지 않는다.
+// "전체 지역본부 통합"은 10개 지역본부를 모두 합친 링크이며, DT센터/퓨처캠/국가기술표준원(파견)은
+// 개별 지역 링크와 동일하게 제외된다.
 function openRegionUrlModal(){
+  const allRow = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 4px;margin-bottom:6px;border-bottom:1px solid var(--line);background:rgba(126,177,56,.08);border-radius:8px;">
+    <span style="font-size:14px;font-weight:700;color:var(--navy);">🌐 ${escapeHtml(REGION_GROUPS[REGION_ALL_TOKEN].label)}</span>
+    <button class="btn btn-ghost" style="padding:6px 12px;font-size:12.5px;flex-shrink:0;" onclick="copyRegionUrl('${REGION_ALL_TOKEN}')">🔗 링크 복사</button>
+  </div>`;
   const rows = REGION_ORDER.map(token=>{
     const g = REGION_GROUPS[token];
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 4px;border-bottom:1px solid var(--line);">
@@ -2802,10 +2822,10 @@ function openRegionUrlModal(){
   }).join('');
   document.getElementById('modalBody').innerHTML = `
     <div class="modal-head">
-      <div><div class="plate-big" style="font-size:18px;">지역본부별 열람URL</div><div class="muted" style="font-size:12px;word-break:keep-all;overflow-wrap:break-word;">지역별 링크는 해당 지역본부(강원지부·충남지부 포함)의 정보만 열람되며, 다른 사업장의 운행정보는 보이지 않습니다.</div></div>
+      <div><div class="plate-big" style="font-size:18px;">지역본부별 열람URL</div><div class="muted" style="font-size:12px;word-break:keep-all;overflow-wrap:break-word;">지역별 링크는 해당 지역본부(강원지부·충남지부 포함)의 정보만 열람되며, 다른 사업장의 운행정보는 보이지 않습니다. 전체 지역본부 통합 링크는 10개 지역본부를 모두 합쳐서 보여주되, DT센터·퓨처캠 등 본사 소속 차량은 제외됩니다.</div></div>
       <button class="close-x" onclick="closeModal()">✕</button>
     </div>
-    <div class="region-url-list">${rows}</div>
+    <div class="region-url-list">${allRow}${rows}</div>
   `;
   document.getElementById('modalOverlay').classList.add('show');
   lockBodyScroll();
