@@ -35,7 +35,11 @@
 <!--
 =================================================================
   CHANGELOG
-  [2026-08-31] 공용차량 운행정보입력: 차량 선택 시 이전 운행기록의 종료거리·운행자 카드
+  [2026-08-31] (2) 이전 행선지 미표시 버그 수정 — getLastTripMeta()가 존재하지 않는
+  last.destination 필드를 참조해 항상 빈 값 반환하던 오류. 실제 저장 필드명인 dest로
+  수정 | 변경: getLastTripMeta()
+
+  [2026-08-31] (1) 공용차량 운행정보입력: 차량 선택 시 이전 운행기록의 종료거리·운행자 카드
   아래에 "이전 행선지"를 두 번째 줄로 추가 표시. 40자 초과 시 말줌표로 자동 처리 | 신규:
   destination 필드 반환 | 변경: getLastTripMeta(), onVehicleSelect(), onVehicleSelectAsync()
 
@@ -6705,7 +6709,7 @@ function getLastTripMeta(plate){
   // 대차반납이 포함된 기록은 반납 시점에 원차량 기준으로 재연동되어 종료거리를 신뢰할 수 있으므로,
   // "시작거리 재확인 필요" 경고는 대차인수만 있고 아직 반납되지 않은 경우에만 표시한다.
   const needsRecheck = !!(last.isDaeChaPickup && !last.isDaeChaReturn);
-  return {endOdo: Number(last.endOdo) || null, isDaeCha: !!last.isDaeCha, needsRecheck, user: last.user||'', destination: last.destination||''};
+  return {endOdo: Number(last.endOdo) || null, isDaeCha: !!last.isDaeCha, needsRecheck, user: last.user||'', destination: last.dest||''};
 }
 
 // 차량에 현재 진행중인(아직 반납되지 않은) 대차가 있는지 확인.
