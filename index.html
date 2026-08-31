@@ -35,6 +35,10 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-08-31] 공용차량 운행정보입력: 차량 선택 시 이전 운행기록의 종료거리·운행자 카드
+  아래에 "이전 행선지"를 두 번째 줄로 추가 표시. 40자 초과 시 말줌표로 자동 처리 | 신규:
+  destination 필드 반환 | 변경: getLastTripMeta(), onVehicleSelect(), onVehicleSelectAsync()
+
   [2026-08-26] 지역본부별 열람URL 모달에 "전체 지역본부 통합" 링크 1건 추가 — 10개 지역본부
   (강원지부·충남지부 포함)를 하나의 링크로 합쳐서 열람. DT센터/퓨처캠/국가기술표준원(파견)은
   기존 개별 지역 링크와 동일하게 제외됨 | 신규: REGION_ALL_TOKEN | 변경: openRegionUrlModal()
@@ -6695,13 +6699,13 @@ function isChainLocked(plate, trip){
 
 function getLastTripMeta(plate){
   const trips = (data.vehicles[plate]?.trips || []);
-  if(!trips.length) return {endOdo:null, isDaeCha:false, needsRecheck:false, user:''};
+  if(!trips.length) return {endOdo:null, isDaeCha:false, needsRecheck:false, user:'', destination:''};
   const sorted = trips.slice().sort(tripChronoCompare);
   const last = sorted[sorted.length - 1];
   // 대차반납이 포함된 기록은 반납 시점에 원차량 기준으로 재연동되어 종료거리를 신뢰할 수 있으므로,
   // "시작거리 재확인 필요" 경고는 대차인수만 있고 아직 반납되지 않은 경우에만 표시한다.
   const needsRecheck = !!(last.isDaeChaPickup && !last.isDaeChaReturn);
-  return {endOdo: Number(last.endOdo) || null, isDaeCha: !!last.isDaeCha, needsRecheck, user: last.user||''};
+  return {endOdo: Number(last.endOdo) || null, isDaeCha: !!last.isDaeCha, needsRecheck, user: last.user||'', destination: last.destination||''};
 }
 
 // 차량에 현재 진행중인(아직 반납되지 않은) 대차가 있는지 확인.
@@ -6810,12 +6814,17 @@ function onVehicleSelect(){
   if(!plate){ hint.style.display='none'; addBtn.style.display='none'; bar.style.display='none'; renderVehicleAlertPanel(null); const b=document.getElementById('daechaActiveBanner'); if(b) b.style.display='none'; return; }
 
   renderVehicleAlertPanel(plate);
-  const {endOdo:lastOdo, needsRecheck:lastNeedsRecheck, user:lastUser} = getLastTripMeta(plate);
+  const {endOdo:lastOdo, needsRecheck:lastNeedsRecheck, user:lastUser, destination:lastDest} = getLastTripMeta(plate);
   if(lastOdo !== null){
     hint.style.display = 'block';
     const userPart = lastUser ? ` <span style="margin-left:8px;color:var(--muted);">· 이전 운행자: <b>${escapeHtml(lastUser)}</b></span>` : '';
     // 대차 운행 건 관련 "시작거리 확인" 안내문구는 대차인수/반납이 별도 체크항목으로 분리되며 불필요해져 제거함
-    hint.innerHTML = `이전 종료거리: <b>${lastOdo.toLocaleString()}</b> km${userPart}`;
+    let html = `이전 종료거리: <b>${lastOdo.toLocaleString()}</b> km${userPart}`;
+    if(lastDest){
+      const destDisplay = lastDest.length > 40 ? lastDest.substring(0, 37) + '...' : lastDest;
+      html += `<div style="margin-top:8px;font-size:12px;color:var(--muted);">이전 행선지: <b style="color:var(--ink);">${escapeHtml(destDisplay)}</b></div>`;
+    }
+    hint.innerHTML = html;
   } else {
     hint.style.display = 'none';
   }
@@ -8784,12 +8793,17 @@ async function doRestoreDraft(draft){
 async function onVehicleSelectAsync(plate){
   document.getElementById('userPlateSelect').value = plate;
   renderVehicleAlertPanel(plate);
-  const {endOdo:lastOdo, user:lastUser} = getLastTripMeta(plate);
+  const {endOdo:lastOdo, user:lastUser, destination:lastDest} = getLastTripMeta(plate);
   const hint = document.getElementById('lastOdoHint');
   if(lastOdo!==null){
     hint.style.display='block';
     const userPart = lastUser ? ` <span style="margin-left:8px;color:var(--muted);">· 이전 운행자: <b>${escapeHtml(lastUser)}</b></span>` : '';
-    hint.innerHTML = `이전 종료거리: <b>${lastOdo.toLocaleString()}</b> km${userPart}`;
+    let html = `이전 종료거리: <b>${lastOdo.toLocaleString()}</b> km${userPart}`;
+    if(lastDest){
+      const destDisplay = lastDest.length > 40 ? lastDest.substring(0, 37) + '...' : lastDest;
+      html += `<div style="margin-top:8px;font-size:12px;color:var(--muted);">이전 행선지: <b style="color:var(--ink);">${escapeHtml(destDisplay)}</b></div>`;
+    }
+    hint.innerHTML = html;
   }
   else hint.style.display='none';
   document.getElementById('addRowBtn').style.display='block';
