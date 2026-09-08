@@ -35,6 +35,14 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-09-08] 엑셀 업로드(수기기록, 1~7월) 반영 데이터가 관리자 화면 직후엔 보이지만 열람
+  전용 링크(?view=readonly, Firebase 재조회 시)에서는 월별 가동율 표·연도 드롭다운이 통째로
+  비어 보이던 버그 수정. 원인: v.manualMonthly[year]의 키(1~7월)가 연속된 작은 정수라
+  Firebase가 배열로 자동 변환해 저장하며, 미사용 인덱스(0번)에 null이 채워져 반환됨 →
+  vehicleStatsOf()의 manualDist 계산에서 Object.values() 순회 중 null.distance 접근으로
+  TypeError 발생 → renderVehicles() 중단으로 이후 renderMonthly()까지 미실행 | 변경:
+  vehicleStatsOf() manualDist 계산부(null 항목 방어)
+
   [2026-08-31] (2) 이전 행선지 미표시 버그 수정 — getLastTripMeta()가 존재하지 않는
   last.destination 필드를 참조해 항상 빈 값 반환하던 오류. 실제 저장 필드명인 dest로
   수정 | 변경: getLastTripMeta()
@@ -50,12 +58,6 @@
   [2026-08-19] 개인사용(주말·공휴일 사용) 체크 시, 실제 운행기간이 주말·공휴일에 해당하지 않는
   경우(운행기간 입력란 하단 경고 문구만으로는 화면에 안 보여 문제없는 것으로 오인할 수 있음)
   운행기간 입력란으로 자동 스크롤 이동하여 즉시 보여주도록 개선 | 변경: togglePersonalUse()
-
-  [2026-08-19] 공용차량 운행정보입력: 개인사용(주말·공휴일 사용) 체크 시 실제 운행기간이 주말·
-  공휴일에 해당하는지 검증하는 로직 추가. 2일 이상 기간은 주말·공휴일 앞뒤 각 1일(퇴근 시 반출,
-  출근 시 반납)까지 허용하되, 그 외(예: 평일 하루만 선택)엔 운행기간 확인 알람과 함께 제출 차단.
-  운행기간 입력란에도 실시간 경고 색상으로 안내 | 신규: isValidPersonalWeekendRange() | 변경:
-  onDateRangeChange(), submitDirectInput()
 
   [2026-08-18] 롱프레스 시 텍스트 선택/콜아웃 메뉴 방지 적용(dedicated-driver-input.html에
   이미 있던 패턴을 이식) — body에 user-select:none/-webkit-touch-callout:none, input/
@@ -4253,7 +4255,10 @@ function scrollToVehicleCard(plate){
 function vehicleStatsOf(plate, businessOnly){
   const v=data.vehicles[plate];
   const trips=v.trips||[];
-  const manualDist=Object.values(v.manualMonthly||{}).reduce((s,yearObj)=>s+Object.values(yearObj).reduce((s2,mm)=>s2+(Number(mm.distance)||0),0),0);
+  // Firebase는 v.manualMonthly[year]의 키(1~7월 등)가 연속된 작은 정수이면 저장 시 배열로 자동 변환하며,
+  // 이 경우 사용되지 않는 인덱스(0번 등)가 null로 채워져 돌아온다. Object.values에 null이 섞여도
+  // mm.distance에서 TypeError가 나지 않도록 mm 존재 여부를 먼저 확인한다.
+  const manualDist=Object.values(v.manualMonthly||{}).reduce((s,yearObj)=>s+Object.values(yearObj||{}).reduce((s2,mm)=>s2+(mm?Number(mm.distance)||0:0),0),0);
   // businessOnly=true: 업무용 기준(개인사용·출퇴근사용 제외) 집계. 기본값(false/미지정)은 기존과 동일하게 전체 합산
   // — 엑셀 내보내기(총괄자료)·차량상세 모달 등 기존 호출부는 변경 없이 전체 데이터를 유지해야 하므로 필터를 걸지 않음.
   const distTrips=businessOnly?trips.filter(t=>!t.isPersonal&&!t.isCommute):trips;
