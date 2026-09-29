@@ -35,6 +35,12 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-09-29] 개인주유 증빙을 기한 내 올리지 못한 건에 대해 관리자가 대신 증빙 사진을 첨부할 수
+  있도록 개선. 개인사용 목록 증빙상태 열의 대기중/기한초과 건에 "📎 관리자 첨부" 버튼 추가(열람
+  전용 모드 제외), 사용자 화면과 동일한 압축(가로 1200px, JPEG 0.75) 후 receipts/에 저장하고
+  receiptAttachedBy:'admin' 신규 필드로 표시(기존 필드 변경 없음, OCR 판정 생략) | 신규:
+  adminReceiptAttachBtnHtml(), adminAttachReceipt() | 변경: receiptStatusBadgeHtml()
+
   [2026-09-08] 엑셀 업로드(수기기록, 1~7월) 반영 데이터가 관리자 화면 직후엔 보이지만 열람
   전용 링크(?view=readonly, Firebase 재조회 시)에서는 월별 가동율 표·연도 드롭다운이 통째로
   비어 보이던 버그 수정. 원인: v.manualMonthly[year]의 키(1~7월)가 연속된 작은 정수라
@@ -4437,9 +4443,17 @@ function receiptStatusBadgeHtml(t){
   if(!t.receiptPath){
     const submitted = t.submittedAt ? new Date(t.submittedAt) : null;
     const daysLeft = submitted ? USER_EDIT_WINDOW_DAYS - Math.floor((Date.now()-submitted.getTime())/86400000) : null;
-    if(daysLeft===null) return `<span style="color:var(--muted);font-size:11px;">-</span>`;
-    if(daysLeft >= 0) return `<span style="background:#EEE;color:#666;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;">⏳ 대기중 (D-${daysLeft})</span>`;
-    return `<span style="background:var(--bad-soft);color:var(--bad);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;">🚫 기한초과</span>`;
+    const adminBtn = adminReceiptAttachBtnHtml(t);
+    let pendBadge;
+    if(daysLeft===null) pendBadge = `<span style="color:var(--muted);font-size:11px;">-</span>`;
+    else if(daysLeft >= 0) pendBadge = `<span style="background:#EEE;color:#666;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;">⏳ 대기중 (D-${daysLeft})</span>`;
+    else pendBadge = `<span style="background:var(--bad-soft);color:var(--bad);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;">🚫 기한초과</span>`;
+    return adminBtn ? `<div style="display:flex;flex-direction:column;gap:3px;">${pendBadge}${adminBtn}</div>` : pendBadge;
+  }
+  // 관리자가 직접 첨부한 증빙은 OCR 판정 대상이 아니므로 "확인필요" 배지 대신 관리자 첨부 배지만 표시
+  if(t.receiptAttachedBy==='admin'){
+    return `<div style="display:flex;flex-direction:column;gap:3px;"><span style="background:var(--accent-soft);color:var(--navy);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;">👤 관리자 첨부</span>
+    <button class="btn-ghost" style="padding:2px 6px;font-size:10.5px;width:fit-content;" onclick="viewReceiptImage('${t.receiptPath.replace(/'/g,"\\'")}')">🧾 원본</button></div>`;
   }
   const badges=[];
   if(t.receiptOcrMatched===true) badges.push(`<span style="background:var(--good-soft);color:var(--good);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">✅ 금액일치</span>`);
@@ -4453,6 +4467,48 @@ function receiptStatusBadgeHtml(t){
   else badges.push(`<span style="background:#FEF3C7;color:#B45309;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">🔍 유형확인필요</span>`);
   return `<div style="display:flex;flex-direction:column;gap:3px;">${badges.join('')}
     <button class="btn-ghost" style="padding:2px 6px;font-size:10.5px;width:fit-content;" onclick="viewReceiptImage('${t.receiptPath.replace(/'/g,"\\'")}')">🧾 원본</button></div>`;
+}
+
+// 관리자 직접 증빙 첨부 — 사용자가 기한(USER_EDIT_WINDOW_DAYS) 내 업로드하지 못한 개인사용 건에 대해
+// 관리자가 영수증 사진을 대신 올린다. 사용자 화면과 동일하게 압축(compressReceiptImage) 후 receipts/에 저장하며,
+// OCR 판정은 하지 않고 receiptAttachedBy:'admin'으로 표시한다(기존 필드는 변경하지 않고 신규 필드만 추가).
+function adminReceiptAttachBtnHtml(t){
+  if(currentRole!=='admin' || viewerMode || !t.plate || !t.isoDate) return '';
+  const a=(v)=>String(v==null?'':v).replace(/['"\\<>&]/g,'');
+  return `<button class="btn-ghost" style="padding:2px 6px;font-size:10.5px;width:fit-content;" onclick="adminAttachReceipt('${a(t.plate)}','${a(t.isoDate)}','${a(t.startOdo)}','${a(t.endOdo)}')">📎 관리자 첨부</button>`;
+}
+function adminAttachReceipt(plate, isoDate, startOdo, endOdo){
+  if(currentRole!=='admin' || viewerMode) return;
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='image/*'; inp.style.display='none';
+  inp.onchange=async()=>{
+    const file=inp.files&&inp.files[0];
+    inp.remove();
+    if(!file) return;
+    const ok=await appConfirm(`${plate} · ${isoDate} 개인사용 건에 선택한 사진(${file.name})을 증빙으로 첨부합니다.\n\n계속하시겠습니까?`,{title:'관리자 증빙 첨부',okText:'첨부'});
+    if(!ok) return;
+    try{
+      await refreshDataFromStorage();
+      const trips=(data.vehicles[plate]&&data.vehicles[plate].trips)||[];
+      const t=trips.find(x=>x.isPersonal && x.isoDate===isoDate && String(x.startOdo)===startOdo && String(x.endOdo)===endOdo);
+      if(!t){ await appAlert('해당 운행기록을 찾을 수 없습니다. 새로고침 후 다시 시도해 주세요.',{title:'첨부 실패',danger:true}); return; }
+      if(t.receiptPath){ await appAlert('이미 증빙이 첨부된 건입니다.',{title:'첨부 불필요'}); renderPersonalUseList(); return; }
+      const normalized=await normalizeReceiptOrientation(file);
+      const compressed=await compressReceiptImage(normalized);
+      t.receiptPath=await uploadReceiptToStorage(compressed, buildReceiptFileName(t.user, t.isoDate, t.fuel));
+      t.receiptUploadedAt=new Date().toISOString();
+      t.receiptAttachedBy='admin';
+      const saved=await saveData();
+      if(!saved) return;
+      renderPersonalUseList();
+      showDoneModal('첨부 완료','증빙이 관리자 첨부로 저장되었습니다.');
+    }catch(e){
+      console.error('[관리자 증빙 첨부 실패]', e);
+      await appAlert(`증빙 첨부에 실패했습니다.\n${e.message||''}`,{title:'첨부 실패',danger:true});
+    }
+  };
+  document.body.appendChild(inp);
+  inp.click();
 }
 
 // 관리자 화면에서 Storage의 영수증 원본 이미지를 새 창으로 열람
