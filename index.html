@@ -35,6 +35,15 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-10-19] 개인사용 주유영수증 복수 첨부(최대 5장, MAX_RECEIPT_FILES) 지원 — 촬영/앨범(다중선택)으로
+  추가 첨부·장별 삭제 가능, 전 장 금액 인식 시 합산 금액을 주유비에 자동 연동, 일자/유형은 1장이라도
+  부적격이면 부적격 처리. 업로드는 전 장 성공 시에만 반영(일부 실패 시 전체 첨부실패 처리). 복수 첨부 건은
+  신규 필드 receiptPaths 추가(receiptPath=첫 장, 기존 필드 변경 없음), 증빙상태 원본버튼 장별 표시 |
+  신규: newReceiptEntry(), analyzeReceiptEntry(), aggregateReceiptEntries(), receiptEntriesHtml(),
+  receiptAggSummaryHtml(), applyReceiptAggregate(), removeReceiptFile(), ueApplyReceiptAggregate(),
+  ueRemoveReceiptFile(), receiptOriginalBtnsHtml() | 변경: onReceiptFileSelected(), ueReceiptFileSelected(),
+  updateReceiptButtonStates(), resetReceiptState(), doSubmit() 영수증 업로드, saveUserEdits() 영수증 업로드,
+  receiptStatusBadgeHtml(), 영수증 첨부 UI(제출/내 제출기록 수정)
   [2026-09-29] 개인주유 증빙을 기한 내 올리지 못한 건에 대해 관리자가 대신 증빙 사진을 첨부할 수
   있도록 개선. 개인사용 목록 증빙상태 열의 대기중/기한초과 건에 "📎 관리자 첨부" 버튼 추가(열람
   전용 모드 제외), 사용자 화면과 동일한 압축(가로 1200px, JPEG 0.75) 후 receipts/에 저장하고
@@ -1739,6 +1748,7 @@ firebase.initializeApp(firebaseConfig);
 const GOOGLE_VISION_API_KEY   = "AIzaSyD2yFArdilNg76gWJcZAwbvxKPXoUJZ2t8";
 const FIREBASE_STORAGE_BUCKET = "ksa-vehicle-log.firebasestorage.app"; // 콘솔에서 실제 버킷명 확인 후 교체
 const RECEIPT_DATE_TOLERANCE_DAYS = 10; // 영수증 일자와 운행일 허용 오차(±일)
+const MAX_RECEIPT_FILES = 5; // 개인사용 1건당 첨부 가능한 주유영수증 최대 장수(인식 금액은 합산해 주유비로 연동)
 
 // ============================================================
 // ★ Vision API 월간 무료 한도 소프트 캡 (2026-08-18 추가) ★
@@ -4466,7 +4476,14 @@ function receiptStatusBadgeHtml(t){
   else if(t.receiptTypeValid===false) badges.push(`<span style="background:var(--bad-soft);color:var(--bad);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">⚠️ 유형상이</span>`);
   else badges.push(`<span style="background:#FEF3C7;color:#B45309;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">🔍 유형확인필요</span>`);
   return `<div style="display:flex;flex-direction:column;gap:3px;">${badges.join('')}
-    <button class="btn-ghost" style="padding:2px 6px;font-size:10.5px;width:fit-content;" onclick="viewReceiptImage('${t.receiptPath.replace(/'/g,"\\'")}')">🧾 원본</button></div>`;
+    ${receiptOriginalBtnsHtml(t)}</div>`;
+}
+// 영수증 원본 열람 버튼 — 복수 첨부(receiptPaths) 건은 장별 버튼(🧾 1 ~ 🧾 n), 단일 건은 기존과 동일하게 "🧾 원본"
+function receiptOriginalBtnsHtml(t){
+  const paths = Array.isArray(t.receiptPaths) && t.receiptPaths.length>1 ? t.receiptPaths.filter(Boolean) : [t.receiptPath];
+  const btn = (p,label)=>`<button class="btn-ghost" style="padding:2px 6px;font-size:10.5px;width:fit-content;" onclick="viewReceiptImage('${String(p).replace(/'/g,"\\'")}')">${label}</button>`;
+  if(paths.length<=1) return btn(t.receiptPath,'🧾 원본');
+  return `<div style="display:flex;gap:3px;flex-wrap:wrap;">${paths.map((p,i)=>btn(p,`🧾 ${i+1}`)).join('')}</div>`;
 }
 
 // 관리자 직접 증빙 첨부 — 사용자가 기한(USER_EDIT_WINDOW_DAYS) 내 업로드하지 못한 개인사용 건에 대해
@@ -7127,18 +7144,15 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
           <div id="fuelrefprice-${id}" style="margin-top:6px;font-size:11px;color:#1D4ED8;line-height:1.6;"></div>
           <div id="fuelminguide-${id}" style="display:none;margin-top:6px;font-size:11.5px;font-weight:700;color:#1D4ED8;line-height:1.6;"></div>
           <div id="receiptBox-${id}" style="margin-top:10px;padding-top:10px;border-top:1px dashed #93C5FD;">
-            <div style="font-size:11.5px;font-weight:700;color:#1D4ED8;margin-bottom:6px;">🧾 주유영수증 첨부</div>
+            <div style="font-size:11.5px;font-weight:700;color:#1D4ED8;margin-bottom:6px;">🧾 주유영수증 첨부 <span style="font-weight:400;">(최대 ${MAX_RECEIPT_FILES}장 · 금액 자동 합산)</span></div>
             <div id="receiptButtons-${id}" style="display:flex;gap:6px;flex-wrap:wrap;">
               <button type="button" id="receiptBtnCamera-${id}" class="receipt-opt-btn" onclick="onReceiptAttachNow('${id}')" style="flex:1 1 30%;min-width:88px;padding:9px 6px;border-radius:8px;border:none;background:#1D4ED8;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">📷 영수증 촬영</button>
               <button type="button" id="receiptBtnAlbum-${id}" class="receipt-opt-btn" onclick="onReceiptAttachAlbum('${id}')" style="flex:1 1 30%;min-width:88px;padding:9px 6px;border-radius:8px;border:1px solid #93C5FD;background:#fff;color:#1D4ED8;font-size:12px;font-weight:700;cursor:pointer;">🖼️ 앨범에서 선택</button>
               <button type="button" id="receiptBtnLater-${id}" class="receipt-opt-btn" onclick="onReceiptAttachLater('${id}')" style="flex:1 1 30%;min-width:88px;padding:9px 6px;border-radius:8px;border:1px solid #93C5FD;background:#fff;color:#1D4ED8;font-size:12px;font-weight:700;cursor:pointer;">⏳ 나중에 첨부</button>
             </div>
             <input type="file" id="receiptFile-${id}" accept="image/*" capture="environment" style="display:none;" onchange="onReceiptFileSelected(this,'${id}','camera')">
-            <input type="file" id="receiptFileAlbum-${id}" accept="image/*" style="display:none;" onchange="onReceiptFileSelected(this,'${id}','album')">
-            <div id="receiptThumbWrap-${id}" style="display:none;margin-top:8px;gap:8px;align-items:flex-start;">
-              <img id="receiptThumb-${id}" src="" alt="영수증 미리보기" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #93C5FD;flex-shrink:0;">
-              <div id="receiptOcrStatus-${id}" style="font-size:11.5px;flex:1;"></div>
-            </div>
+            <input type="file" id="receiptFileAlbum-${id}" accept="image/*" multiple style="display:none;" onchange="onReceiptFileSelected(this,'${id}','album')">
+            <div id="receiptThumbWrap-${id}" style="display:none;margin-top:8px;"></div>
             <div id="receiptDeferredNote-${id}" style="display:none;margin-top:8px;font-size:11.5px;color:#B91C1C;background:#FEE2E2;border-radius:8px;padding:8px 10px;line-height:1.5;word-break:keep-all;overflow-wrap:break-word;">
               ⏳ 영수증 미첨부 — 제출일로부터 <b>10일 이내</b> "내 제출 기록 수정"에서 반드시 추가 제출해주세요.
             </div>
@@ -7801,7 +7815,72 @@ function togglePersonalUse(chk, id){
 // ============================================================
 window._receiptFileMap = window._receiptFileMap || {};
 
+// ── 복수 영수증(최대 MAX_RECEIPT_FILES장) 공용 헬퍼 ──
+// window._receiptFileMap[id] / window._ueReceiptFileMap[key]는 아래 entry 객체의 배열을 보관한다.
+// entry: {file, thumbUrl, pending, ocrAmount, ocrDate, dateValid, diffDays, typeValid, debug}
+function newReceiptEntry(file){
+  return {file, thumbUrl:URL.createObjectURL(file), pending:true, ocrAmount:null, ocrDate:null, dateValid:null, diffDays:0, typeValid:null, debug:''};
+}
+// 영수증 1장 OCR 판정(기존 단일 첨부와 동일 로직) — 결과를 entry에 직접 기록
+async function analyzeReceiptEntry(entry, tripDateStr){
+  try{
+    const { text, debug } = await callVisionOcr(entry.file);
+    const cands = parseReceiptAmount(text);
+    entry.ocrAmount = cands.length ? cands[0] : null;
+    entry.ocrDate = parseReceiptDate(text);
+    const { valid, diffDays } = validateReceiptDate(entry.ocrDate, tripDateStr);
+    entry.dateValid = valid; entry.diffDays = diffDays;
+    entry.typeValid = isFuelReceiptText(text);
+    entry.debug = debug || '';
+  }catch(e){
+    console.error('[영수증 OCR 실패]', e);
+  }
+  entry.pending = false;
+}
+// 복수 영수증 판정 합산: 금액은 전 장 인식 성공 시에만 합계(1장이라도 실패하면 null),
+// 일자/유형은 1장이라도 부적격이면 false, 전 장 적격이면 true, 그 외 null(확인필요)
+function aggregateReceiptEntries(list){
+  const done = list.filter(e=>!e.pending);
+  const pending = list.length - done.length;
+  const allAmt = done.length>0 && done.every(e=>e.ocrAmount!==null);
+  const amountSum = allAmt ? done.reduce((s,e)=>s+e.ocrAmount,0) : null;
+  const tri = (k)=> done.some(e=>e[k]===false) ? false : (done.length>0 && done.every(e=>e[k]===true) ? true : null);
+  const dates = [...new Set(done.map(e=>e.ocrDate).filter(Boolean))];
+  return { count:list.length, pending, amountSum, ocrDate: dates.join(', ') || null, dateValid: tri('dateValid'), typeValid: tri('typeValid') };
+}
+// 첨부 영수증 목록(썸네일 + 장별 인식결과 + 삭제버튼) 마크업. removeJs(idx)는 삭제 onclick 문자열 반환
+function receiptEntriesHtml(list, removeJs){
+  return list.map((e,i)=>{
+    let info;
+    if(e.pending) info = '🔄 영수증 인식 중...';
+    else {
+      const amt = e.ocrAmount!==null ? `<b>${e.ocrAmount.toLocaleString()}원</b>` : `<span style="color:#B45309;font-weight:700;">금액 인식 실패</span>`;
+      const dt = e.ocrDate ? `${e.ocrDate} ${e.dateValid===false?'<span style="color:#DC2626;font-weight:700;">⚠️일자부적격</span>':(e.dateValid===true?'✅':'')}` : `<span style="color:#B45309;">일자 인식 실패</span>`;
+      const tp = e.typeValid===false ? ` · <span style="color:#DC2626;font-weight:700;">⚠️주유영수증 아님</span>` : '';
+      info = `${amt} · ${dt}${tp}` + (e.debug ? `<br><span style="color:#9CA3AF;font-size:10.5px;">🛠 진단정보(임시): ${String(e.debug).replace(/</g,'&lt;')}</span>` : '');
+    }
+    return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+      <img src="${e.thumbUrl}" alt="영수증 ${i+1}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #93C5FD;flex-shrink:0;">
+      <div style="flex:1;font-size:11.5px;line-height:1.5;word-break:keep-all;overflow-wrap:break-word;"><span style="color:#1D4ED8;font-weight:700;">영수증 ${i+1}</span><br>${info}</div>
+      <button type="button" onclick="${removeJs(i)}" style="flex-shrink:0;border:1px solid #FCA5A5;background:#fff;color:#DC2626;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;">✕ 삭제</button>
+    </div>`;
+  }).join('');
+}
+// 합산 판정 결과 요약 문구(금액/일자/유형 배지) — amountText는 금액 배지 문구(화면별 상이)
+function receiptAggSummaryHtml(agg, amountText){
+  let dateBadge, typeBadge;
+  if(agg.dateValid===true) dateBadge = `<span style="color:#059669;font-weight:700;">✅ 증빙 일자 적격 (운행일 ±${RECEIPT_DATE_TOLERANCE_DAYS}일 이내)</span>`;
+  else if(agg.dateValid===false) dateBadge = `<span style="color:#DC2626;font-weight:700;">⚠️ 증빙 부적격 — 운행일 ±${RECEIPT_DATE_TOLERANCE_DAYS}일 범위를 벗어난 영수증이 있습니다</span>`;
+  else dateBadge = `<span style="color:#B45309;font-weight:700;">🔍 일자 자동 인식 실패 - 관리자 확인 예정</span>`;
+  if(agg.typeValid===true) typeBadge = `<span style="color:#059669;font-weight:700;">✅ 주유 영수증으로 확인됨</span>`;
+  else if(agg.typeValid===false) typeBadge = `<span style="color:#DC2626;font-weight:700;">⚠️ 주유 영수증이 아닌 것으로 보이는 영수증이 있습니다 - 관리자 확인 예정</span>`;
+  else typeBadge = `<span style="color:#B45309;font-weight:700;">🔍 영수증 종류 자동 인식 실패 - 관리자 확인 예정</span>`;
+  const total = agg.amountSum!==null ? `합산 금액: <b>${agg.amountSum.toLocaleString()}원</b> (${agg.count}장)<br>` : '';
+  return `<div style="font-size:11.5px;line-height:1.6;padding:8px 10px;background:#fff;border:1px solid #BFDBFE;border-radius:8px;word-break:keep-all;overflow-wrap:break-word;">${total}${amountText}<br>${dateBadge}<br>${typeBadge}</div>`;
+}
+
 function resetReceiptState(id){
+  (window._receiptFileMap[id]||[]).forEach(e=>{ try{ URL.revokeObjectURL(e.thumbUrl); }catch(_){} });
   delete window._receiptFileMap[id];
   const card = document.getElementById(id);
   if(card){
@@ -7824,15 +7903,18 @@ function resetReceiptState(id){
   updateReceiptButtonStates(id);
 }
 
-// 영수증 첨부 3버튼(촬영/앨범/나중에 첨부) 중 선택된 옵션 1개만 활성 표시하고 나머지는 비활성화.
-// 선택 해제(active==='') 시 3개 버튼 모두 다시 활성화.
+// 영수증 첨부 3버튼(촬영/앨범/나중에 첨부) 활성 상태 갱신.
+// "나중에 첨부" 선택 시 촬영/앨범 비활성. 영수증이 1장 이상 첨부되면 "나중에 첨부"만 비활성화하고
+// 촬영/앨범은 MAX_RECEIPT_FILES장 미만일 때 추가 첨부용으로 계속 활성(최대치 도달 시 비활성).
 function updateReceiptButtonStates(id){
   const card = document.getElementById(id);
   const active = card?.dataset.receiptActiveOption || '';
+  const cnt = (window._receiptFileMap[id]||[]).length;
   [['receiptBtnCamera-'+id,'camera'],['receiptBtnAlbum-'+id,'album'],['receiptBtnLater-'+id,'later']].forEach(([btnId,key])=>{
     const btn = document.getElementById(btnId);
     if(!btn) return;
-    if(!active || active===key){
+    const enabled = active==='later' ? key==='later' : (cnt>0 ? (key!=='later' && cnt<MAX_RECEIPT_FILES) : true);
+    if(enabled){
       btn.disabled = false;
       btn.style.opacity = '1';
       btn.style.cursor = 'pointer';
@@ -7882,85 +7964,97 @@ function onReceiptAttachLater(id){
 }
 
 async function onReceiptFileSelected(inputEl, id, source){
-  let file = inputEl.files && inputEl.files[0];
-  if(!file) return;
+  const picked = Array.from(inputEl.files || []);
+  inputEl.value = ''; // 같은 파일 재선택/추가 첨부가 가능하도록 초기화
+  if(!picked.length) return;
   const card = document.getElementById(id);
+  const list = window._receiptFileMap[id] = window._receiptFileMap[id] || [];
+  const room = MAX_RECEIPT_FILES - list.length;
+  if(room <= 0){ await appAlert(`영수증은 최대 ${MAX_RECEIPT_FILES}장까지 첨부할 수 있습니다.`,{title:'첨부 한도 초과'}); return; }
+  if(picked.length > room) await appAlert(`영수증은 최대 ${MAX_RECEIPT_FILES}장까지 첨부할 수 있어 ${room}장만 추가됩니다.`,{title:'첨부 한도 초과'});
   if(card){
     delete card.dataset.receiptDeferred;
     card.dataset.receiptActiveOption = source || 'camera';
   }
   const deferredNote = document.getElementById('receiptDeferredNote-'+id);
   if(deferredNote) deferredNote.style.display = 'none';
-  updateReceiptButtonStates(id);
 
-  // 가로로 촬영/첨부된 영수증은 세로로 정규화(OCR 인식 순서 안정화 목적) —
-  // 이후 썸네일·OCR·실제 업로드 모두 이 정규화된 파일을 동일하게 사용
-  file = await normalizeReceiptOrientation(file);
-  window._receiptFileMap[id] = file;
-
-  const thumbWrap = document.getElementById('receiptThumbWrap-'+id);
-  const thumbImg = document.getElementById('receiptThumb-'+id);
-  const statusEl = document.getElementById('receiptOcrStatus-'+id);
-  if(thumbImg) thumbImg.src = URL.createObjectURL(file);
-  if(thumbWrap) thumbWrap.style.display = 'flex';
-  if(statusEl) statusEl.innerHTML = '🔄 영수증 인식 중...';
-
-  const fuelInp = card?.querySelector('.tr-fuel');
   const tripDateInp = card?.querySelector('.tr-date-from');
   const tripDateStr = tripDateInp ? tripDateInp.value : todayLocalISO();
-
-  const { text, debug } = await callVisionOcr(file);
-  const amountCandidates = parseReceiptAmount(text);
-  const ocrAmount = amountCandidates.length ? amountCandidates[0] : null;
-  const ocrDate = parseReceiptDate(text);
-  const { valid: dateValid, diffDays } = validateReceiptDate(ocrDate, tripDateStr);
-  const typeValid = isFuelReceiptText(text);
-
-  // 금액이 인식되면 주유비 입력란(아래쪽)에 자동으로 채워준다 — 증빙 첨부 후 금액을 직접
-  // 타이핑할 필요가 없도록 순서를 바꿈. 이후 사용자가 이 값을 임의로 고치면
-  // checkReceiptAmountMismatch()가 감지해 별도 안내 문구를 띄운다(fuelOcrWarn-${id}).
-  let matched;
-  if(ocrAmount!==null && fuelInp){
-    fuelInp.value = String(ocrAmount);
-    formatFuelInput(fuelInp);
-    matched = true;
-    const ocrWarnEl = document.getElementById('fuelOcrWarn-'+id);
-    if(ocrWarnEl) ocrWarnEl.style.display = 'none';
-    checkFuelVsDistance(id);
-    scheduleDraft();
-  } else {
-    matched = null; // 금액 인식 실패 — 기존 입력값 유지, 관리자 확인 대상
+  // 가로로 촬영/첨부된 영수증은 세로로 정규화(OCR 인식 순서 안정화 목적) —
+  // 이후 썸네일·OCR·실제 업로드 모두 이 정규화된 파일을 동일하게 사용
+  const added = [];
+  for(const f of picked.slice(0, room)){
+    const entry = newReceiptEntry(await normalizeReceiptOrientation(f));
+    list.push(entry); added.push(entry);
   }
-
-  if(card){
-    card.dataset.receiptOcrAmount = ocrAmount===null ? '' : String(ocrAmount);
-    card.dataset.receiptOcrMatched = matched===null ? '' : String(matched);
-    card.dataset.receiptOcrDate = ocrDate || '';
-    card.dataset.receiptDateValid = dateValid===null ? '' : String(dateValid);
-    card.dataset.receiptTypeValid = typeValid===null ? '' : String(typeValid);
-  }
-
-  let amountBadge, dateBadge;
-  if(matched===true) amountBadge = `<span style="color:#059669;font-weight:700;">✅ 인식된 금액이 주유비 입력란에 자동으로 입력되었습니다 (임의 수정 시 안내 표시)</span>`;
-  else amountBadge = `<span style="color:#B45309;font-weight:700;">🔍 금액 자동 인식 실패 - 주유비를 직접 입력해주세요 (관리자 확인 예정)</span>`;
-
-  if(dateValid===true) dateBadge = `<span style="color:#059669;font-weight:700;">✅ 증빙 일자 적격 (운행일 ±10일 이내)</span>`;
-  else if(dateValid===false) dateBadge = `<span style="color:#DC2626;font-weight:700;">⚠️ 증빙 부적격 — 영수증 일자(${ocrDate})가 운행일보다 ${Math.abs(diffDays)}일 ${diffDays<0?'이전':'초과'}입니다</span>`;
-  else dateBadge = `<span style="color:#B45309;font-weight:700;">🔍 일자 자동 인식 실패 - 관리자 확인 예정</span>`;
-
-  let typeBadge;
-  if(typeValid===true) typeBadge = `<span style="color:#059669;font-weight:700;">✅ 주유 영수증으로 확인됨</span>`;
-  else if(typeValid===false) typeBadge = `<span style="color:#DC2626;font-weight:700;">⚠️ 주유 영수증이 아닌 것으로 보입니다 - 관리자 확인 예정</span>`;
-  else typeBadge = `<span style="color:#B45309;font-weight:700;">🔍 영수증 종류 자동 인식 실패 - 관리자 확인 예정</span>`;
-
-  if(statusEl){
-    statusEl.innerHTML =
-      (ocrAmount!==null ? `인식 금액: <b>${ocrAmount.toLocaleString()}원</b><br>` : '') + amountBadge +
-      `<br>` + (ocrDate ? `인식 일자: <b>${ocrDate}</b><br>` : '') + dateBadge +
-      `<br>` + typeBadge +
-      (debug ? `<br><span style="color:#9CA3AF;font-size:10.5px;">🛠 진단정보(임시): ${String(debug).replace(/</g,'&lt;')}</span>` : '');
+  applyReceiptAggregate(id);
+  for(const entry of added){
+    await analyzeReceiptEntry(entry, tripDateStr);
+    applyReceiptAggregate(id);
   }
   // 금액/일자/유형 부적격·인식실패여도 입력 진행은 막지 않음 — 경고만 표시 (관리자 사후 모니터링)
+}
+
+// 첨부 영수증 1장 삭제 — 남은 영수증 기준으로 합산 금액/판정 재계산
+function removeReceiptFile(id, idx){
+  const list = window._receiptFileMap[id];
+  if(!list || !list[idx]) return;
+  try{ URL.revokeObjectURL(list[idx].thumbUrl); }catch(_){}
+  list.splice(idx, 1);
+  applyReceiptAggregate(id);
+}
+
+// 첨부된 영수증 전체의 OCR 결과를 합산해 card.dataset(collectRows()가 읽는 값)과 화면에 반영.
+// 전 장 금액 인식 성공 시 합산 금액을 주유비 입력란에 자동 입력한다 — 이후 사용자가 이 값을 임의로
+// 고치면 checkReceiptAmountMismatch()가 감지해 별도 안내 문구를 띄운다(fuelOcrWarn-${id}).
+function applyReceiptAggregate(id){
+  const card = document.getElementById(id);
+  const list = window._receiptFileMap[id] || [];
+  const wrap = document.getElementById('receiptThumbWrap-'+id);
+  if(!list.length){
+    delete window._receiptFileMap[id];
+    if(card){
+      if(card.dataset.receiptActiveOption!=='later') delete card.dataset.receiptActiveOption;
+      ['receiptOcrAmount','receiptOcrMatched','receiptOcrDate','receiptDateValid','receiptTypeValid'].forEach(k=>delete card.dataset[k]);
+    }
+    if(wrap){ wrap.innerHTML=''; wrap.style.display='none'; }
+    const ocrWarnEl = document.getElementById('fuelOcrWarn-'+id);
+    if(ocrWarnEl) ocrWarnEl.style.display = 'none';
+    updateReceiptButtonStates(id);
+    return;
+  }
+  const agg = aggregateReceiptEntries(list);
+  let summary = '';
+  if(!agg.pending){
+    const fuelInp = card?.querySelector('.tr-fuel');
+    let matched = null; // 금액 인식 실패 — 기존 입력값 유지, 관리자 확인 대상
+    if(agg.amountSum!==null && fuelInp){
+      fuelInp.value = String(agg.amountSum);
+      formatFuelInput(fuelInp);
+      matched = true;
+      const ocrWarnEl = document.getElementById('fuelOcrWarn-'+id);
+      if(ocrWarnEl) ocrWarnEl.style.display = 'none';
+      checkFuelVsDistance(id);
+      scheduleDraft();
+    }
+    if(card){
+      card.dataset.receiptOcrAmount = agg.amountSum===null ? '' : String(agg.amountSum);
+      card.dataset.receiptOcrMatched = matched===null ? '' : String(matched);
+      card.dataset.receiptOcrDate = agg.ocrDate || '';
+      card.dataset.receiptDateValid = agg.dateValid===null ? '' : String(agg.dateValid);
+      card.dataset.receiptTypeValid = agg.typeValid===null ? '' : String(agg.typeValid);
+    }
+    const amountText = matched===true
+      ? `<span style="color:#059669;font-weight:700;">✅ ${agg.count>1?'합산 금액이':'인식된 금액이'} 주유비 입력란에 자동으로 입력되었습니다 (임의 수정 시 안내 표시)</span>`
+      : `<span style="color:#B45309;font-weight:700;">🔍 금액 자동 인식 실패${agg.count>1?'(일부 영수증)':''} - 주유비를 직접 입력해주세요 (관리자 확인 예정)</span>`;
+    summary = receiptAggSummaryHtml(agg, amountText);
+  }
+  if(wrap){
+    wrap.innerHTML = receiptEntriesHtml(list, i=>`removeReceiptFile('${id}',${i})`) + summary;
+    wrap.style.display = 'block';
+  }
+  updateReceiptButtonStates(id);
 }
 
 // 영수증 OCR로 자동 입력된 주유비를 사용자가 임의로 수정했는지 실시간 감지 (주유비 입력란 oninput에서 호출).
@@ -8491,24 +8585,35 @@ async function doSubmit(submitter, plate, rows){
     // OCR(금액/일자) 판정 결과는 이미 첨부 시점에 계산되어 r에 담겨 있음(collectRows() 참고).
     // 업로드 실패 시에도 전체 제출은 막지 않고 "나중에 첨부"와 동일하게 receiptPath=null로 저장.
     // 일시적 통신 오류 대응을 위해 1회 재시도 후에도 실패하면 최종 실패로 처리.
-    let receiptPath = null, receiptUploadedAt = null;
+    let receiptPath = null, receiptPaths = null, receiptUploadedAt = null;
     if(r.isPersonal && !r.receiptDeferred){
-      const file = window._receiptFileMap && window._receiptFileMap[r.id];
-      if(file){
-        let lastErr = null;
-        for(let attempt=0; attempt<2 && !receiptPath; attempt++){
-          try{
-            const fileName = buildReceiptFileName(r.user, isoDate, r.fuel);
-            const compressed = await compressReceiptImage(file);
-            receiptPath = await uploadReceiptToStorage(compressed, fileName);
-            receiptUploadedAt = new Date().toISOString();
-          }catch(e){
-            lastErr = e;
-            console.error(`[영수증 업로드 실패${attempt===0?' - 재시도 예정':''}]`, e);
+      const entries = (window._receiptFileMap && window._receiptFileMap[r.id]) || [];
+      if(entries.length){
+        // 복수 영수증(최대 MAX_RECEIPT_FILES장)은 장별로 업로드(각 1회 재시도). 1장이라도 최종 실패하면
+        // 일부만 저장되는 불완전 증빙을 막기 위해 전체를 첨부 실패로 처리(receiptPath=null) —
+        // "내 제출 기록 수정"에서 다시 전부 첨부하도록 안내한다.
+        const okPaths = [];
+        let lastErr = null, failCnt = 0;
+        for(const ent of entries){
+          let path = null;
+          for(let attempt=0; attempt<2 && !path; attempt++){
+            try{
+              const fileName = buildReceiptFileName(r.user, isoDate, r.fuel);
+              const compressed = await compressReceiptImage(ent.file);
+              path = await uploadReceiptToStorage(compressed, fileName);
+            }catch(e){
+              lastErr = e;
+              console.error(`[영수증 업로드 실패${attempt===0?' - 재시도 예정':''}]`, e);
+            }
           }
+          if(path) okPaths.push(path); else failCnt++;
         }
-        if(!receiptPath){
-          receiptUploadFailures.push({isoDate, dateDisplay, errMsg: lastErr?.message||''});
+        if(failCnt===0){
+          receiptPath = okPaths[0];
+          receiptPaths = okPaths.length>1 ? okPaths : null; // 신규 필드(복수 첨부 시에만), 첫 장은 기존 receiptPath 유지
+          receiptUploadedAt = new Date().toISOString();
+        } else {
+          receiptUploadFailures.push({isoDate, dateDisplay, errMsg: (entries.length>1?`${entries.length}장 중 ${failCnt}장 업로드 실패 `:'') + (lastErr?.message||'')});
         }
       } else {
         // "나중에 첨부"를 선택하지 않았는데도 실제 File 참조가 남아있지 않은 경우(모바일에서
@@ -8573,6 +8678,7 @@ async function doSubmit(submitter, plate, rows){
       editToken: getDeviceEditToken(), // 이 트립을 제출한 기기 식별용(본인수정화면 접근 제어에 사용)
       // 개인사용 주유영수증 OCR 검증 필드 (RECEIPT_OCR_DESIGN.md 2항) — 개인사용이 아니면 전부 null
       receiptPath,
+      ...(receiptPaths ? { receiptPaths } : {}),
       receiptOcrAmount: r.isPersonal ? (r.receiptOcrAmount ?? null) : null,
       receiptOcrMatched: r.isPersonal ? (r.receiptOcrMatched ?? null) : null,
       receiptOcrDate: r.isPersonal ? (r.receiptOcrDate ?? null) : null,
@@ -9117,18 +9223,15 @@ function loadUserEditable(){
             <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5;">인수·반납 상세정보(차종·하이패스·주유게이지·이상여부)는 이 화면에서 수정할 수 없습니다. 최초 제출한 운행기록의 인수/반납 여부는 그대로 유지됩니다.</div>
           </div>
           <div class="ue-receipt-field" style="${f.trip.isPersonal?'':'display:none;'}margin-top:10px;padding-top:10px;border-top:1px dashed #93C5FD;">
-            <div style="font-size:11px;font-weight:700;color:#1D4ED8;margin-bottom:6px;">🧾 개인사용 주유영수증</div>
+            <div style="font-size:11px;font-weight:700;color:#1D4ED8;margin-bottom:6px;">🧾 개인사용 주유영수증${f.trip.receiptPath?'':` <span style="font-weight:400;">(최대 ${MAX_RECEIPT_FILES}장 · 금액 자동 합산)</span>`}</div>
             <div class="ue-receipt-status">${f.trip.receiptPath ? receiptStatusBadgeHtml(f.trip) : `
               <div style="display:flex;gap:6px;flex-wrap:wrap;">
                 <button type="button" class="ue-receipt-btn" onclick="ueReceiptAttach(this,'camera')" style="flex:1 1 45%;min-width:88px;padding:9px 6px;border-radius:8px;border:none;background:#1D4ED8;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">📷 촬영</button>
                 <button type="button" class="ue-receipt-btn" onclick="ueReceiptAttach(this,'album')" style="flex:1 1 45%;min-width:88px;padding:9px 6px;border-radius:8px;border:1px solid #93C5FD;background:#fff;color:#1D4ED8;font-size:12px;font-weight:700;cursor:pointer;">🖼️ 앨범에서 선택</button>
               </div>
               <input type="file" class="ue-receipt-file-camera" accept="image/*" capture="environment" style="display:none;" onchange="ueReceiptFileSelected(this)">
-              <input type="file" class="ue-receipt-file-album" accept="image/*" style="display:none;" onchange="ueReceiptFileSelected(this)">
-              <div class="ue-receipt-thumb-wrap" style="display:none;margin-top:8px;gap:8px;align-items:flex-start;">
-                <img class="ue-receipt-thumb" src="" alt="영수증 미리보기" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid #93C5FD;flex-shrink:0;">
-                <div class="ue-receipt-ocr-status" style="font-size:11px;flex:1;"></div>
-              </div>
+              <input type="file" class="ue-receipt-file-album" accept="image/*" multiple style="display:none;" onchange="ueReceiptFileSelected(this)">
+              <div class="ue-receipt-thumb-wrap" style="display:none;margin-top:8px;"></div>
             `}</div>
           </div>
           <div style="margin-top:10px;">
@@ -9224,55 +9327,78 @@ function ueReceiptAttach(btn, type){
 // 실제 업로드는 저장 시점(saveUserEdits)에 수행하며, 이 함수는 파일을 window._ueReceiptFileMap에 보관하고
 // 인식 결과만 미리 계산해 카드에 표시한다.
 async function ueReceiptFileSelected(inputEl){
-  let file = inputEl.files && inputEl.files[0];
-  if(!file) return;
+  const picked = Array.from(inputEl.files || []);
+  inputEl.value = ''; // 같은 파일 재선택/추가 첨부가 가능하도록 초기화
+  if(!picked.length) return;
   const row = inputEl.closest('[data-plate]');
   if(!row) return;
   const key = row.dataset.key;
-  // 가로로 촬영/첨부된 영수증은 세로로 정규화(OCR 인식 순서 안정화 목적)
-  file = await normalizeReceiptOrientation(file);
   window._ueReceiptFileMap = window._ueReceiptFileMap || {};
-  window._ueReceiptFileMap[key] = file;
-
-  const thumbWrap = row.querySelector('.ue-receipt-thumb-wrap');
-  const thumbImg = row.querySelector('.ue-receipt-thumb');
-  const statusEl = row.querySelector('.ue-receipt-ocr-status');
-  if(thumbImg) thumbImg.src = URL.createObjectURL(file);
-  if(thumbWrap) thumbWrap.style.display = 'flex';
-  if(statusEl) statusEl.innerHTML = '🔄 영수증 인식 중...';
-
+  const list = window._ueReceiptFileMap[key] = window._ueReceiptFileMap[key] || [];
+  const room = MAX_RECEIPT_FILES - list.length;
+  if(room <= 0){ await appAlert(`영수증은 최대 ${MAX_RECEIPT_FILES}장까지 첨부할 수 있습니다.`,{title:'첨부 한도 초과'}); return; }
+  if(picked.length > room) await appAlert(`영수증은 최대 ${MAX_RECEIPT_FILES}장까지 첨부할 수 있어 ${room}장만 추가됩니다.`,{title:'첨부 한도 초과'});
   const dateFromInp = row.querySelector('.ue-date-from');
   const tripDateStr = dateFromInp ? dateFromInp.value : todayLocalISO();
-  const fuelInp = row.querySelector('[data-f="fuel"]');
+  // 가로로 촬영/첨부된 영수증은 세로로 정규화(OCR 인식 순서 안정화 목적)
+  const added = [];
+  for(const f of picked.slice(0, room)){
+    const entry = newReceiptEntry(await normalizeReceiptOrientation(f));
+    list.push(entry); added.push(entry);
+  }
+  ueApplyReceiptAggregate(row);
+  for(const entry of added){
+    await analyzeReceiptEntry(entry, tripDateStr);
+    ueApplyReceiptAggregate(row);
+  }
+}
 
-  const { text } = await callVisionOcr(file);
-  const amountCandidates = parseReceiptAmount(text);
-  const ocrAmount = amountCandidates.length ? amountCandidates[0] : null;
-  const ocrDate = parseReceiptDate(text);
-  const { valid: dateValid, diffDays } = validateReceiptDate(ocrDate, tripDateStr);
-  const typeValid = isFuelReceiptText(text);
-  const currentFuel = fuelInp ? parseFuelAmount(fuelInp.value) : 0;
-  const matched = ocrAmount!==null ? matchReceiptAmount(currentFuel, [ocrAmount]) : null;
+// 내 제출기록 수정 화면 — 첨부 영수증 1장 삭제 후 합산 재계산
+function ueRemoveReceiptFile(btn, idx){
+  const row = btn.closest('[data-plate]');
+  const list = row && window._ueReceiptFileMap && window._ueReceiptFileMap[row.dataset.key];
+  if(!list || !list[idx]) return;
+  try{ URL.revokeObjectURL(list[idx].thumbUrl); }catch(_){}
+  list.splice(idx, 1);
+  ueApplyReceiptAggregate(row);
+}
 
-  row.dataset.receiptOcrAmount = ocrAmount===null ? '' : String(ocrAmount);
-  row.dataset.receiptOcrMatched = matched===null ? '' : String(matched);
-  row.dataset.receiptOcrDate = ocrDate || '';
-  row.dataset.receiptDateValid = dateValid===null ? '' : String(dateValid);
-  row.dataset.receiptTypeValid = typeValid===null ? '' : String(typeValid);
-
-  let amountBadge, dateBadge, typeBadge;
-  if(ocrAmount!==null) amountBadge = `인식 금액: <b>${ocrAmount.toLocaleString()}원</b> ${matched?'<span style="color:#059669;font-weight:700;">✅ 금액일치</span>':'<span style="color:#B45309;font-weight:700;">⚠️ 주유비와 다름</span>'}`;
-  else amountBadge = `<span style="color:#B45309;font-weight:700;">🔍 금액 자동 인식 실패 - 관리자 확인 예정</span>`;
-  if(dateValid===true) dateBadge = `<span style="color:#059669;font-weight:700;">✅ 증빙 일자 적격 (운행일 ±10일 이내)</span>`;
-  else if(dateValid===false) dateBadge = `<span style="color:#DC2626;font-weight:700;">⚠️ 증빙 부적격 — 영수증 일자(${ocrDate})가 운행일보다 ${Math.abs(diffDays)}일 ${diffDays<0?'이전':'초과'}입니다</span>`;
-  else dateBadge = `<span style="color:#B45309;font-weight:700;">🔍 일자 자동 인식 실패 - 관리자 확인 예정</span>`;
-  if(typeValid===true) typeBadge = `<span style="color:#059669;font-weight:700;">✅ 주유 영수증으로 확인됨</span>`;
-  else if(typeValid===false) typeBadge = `<span style="color:#DC2626;font-weight:700;">⚠️ 주유 영수증이 아닌 것으로 보입니다 - 관리자 확인 예정</span>`;
-  else typeBadge = `<span style="color:#B45309;font-weight:700;">🔍 영수증 종류 자동 인식 실패 - 관리자 확인 예정</span>`;
-
-  if(statusEl){
-    statusEl.innerHTML = amountBadge + `<br>` + dateBadge + `<br>` + typeBadge +
-      `<br><span style="color:#6B7280;">저장 버튼을 눌러야 최종 반영됩니다.</span>`;
+// 내 제출기록 수정 화면 — 첨부 영수증 합산 판정을 row.dataset(saveUserEdits()가 읽는 값)과 화면에 반영.
+// 전 장 금액 인식 성공 시 합산 금액을 주유비 입력란에 자동 입력(제출 화면과 동일하게 연동)
+function ueApplyReceiptAggregate(row){
+  const key = row.dataset.key;
+  const list = (window._ueReceiptFileMap && window._ueReceiptFileMap[key]) || [];
+  const wrap = row.querySelector('.ue-receipt-thumb-wrap');
+  const btns = row.querySelectorAll('.ue-receipt-btn');
+  btns.forEach(b=>{ const off = list.length>=MAX_RECEIPT_FILES; b.disabled=off; b.style.opacity=off?'.4':'1'; b.style.cursor=off?'not-allowed':'pointer'; });
+  if(!list.length){
+    if(window._ueReceiptFileMap) delete window._ueReceiptFileMap[key];
+    ['receiptOcrAmount','receiptOcrMatched','receiptOcrDate','receiptDateValid','receiptTypeValid'].forEach(k=>delete row.dataset[k]);
+    if(wrap){ wrap.innerHTML=''; wrap.style.display='none'; }
+    return;
+  }
+  const agg = aggregateReceiptEntries(list);
+  let summary = '';
+  if(!agg.pending){
+    const fuelInp = row.querySelector('[data-f="fuel"]');
+    let matched = null;
+    if(agg.amountSum!==null && fuelInp){
+      fuelInp.value = agg.amountSum.toLocaleString();
+      matched = true;
+    }
+    row.dataset.receiptOcrAmount = agg.amountSum===null ? '' : String(agg.amountSum);
+    row.dataset.receiptOcrMatched = matched===null ? '' : String(matched);
+    row.dataset.receiptOcrDate = agg.ocrDate || '';
+    row.dataset.receiptDateValid = agg.dateValid===null ? '' : String(agg.dateValid);
+    row.dataset.receiptTypeValid = agg.typeValid===null ? '' : String(agg.typeValid);
+    const amountText = matched===true
+      ? `<span style="color:#059669;font-weight:700;">✅ ${agg.count>1?'합산 금액이':'인식된 금액이'} 주유비 입력란에 자동으로 입력되었습니다</span>`
+      : `<span style="color:#B45309;font-weight:700;">🔍 금액 자동 인식 실패${agg.count>1?'(일부 영수증)':''} - 관리자 확인 예정</span>`;
+    summary = receiptAggSummaryHtml(agg, amountText) + `<div style="margin-top:4px;font-size:11px;color:#6B7280;">저장 버튼을 눌러야 최종 반영됩니다.</div>`;
+  }
+  if(wrap){
+    wrap.innerHTML = receiptEntriesHtml(list, i=>`ueRemoveReceiptFile(this,${i})`) + summary;
+    wrap.style.display = 'block';
   }
 }
 
@@ -9448,12 +9574,18 @@ async function saveUserEdits(name){
     }
     // 나중에 첨부: 이 화면에서 새로 선택한 영수증 파일이 있으면 지금 압축+업로드하여 반영.
     // 업로드 실패해도 나머지 저장은 계속 진행(영수증만 미반영, receiptPath는 기존 상태 유지).
-    const newReceiptFile = window._ueReceiptFileMap && window._ueReceiptFileMap[key];
-    if(t.isPersonal && newReceiptFile && !t.receiptPath){
+    // 복수 영수증(최대 MAX_RECEIPT_FILES장)은 전부 업로드 성공한 경우에만 반영(일부 실패 시 전체 미반영).
+    const newReceiptEntries = (window._ueReceiptFileMap && window._ueReceiptFileMap[key]) || [];
+    if(t.isPersonal && newReceiptEntries.length && !t.receiptPath){
       try{
-        const fileName = buildReceiptFileName(t.user, t.isoDate, t.fuel);
-        const compressed = await compressReceiptImage(newReceiptFile);
-        t.receiptPath = await uploadReceiptToStorage(compressed, fileName);
+        const paths = [];
+        for(const ent of newReceiptEntries){
+          const fileName = buildReceiptFileName(t.user, t.isoDate, t.fuel);
+          const compressed = await compressReceiptImage(ent.file);
+          paths.push(await uploadReceiptToStorage(compressed, fileName));
+        }
+        t.receiptPath = paths[0];
+        if(paths.length>1) t.receiptPaths = paths; // 신규 필드(복수 첨부 시에만)
         t.receiptUploadedAt = new Date().toISOString();
         t.receiptOcrAmount = tr.dataset.receiptOcrAmount ? Number(tr.dataset.receiptOcrAmount) : null;
         t.receiptOcrMatched = tr.dataset.receiptOcrMatched==='' ? null : tr.dataset.receiptOcrMatched==='true';
