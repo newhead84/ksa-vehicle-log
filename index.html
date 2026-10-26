@@ -35,6 +35,13 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-10-26] 대시보드 "🚗 대차차량 사용이력 조회" 섹션 신규 — 대차 차량번호(부분입력) 검색 시 전 차량
+  trips의 대차인수~대차반납을 사용기간으로 묶어 인수일·반납일·원차량·지역구분·운행자·운행기록·상태
+  (반납완료/사용중/반납기록 없음/인수기록 없음) 표시, 조회 전용(데이터 변경 없음) |
+  신규: normDaeChaPlate(), daeChaUsagePeriods(), renderDaeChaHistory() | 변경: renderVehicles()
+  [2026-10-26] 관리자 증빙 첨부도 복수 장(최대 5장) 선택 가능하도록 개선 — 파일 다중선택, 전 장 업로드
+  성공 시에만 반영, 2장 이상이면 receiptPaths 저장, 관리자 첨부 배지 원본버튼 장별 표시 |
+  변경: adminAttachReceipt(), receiptStatusBadgeHtml()
   [2026-10-19] 개인사용 주유영수증 복수 첨부(최대 5장, MAX_RECEIPT_FILES) 지원 — 촬영/앨범(다중선택)으로
   추가 첨부·장별 삭제 가능, 전 장 금액 인식 시 합산 금액을 주유비에 자동 연동, 일자/유형은 1장이라도
   부적격이면 부적격 처리. 업로드는 전 장 성공 시에만 반영(일부 실패 시 전체 첨부실패 처리). 복수 첨부 건은
@@ -1326,6 +1333,17 @@
         <div id="commuteUseSummaryBar" style="font-size:12.5px;color:var(--ink);"></div>
       </div>
       <div id="commuteUseList"></div>
+    </div>
+
+    <div class="section-head">
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>🚗 대차차량 사용이력 조회 <span style="font-size:11px;color:var(--muted);font-weight:400;">(대차인수~반납 기간 기준)</span></h2>
+    </div>
+    <div class="section-body collapsed" id="daeChaHistoryWrap">
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
+        <input class="search-box" id="daeChaSearchBox" placeholder="대차 차량번호 검색 (예: 1234)…" oninput="renderDaeChaHistory()" style="max-width:280px;">
+        <div id="daeChaSummaryBar" style="font-size:12.5px;color:var(--ink);word-break:keep-all;overflow-wrap:break-word;"></div>
+      </div>
+      <div id="daeChaHistoryList"></div>
     </div>
 
     <div class="section-head" style="margin-bottom:10px;">
@@ -4463,7 +4481,7 @@ function receiptStatusBadgeHtml(t){
   // 관리자가 직접 첨부한 증빙은 OCR 판정 대상이 아니므로 "확인필요" 배지 대신 관리자 첨부 배지만 표시
   if(t.receiptAttachedBy==='admin'){
     return `<div style="display:flex;flex-direction:column;gap:3px;"><span style="background:var(--accent-soft);color:var(--navy);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;">👤 관리자 첨부</span>
-    <button class="btn-ghost" style="padding:2px 6px;font-size:10.5px;width:fit-content;" onclick="viewReceiptImage('${t.receiptPath.replace(/'/g,"\\'")}')">🧾 원본</button></div>`;
+    ${receiptOriginalBtnsHtml(t)}</div>`;
   }
   const badges=[];
   if(t.receiptOcrMatched===true) badges.push(`<span style="background:var(--good-soft);color:var(--good);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">✅ 금액일치</span>`);
@@ -4497,12 +4515,17 @@ function adminReceiptAttachBtnHtml(t){
 function adminAttachReceipt(plate, isoDate, startOdo, endOdo){
   if(currentRole!=='admin' || viewerMode) return;
   const inp=document.createElement('input');
-  inp.type='file'; inp.accept='image/*'; inp.style.display='none';
+  inp.type='file'; inp.accept='image/*'; inp.multiple=true; inp.style.display='none';
   inp.onchange=async()=>{
-    const file=inp.files&&inp.files[0];
+    let files=Array.from(inp.files||[]);
     inp.remove();
-    if(!file) return;
-    const ok=await appConfirm(`${plate} · ${isoDate} 개인사용 건에 선택한 사진(${file.name})을 증빙으로 첨부합니다.\n\n계속하시겠습니까?`,{title:'관리자 증빙 첨부',okText:'첨부'});
+    if(!files.length) return;
+    if(files.length>MAX_RECEIPT_FILES){
+      await appAlert(`영수증은 최대 ${MAX_RECEIPT_FILES}장까지 첨부할 수 있어 앞의 ${MAX_RECEIPT_FILES}장만 첨부됩니다.`,{title:'첨부 한도 초과'});
+      files=files.slice(0,MAX_RECEIPT_FILES);
+    }
+    const names=files.map(f=>f.name).join(', ');
+    const ok=await appConfirm(`${plate} · ${isoDate} 개인사용 건에 선택한 사진 ${files.length}장(${names})을 증빙으로 첨부합니다.\n\n계속하시겠습니까?`,{title:'관리자 증빙 첨부',okText:'첨부'});
     if(!ok) return;
     try{
       await refreshDataFromStorage();
@@ -4510,9 +4533,15 @@ function adminAttachReceipt(plate, isoDate, startOdo, endOdo){
       const t=trips.find(x=>x.isPersonal && x.isoDate===isoDate && String(x.startOdo)===startOdo && String(x.endOdo)===endOdo);
       if(!t){ await appAlert('해당 운행기록을 찾을 수 없습니다. 새로고침 후 다시 시도해 주세요.',{title:'첨부 실패',danger:true}); return; }
       if(t.receiptPath){ await appAlert('이미 증빙이 첨부된 건입니다.',{title:'첨부 불필요'}); renderPersonalUseList(); return; }
-      const normalized=await normalizeReceiptOrientation(file);
-      const compressed=await compressReceiptImage(normalized);
-      t.receiptPath=await uploadReceiptToStorage(compressed, buildReceiptFileName(t.user, t.isoDate, t.fuel));
+      // 복수 장(최대 MAX_RECEIPT_FILES)은 전부 업로드 성공 시에만 반영 — 1장이라도 실패하면 catch로 이동해 미반영
+      const paths=[];
+      for(const f of files){
+        const normalized=await normalizeReceiptOrientation(f);
+        const compressed=await compressReceiptImage(normalized);
+        paths.push(await uploadReceiptToStorage(compressed, buildReceiptFileName(t.user, t.isoDate, t.fuel)));
+      }
+      t.receiptPath=paths[0];
+      if(paths.length>1) t.receiptPaths=paths; // 신규 필드(복수 첨부 시에만)
       t.receiptUploadedAt=new Date().toISOString();
       t.receiptAttachedBy='admin';
       const saved=await saveData();
@@ -4673,6 +4702,81 @@ function commuteDailyTotals(list){
   return map;
 }
 
+// ============================================================
+// 대차차량 사용이력 조회 — 대차 정보는 원차량별 trips(isDaeChaPickup/isDaeChaReturn/daeChaPate)에
+// 흩어져 저장되므로, 전 차량의 trips를 시간순(tripChronoCompare)으로 훑어 "대차인수 ~ 대차반납"을
+// 1개 사용기간으로 묶는다. 인수~반납 사이 원차량 운행기록(대차 운행분)의 운행자를 함께 집계.
+// 반납 기록이 없으면 "사용중", 인수 기록 없이 반납만 있으면 "인수기록 없음"으로 표시.
+// (과태료·범칙금 발생 시 해당 일자에 누가 대차 차량을 운행했는지 확인 목적, 조회 전용)
+// ============================================================
+function normDaeChaPlate(s){ return String(s||'').replace(/[\s\-]/g,'').toLowerCase(); }
+function daeChaUsagePeriods(){
+  const periods=[];
+  Object.keys(data.vehicles||{}).forEach(plate=>{
+    const v=data.vehicles[plate];
+    const sorted=(v.trips||[]).filter(Boolean).slice().sort(tripChronoCompare);
+    let cur=null;
+    const close=(endTrip, status)=>{
+      if(endTrip){ cur.returnTrip=endTrip; if(endTrip.daeChaPate) cur.rentalPlates.add(endTrip.daeChaPate); }
+      cur.status=status;
+      periods.push(cur); cur=null;
+    };
+    sorted.forEach(t=>{
+      if(t.isDaeChaPickup){
+        if(cur) close(null,'반납기록 없음'); // 반납 없이 다시 인수된 경우 이전 기간은 별도 표시
+        cur={origPlate:plate, branch:v.branch||'', model:t.daeChaModel||'', pickupTrip:t, returnTrip:null, trips:[], rentalPlates:new Set(t.daeChaPate?[t.daeChaPate]:[]), status:''};
+      }
+      if(cur) cur.trips.push(t);
+      if(t.isDaeChaReturn){
+        if(!cur){
+          cur={origPlate:plate, branch:v.branch||'', model:t.daeChaModel||'', pickupTrip:null, returnTrip:null, trips:[t], rentalPlates:new Set(t.daeChaPate?[t.daeChaPate]:[]), status:''};
+          close(t,'인수기록 없음');
+        } else close(t,'반납완료');
+      }
+    });
+    if(cur) close(null,'사용중');
+  });
+  periods.forEach(pd=>{
+    const first=pd.pickupTrip||pd.trips[0];
+    const last=pd.returnTrip||pd.trips[pd.trips.length-1];
+    pd.from=first?.isoDate||'';
+    pd.to=pd.returnTrip ? (last.dateTo||last.isoDate||'') : (pd.status==='사용중' ? '' : (last?.dateTo||last?.isoDate||''));
+    // 인수/반납 시 띄어쓰기·하이픈만 다르게 입력된 동일 번호는 1개로 표시
+    const seen=new Set(); pd.rentalPlates=[...pd.rentalPlates].filter(rp=>{ const k=normDaeChaPlate(rp); if(seen.has(k)) return false; seen.add(k); return true; });
+    pd.users=[...new Set(pd.trips.map(t=>t.user).filter(Boolean))];
+    pd.distance=pd.trips.reduce((s,t)=>s+(Number(t.distance)||0),0);
+  });
+  return periods.sort((a,b)=>(b.from||'').localeCompare(a.from||''));
+}
+function renderDaeChaHistory(){
+  const listEl=document.getElementById('daeChaHistoryList');
+  const barEl=document.getElementById('daeChaSummaryBar');
+  if(!listEl||!barEl) return;
+  const q=normDaeChaPlate(document.getElementById('daeChaSearchBox')?.value||'');
+  if(!q){
+    barEl.innerHTML='';
+    listEl.innerHTML=`<div style="text-align:center;padding:24px;color:var(--muted);font-size:13px;word-break:keep-all;overflow-wrap:break-word;">대차 차량번호(일부만 입력 가능)를 입력하면 해당 대차 차량을 언제, 어느 차량에서, 누가 사용했는지 조회됩니다.</div>`;
+    return;
+  }
+  const list=daeChaUsagePeriods().filter(pd=>[...pd.rentalPlates].some(rp=>normDaeChaPlate(rp).includes(q)));
+  const statusBadge=(s)=>{
+    const c = s==='반납완료' ? ['var(--good)','var(--good-soft)'] : (s==='사용중' ? ['var(--accent)','var(--accent-soft)'] : ['#B45309','#FEF3C7']);
+    return `<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;white-space:nowrap;color:${c[0]};background:${c[1]};">${s}</span>`;
+  };
+  const rows=list.map(pd=>`<tr>
+    <td class="mono"><b>${[...pd.rentalPlates].map(escapeHtml).join(' / ')||'-'}</b>${pd.model?`<div style="font-size:11px;color:var(--muted);">${escapeHtml(pd.model)}</div>`:''}</td>
+    <td class="mono">${pd.from?formatTripDateDisplay(pd.from, pd.from):'-'}${pd.pickupTrip?'':' <span style="font-size:10.5px;color:var(--muted);">(인수기록 없음)</span>'}</td>
+    <td class="mono">${pd.status==='사용중'?'-':(pd.to?formatTripDateDisplay(pd.to, pd.to):'-')}</td>
+    <td class="mono"><b>${escapeHtml(pd.origPlate)}</b></td>
+    <td>${escapeHtml(pd.branch)}</td>
+    <td style="word-break:keep-all;overflow-wrap:break-word;">${pd.users.map(escapeHtml).join(', ')||'-'}</td>
+    <td class="mono">${pd.trips.length}건 · ${pd.distance.toLocaleString()}km</td>
+    <td>${statusBadge(pd.status)}</td>
+  </tr>`).join('');
+  barEl.innerHTML=list.length?`총 <b>${list.length}건</b>의 대차 사용기간${list.some(pd=>pd.status==='사용중')?` · <span style="color:var(--accent);font-weight:700;">현재 사용중 ${list.filter(pd=>pd.status==='사용중').length}건</span>`:''}`:'';
+  listEl.innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>대차 차량번호</th><th>인수일</th><th>반납일</th><th>원차량</th><th>지역구분</th><th>운행자</th><th>운행기록</th><th>상태</th></tr></thead><tbody>${rows||`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted);">검색 결과가 없습니다</td></tr>`}</tbody></table></div>`;
+}
+
 function renderCommuteUseList(){
   const q=(document.getElementById('commuteSearchBox')?.value||'').trim();
   if(!q){
@@ -4760,6 +4864,7 @@ function renderVehicles(){
   renderDriverSummary();
   renderPersonalUseList();
   renderCommuteUseList();
+  renderDaeChaHistory();
   const q=(document.getElementById('searchBox').value||'').trim();
   let plates=Object.keys(data.vehicles).filter(p=>p.includes(q)||(data.vehicles[p].branch||'').includes(q));
   if(!showInactive) plates=plates.filter(p=>data.vehicles[p].active!==false);
