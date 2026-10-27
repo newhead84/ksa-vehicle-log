@@ -35,6 +35,11 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-10-27] '내 제출 기록 수정'에서 같은 휴대폰인데도 "제출 당시 기기가 아님"으로 막히는 문제 해소 —
+  iOS Safari 7일 미사용 시 저장값 자동삭제, 카톡·카메라QR·홈화면 등 진입경로별 저장공간 분리로 기기토큰이
+  바뀌는 것이 원인. 요청에 따라 기기토큰 일치 조건을 제거하고 운행자명 + 제출일 기준 10일 이내만으로 조회·수정
+  허용(운행기록·사고이력 동일). editToken 필드는 기존대로 계속 저장(필드 변경 없음), 안내문구 수정 |
+  변경: loadUserEditable(), 내 제출 기록 수정 안내문구
   [2026-10-27] 운행정보 제출 후 확인창이 늦게 뜨는 현상 개선 — 제출(doSubmit)마다 fleet-data 전체를 읽고
   통째로 다시 쓰던 방식을 해당 차량 1대(fleet-data/vehicles/{차량번호} 및 연도노드의 해당 차량 trips)만
   읽고 쓰도록 변경(저장 경로·필드 구조 동일, 필드 변경 없음). 부수 수정: ① 제출 전 서버 재조회 실패 시
@@ -1267,7 +1272,7 @@
         <button class="btn btn-primary" style="padding:8px 12px;font-size:13px;flex-shrink:0;white-space:nowrap;" onclick="loadUserEditable()">조회</button>
       </div>
       <div style="font-size:11.5px;color:var(--muted);word-break:keep-all;overflow-wrap:break-word;margin:-4px 0 0;">
-        ※ 보안을 위해 <b>본인이 제출한 기기</b>에서 <b>제출일 기준 10일 이내</b> 기록만 조회·수정할 수 있습니다.
+        ※ 본인 이름으로 제출한 <b>제출일 기준 10일 이내</b> 기록만 조회·수정할 수 있습니다.
       </div>
     </div>
     <div id="userEditErr" class="user-edit-err"></div>
@@ -9280,16 +9285,15 @@ function loadUserEditable(){
     });
   });
 
-  // 보안: 이름이 일치해도 (1) 이 기기에서 직접 제출한 기록이고 (2) 제출일 기준
-  // USER_EDIT_WINDOW_DAYS일 이내인 경우만 본인수정 화면에 노출한다.
-  // → 타인의 이름을 알아내 임의 기기에서 조회·수정하는 것을 원천 차단.
+  // 이름이 일치하고 제출일 기준 USER_EDIT_WINDOW_DAYS일 이내인 기록만 본인수정 화면에 노출한다.
+  // (2026-10-27) 기기토큰(editToken) 일치 조건은 제거 — iOS Safari 저장값 자동삭제·진입경로별 저장공간
+  // 분리로 같은 휴대폰에서도 토큰이 바뀌어 본인 기록을 수정하지 못하는 사례가 발생했기 때문.
+  // editToken은 제출 시 계속 저장만 한다(추후 필요 시 재사용 가능하도록 필드 유지).
   const nameMatchedCount = found.length;
-  const myToken = getDeviceEditToken();
   const windowMs = USER_EDIT_WINDOW_DAYS * 86400000;
   const nowMs = Date.now();
   found = found.filter(f=>{
-    if(f.trip.editToken !== myToken) return false;
-    if(!f.trip.submittedAt) return false; // 이 기능 적용 이전(구버전) 데이터는 기기토큰이 없어 본인수정 불가
+    if(!f.trip.submittedAt) return false; // 제출시각이 없는 구버전 데이터는 기간 판정 불가 → 본인수정 불가
     const submittedMs = new Date(f.trip.submittedAt).getTime();
     if(isNaN(submittedMs)) return false;
     return (nowMs - submittedMs) <= windowMs;
@@ -9306,7 +9310,6 @@ function loadUserEditable(){
     .filter(a=>(a.reportedBy?.name||'')===name);
   const accNameMatchedCount = foundAcc.length;
   foundAcc = foundAcc.filter(a=>{
-    if(a.editToken !== myToken) return false; // 구버전(기기토큰 없음) 데이터는 본인수정 불가
     if(!a.createdAt) return false;
     const submittedMs = new Date(a.createdAt).getTime();
     if(isNaN(submittedMs)) return false;
@@ -9327,8 +9330,8 @@ function loadUserEditable(){
     if(blockedByDeviceOrWindow || accBlockedByDeviceOrWindow){
       body.innerHTML=`<div class="empty-state" style="margin:0;">
         <b>${escapeHtml(name)}</b>님 명의로 제출된 기록이 있으나, 본인수정 화면에서는 수정할 수 없습니다.<br><br>
-        본인수정은 <b>제출 당시 사용한 기기</b>에서 <b>제출일 기준 ${USER_EDIT_WINDOW_DAYS}일 이내</b>인 기록만 가능합니다.<br>
-        기간이 지났거나 다른 기기에서 제출한 기록이라면 관리자(${ADMIN_EMAIL})에게 문의해 주세요.
+        본인수정은 <b>제출일 기준 ${USER_EDIT_WINDOW_DAYS}일 이내</b>인 기록만 가능합니다.<br>
+        기간이 지난 기록은 관리자(${ADMIN_EMAIL})에게 문의해 주세요.
       </div>`;
     }else{
       body.innerHTML=`<div class="empty-state" style="margin:0;">
