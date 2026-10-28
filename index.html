@@ -35,6 +35,13 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-10-28] 영수증 첨부 개선 — ① 복수 영수증을 한 장씩 순서대로 올리던 것을 동시(병렬) 업로드로 변경(장별 1회
+  재시도, 1장이라도 실패 시 전체 미반영 기존 원칙 유지) — 운행정보 제출·내 제출기록 수정·관리자 첨부 공통 ② 관리자가
+  이미 증빙이 첨부된 개인사용 건에도 증빙 추가(➕, 합계 최대 5장)·교체(🔄) 가능. 교체 시 이전 증빙 경로·판정값은
+  receiptHistory(신규 필드)에 보관, Storage 원본 삭제 없음. 추가 건은 receiptAdminAddedAt(신규 필드)로 '관리자
+  추가첨부' 배지 표시. 관리자 첨부도 차량 1대 단위 저장으로 변경 | 신규: uploadReceiptFilesParallel(),
+  receiptPathsOf(), adminReceiptManageBtnsHtml() | 변경: doSubmit() 영수증 업로드, saveUserEdits() 영수증 업로드,
+  adminAttachReceipt()(mode: new/add/replace), receiptStatusBadgeHtml()
   [2026-10-28] 시스템 점검 버그 수정 — ① 운행자 이름·출퇴근구분·지역명 화면 출력 시 escapeHtml 미적용(저장형 XSS)
   ② 운용중지 차량 재등록 시 계약단가·계약일·개시일·재배치이력·수기기록 소실 → 기존 정보에 병합, 차량번호 금지문자
   (. # $ [ ] /) 차단 ③ 관리자 수정모드 중 필터/더보기 시 버튼을 두 번 눌러야 켜지던 문제(openVehicle에서 상태 초기화)
@@ -2290,6 +2297,25 @@ async function viewDaeChaFuelPhoto(path){
 }
 
 // {YYYYMMDD}_{이름}_{금액}-{랜덤4자리}.jpg 파일명 생성 (설계 4-3)
+// 영수증 여러 장을 동시에(병렬) 압축·업로드 — 장별 1회 재시도. 기존엔 한 장씩 순서대로 올려 장수만큼 대기시간이 늘었음.
+// 반환: {paths(업로드 순서 = 선택 순서), failCnt, lastErr}. 한 장이라도 실패하면 호출부에서 전체 미반영 처리
+async function uploadReceiptFilesParallel(files, userName, isoDateStr, fuelAmount, normalize){
+  let lastErr = null;
+  const results = await Promise.all(files.map(async file=>{
+    for(let attempt=0; attempt<2; attempt++){
+      try{
+        const src = normalize ? await normalizeReceiptOrientation(file) : file;
+        const compressed = await compressReceiptImage(src);
+        return await uploadReceiptToStorage(compressed, buildReceiptFileName(userName, isoDateStr, fuelAmount));
+      }catch(e){
+        lastErr = e;
+        console.error(`[영수증 업로드 실패${attempt===0?' - 재시도 예정':''}]`, e);
+      }
+    }
+    return null;
+  }));
+  return { paths: results.filter(Boolean), failCnt: results.filter(p=>!p).length, lastErr };
+}
 function buildReceiptFileName(userName, isoDateStr, fuelAmount){
   const ymd = (isoDateStr || todayLocalISO()).replace(/-/g,'');
   const safeName = (userName||'미상').replace(/[^\w가-힣]/g,'');
@@ -4705,7 +4731,7 @@ function receiptStatusBadgeHtml(t){
   // 관리자가 직접 첨부한 증빙은 OCR 판정 대상이 아니므로 "확인필요" 배지 대신 관리자 첨부 배지만 표시
   if(t.receiptAttachedBy==='admin'){
     return `<div style="display:flex;flex-direction:column;gap:3px;"><span style="background:var(--accent-soft);color:var(--navy);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;">👤 관리자 첨부</span>
-    ${receiptOriginalBtnsHtml(t)}</div>`;
+    ${receiptOriginalBtnsHtml(t)}${adminReceiptManageBtnsHtml(t)}</div>`;
   }
   const badges=[];
   if(t.receiptOcrMatched===true) badges.push(`<span style="background:var(--good-soft);color:var(--good);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">✅ 금액일치</span>`);
@@ -4717,8 +4743,9 @@ function receiptStatusBadgeHtml(t){
   if(t.receiptTypeValid===true) badges.push(`<span style="background:var(--good-soft);color:var(--good);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">✅ 주유영수증</span>`);
   else if(t.receiptTypeValid===false) badges.push(`<span style="background:var(--bad-soft);color:var(--bad);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">⚠️ 유형상이</span>`);
   else badges.push(`<span style="background:#FEF3C7;color:#B45309;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">🔍 유형확인필요</span>`);
+  if(t.receiptAdminAddedAt) badges.push(`<span style="background:var(--accent-soft);color:var(--navy);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;">👤 관리자 추가첨부</span>`);
   return `<div style="display:flex;flex-direction:column;gap:3px;">${badges.join('')}
-    ${receiptOriginalBtnsHtml(t)}</div>`;
+    ${receiptOriginalBtnsHtml(t)}${adminReceiptManageBtnsHtml(t)}</div>`;
 }
 // 영수증 원본 열람 버튼 — 복수 첨부(receiptPaths) 건은 장별 버튼(🧾 1 ~ 🧾 n), 단일 건은 기존과 동일하게 "🧾 원본"
 function receiptOriginalBtnsHtml(t){
@@ -4736,42 +4763,80 @@ function adminReceiptAttachBtnHtml(t){
   const a=(v)=>String(v==null?'':v).replace(/['"\\<>&]/g,'');
   return `<button class="btn-ghost" style="padding:2px 6px;font-size:10.5px;width:fit-content;" onclick="adminAttachReceipt('${a(t.plate)}','${a(t.isoDate)}','${a(t.startOdo)}','${a(t.endOdo)}')">📎 관리자 첨부</button>`;
 }
-function adminAttachReceipt(plate, isoDate, startOdo, endOdo){
+// 이미 증빙이 첨부된 건의 관리자 추가첨부(➕)·교체(🔄) 버튼 — 열람 전용 모드 제외
+function receiptPathsOf(t){
+  return Array.isArray(t.receiptPaths) && t.receiptPaths.length>1 ? t.receiptPaths.filter(Boolean) : (t.receiptPath ? [t.receiptPath] : []);
+}
+function adminReceiptManageBtnsHtml(t){
+  if(currentRole!=='admin' || viewerMode || !t.plate || !t.isoDate || !t.receiptPath) return '';
+  const a=(v)=>String(v==null?'':v).replace(/['"\\<>&]/g,'');
+  const args=`'${a(t.plate)}','${a(t.isoDate)}','${a(t.startOdo)}','${a(t.endOdo)}'`;
+  const canAdd = receiptPathsOf(t).length < MAX_RECEIPT_FILES;
+  return `<div style="display:flex;gap:3px;flex-wrap:wrap;">${canAdd?`<button class="btn-ghost" style="padding:2px 6px;font-size:10.5px;width:fit-content;" onclick="adminAttachReceipt(${args},'add')">➕ 추가</button>`:''}<button class="btn-ghost" style="padding:2px 6px;font-size:10.5px;width:fit-content;" onclick="adminAttachReceipt(${args},'replace')">🔄 교체</button></div>`;
+}
+// mode: 'new'(미첨부 건 첨부, 기본) / 'add'(기존 증빙에 추가, 합계 최대 MAX_RECEIPT_FILES장) / 'replace'(전체 교체)
+// 교체 시 이전 증빙 경로·판정값은 receiptHistory(신규 필드)에 보관하고 Storage 원본은 삭제하지 않는다(무손실)
+function adminAttachReceipt(plate, isoDate, startOdo, endOdo, mode){
   if(currentRole!=='admin' || viewerMode) return;
+  mode = mode || 'new';
+  const curT=((data.vehicles[plate]&&data.vehicles[plate].trips)||[]).find(x=>x.isPersonal && x.isoDate===isoDate && String(x.startOdo)===startOdo && String(x.endOdo)===endOdo);
+  const limit = mode==='add' ? MAX_RECEIPT_FILES - (curT?receiptPathsOf(curT).length:0) : MAX_RECEIPT_FILES;
+  if(limit<=0){ appAlert(`영수증은 1건당 최대 ${MAX_RECEIPT_FILES}장까지 첨부할 수 있습니다.`,{title:'첨부 한도 초과'}); return; }
   const inp=document.createElement('input');
   inp.type='file'; inp.accept='image/*'; inp.multiple=true; inp.style.display='none';
   inp.onchange=async()=>{
     let files=Array.from(inp.files||[]);
     inp.remove();
     if(!files.length) return;
-    if(files.length>MAX_RECEIPT_FILES){
-      await appAlert(`영수증은 최대 ${MAX_RECEIPT_FILES}장까지 첨부할 수 있어 앞의 ${MAX_RECEIPT_FILES}장만 첨부됩니다.`,{title:'첨부 한도 초과'});
-      files=files.slice(0,MAX_RECEIPT_FILES);
+    if(files.length>limit){
+      await appAlert(`영수증은 1건당 최대 ${MAX_RECEIPT_FILES}장까지 첨부할 수 있어 앞의 ${limit}장만 첨부됩니다.`,{title:'첨부 한도 초과'});
+      files=files.slice(0,limit);
     }
     const names=files.map(f=>f.name).join(', ');
-    const ok=await appConfirm(`${plate} · ${isoDate} 개인사용 건에 선택한 사진 ${files.length}장(${names})을 증빙으로 첨부합니다.\n\n계속하시겠습니까?`,{title:'관리자 증빙 첨부',okText:'첨부'});
+    const msg = mode==='replace'
+      ? `${plate} · ${isoDate} 개인사용 건의 기존 증빙을 선택한 사진 ${files.length}장(${names})으로 교체합니다.\n이전 증빙은 이력으로 보관됩니다.\n\n계속하시겠습니까?`
+      : mode==='add'
+        ? `${plate} · ${isoDate} 개인사용 건의 기존 증빙에 선택한 사진 ${files.length}장(${names})을 추가합니다.\n\n계속하시겠습니까?`
+        : `${plate} · ${isoDate} 개인사용 건에 선택한 사진 ${files.length}장(${names})을 증빙으로 첨부합니다.\n\n계속하시겠습니까?`;
+    const ok=await appConfirm(msg,{title: mode==='replace'?'관리자 증빙 교체':mode==='add'?'관리자 증빙 추가':'관리자 증빙 첨부', okText: mode==='replace'?'교체':mode==='add'?'추가':'첨부'});
     if(!ok) return;
     try{
-      await refreshDataFromStorage();
+      // 해당 차량만 최신 재조회(DB 전체 덮어쓰기 방지)
+      const vr = await refreshVehicleOrWarn(plate);
+      if(!vr) return;
       const trips=(data.vehicles[plate]&&data.vehicles[plate].trips)||[];
       const t=trips.find(x=>x.isPersonal && x.isoDate===isoDate && String(x.startOdo)===startOdo && String(x.endOdo)===endOdo);
       if(!t){ await appAlert('해당 운행기록을 찾을 수 없습니다. 새로고침 후 다시 시도해 주세요.',{title:'첨부 실패',danger:true}); return; }
-      if(t.receiptPath){ await appAlert('이미 증빙이 첨부된 건입니다.',{title:'첨부 불필요'}); renderPersonalUseList(); return; }
-      // 복수 장(최대 MAX_RECEIPT_FILES)은 전부 업로드 성공 시에만 반영 — 1장이라도 실패하면 catch로 이동해 미반영
-      const paths=[];
-      for(const f of files){
-        const normalized=await normalizeReceiptOrientation(f);
-        const compressed=await compressReceiptImage(normalized);
-        paths.push(await uploadReceiptToStorage(compressed, buildReceiptFileName(t.user, t.isoDate, t.fuel)));
+      if(mode==='new' && t.receiptPath){ await appAlert('이미 증빙이 첨부된 건입니다.',{title:'첨부 불필요'}); renderPersonalUseList(); return; }
+      const existing = receiptPathsOf(t);
+      if(mode==='add' && existing.length + files.length > MAX_RECEIPT_FILES){ await appAlert(`그 사이 증빙이 변경되어 최대 ${MAX_RECEIPT_FILES}장을 넘게 됩니다. 새로고침 후 다시 시도해 주세요.`,{title:'첨부 한도 초과'}); return; }
+      // 복수 장은 병렬 업로드, 전부 성공 시에만 반영 — 1장이라도 실패하면 미반영
+      const up = await uploadReceiptFilesParallel(files, t.user, t.isoDate, t.fuel, true);
+      if(up.failCnt) throw (up.lastErr || new Error(`${files.length}장 중 ${up.failCnt}장 업로드 실패`));
+      const now = new Date().toISOString();
+      if(mode==='add'){
+        const all = existing.concat(up.paths);
+        t.receiptPath = all[0];
+        t.receiptPaths = all.length>1 ? all : null;
+        t.receiptAdminAddedAt = now; // 신규 필드 — 사용자 증빙에 관리자가 추가한 건 표시
+      } else {
+        if(mode==='replace' && existing.length){
+          if(!Array.isArray(t.receiptHistory)) t.receiptHistory=[]; // 신규 필드(교체 이력)
+          t.receiptHistory.push({paths:existing, attachedBy:t.receiptAttachedBy||'user', uploadedAt:t.receiptUploadedAt||null,
+            ocrAmount:t.receiptOcrAmount??null, ocrMatched:t.receiptOcrMatched??null, dateValid:t.receiptDateValid??null, typeValid:t.receiptTypeValid??null, replacedAt:now});
+          // 관리자 교체 증빙은 OCR 판정 대상이 아니므로 이전 판정값은 이력으로 옮기고 비운다
+          t.receiptOcrAmount=null; t.receiptOcrMatched=null; t.receiptOcrDate=null; t.receiptDateValid=null; t.receiptTypeValid=null;
+          t.receiptAdminAddedAt=null;
+        }
+        t.receiptPath = up.paths[0];
+        t.receiptPaths = up.paths.length>1 ? up.paths : null; // 신규 필드(복수 첨부 시에만)
+        t.receiptAttachedBy='admin';
       }
-      t.receiptPath=paths[0];
-      if(paths.length>1) t.receiptPaths=paths; // 신규 필드(복수 첨부 시에만)
-      t.receiptUploadedAt=new Date().toISOString();
-      t.receiptAttachedBy='admin';
-      const saved=await saveData();
+      t.receiptUploadedAt=now;
+      const saved=await saveVehicleToStorage(plate, !vr.exists);
       if(!saved) return;
       renderPersonalUseList();
-      showDoneModal('첨부 완료','증빙이 관리자 첨부로 저장되었습니다.');
+      showDoneModal(mode==='replace'?'교체 완료':mode==='add'?'추가 완료':'첨부 완료', mode==='replace'?'증빙이 관리자 첨부로 교체되었습니다.':mode==='add'?'증빙이 추가되었습니다.':'증빙이 관리자 첨부로 저장되었습니다.');
     }catch(e){
       console.error('[관리자 증빙 첨부 실패]', e);
       await appAlert(`증빙 첨부에 실패했습니다.\n${e.message||''}`,{title:'첨부 실패',danger:true});
@@ -8925,22 +8990,7 @@ async function doSubmit(submitter, plate, rows){
         // 복수 영수증(최대 MAX_RECEIPT_FILES장)은 장별로 업로드(각 1회 재시도). 1장이라도 최종 실패하면
         // 일부만 저장되는 불완전 증빙을 막기 위해 전체를 첨부 실패로 처리(receiptPath=null) —
         // "내 제출 기록 수정"에서 다시 전부 첨부하도록 안내한다.
-        const okPaths = [];
-        let lastErr = null, failCnt = 0;
-        for(const ent of entries){
-          let path = null;
-          for(let attempt=0; attempt<2 && !path; attempt++){
-            try{
-              const fileName = buildReceiptFileName(r.user, isoDate, r.fuel);
-              const compressed = await compressReceiptImage(ent.file);
-              path = await uploadReceiptToStorage(compressed, fileName);
-            }catch(e){
-              lastErr = e;
-              console.error(`[영수증 업로드 실패${attempt===0?' - 재시도 예정':''}]`, e);
-            }
-          }
-          if(path) okPaths.push(path); else failCnt++;
-        }
+        const { paths: okPaths, failCnt, lastErr } = await uploadReceiptFilesParallel(entries.map(ent=>ent.file), r.user, isoDate, r.fuel, false);
         if(failCnt===0){
           receiptPath = okPaths[0];
           receiptPaths = okPaths.length>1 ? okPaths : null; // 신규 필드(복수 첨부 시에만), 첫 장은 기존 receiptPath 유지
@@ -9934,12 +9984,9 @@ async function saveUserEdits(){
     const newReceiptEntries = (window._ueReceiptFileMap && window._ueReceiptFileMap[key]) || [];
     if(t.isPersonal && newReceiptEntries.length && !t.receiptPath){
       try{
-        const paths = [];
-        for(const ent of newReceiptEntries){
-          const fileName = buildReceiptFileName(t.user, t.isoDate, t.fuel);
-          const compressed = await compressReceiptImage(ent.file);
-          paths.push(await uploadReceiptToStorage(compressed, fileName));
-        }
+        const up = await uploadReceiptFilesParallel(newReceiptEntries.map(ent=>ent.file), t.user, t.isoDate, t.fuel, false);
+        if(up.failCnt) throw (up.lastErr || new Error('영수증 업로드 실패'));
+        const paths = up.paths;
         t.receiptPath = paths[0];
         if(paths.length>1) t.receiptPaths = paths; // 신규 필드(복수 첨부 시에만)
         t.receiptUploadedAt = new Date().toISOString();

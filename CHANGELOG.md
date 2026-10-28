@@ -4,6 +4,13 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 형식: 각 항목은 `요청내용 요약 | 변경: 함수/영역`
 
+## 2026-10-28 (3)
+
+- 영수증 첨부 개선
+  - 복수 영수증 병렬 업로드(장별 1회 재시도, 일부 실패 시 전체 미반영 유지) — 제출·내 제출기록 수정·관리자 첨부 공통
+  - 관리자: 증빙 첨부된 개인사용 건에 추가(➕, 합계 최대 5장)·교체(🔄) 가능. 교체 시 이전 증빙은 `receiptHistory`(신규 필드)에 보관, Storage 원본 삭제 없음. 추가 건은 `receiptAdminAddedAt`(신규 필드)로 배지 표시
+  - 신규: `uploadReceiptFilesParallel()`, `receiptPathsOf()`, `adminReceiptManageBtnsHtml()` | 변경: `doSubmit()`, `saveUserEdits()`, `adminAttachReceipt()`, `receiptStatusBadgeHtml()`
+
 ## 2026-10-28 (2)
 
 - 시스템 점검 버그 수정
