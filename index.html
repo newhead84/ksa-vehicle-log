@@ -35,6 +35,11 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-10-27] 보안 점검 후속 조치 — ① DB 읽기를 인증(익명 포함) 사용자로 제한하는 규칙 전환에 대비해, 첫 접속
+  (또는 iOS 저장값 삭제 후) 시 익명 로그인 완료 전에 조회가 토큰 없이 나가던 문제 수정(getAuthToken이 익명 로그인
+  완료까지 대기, 실패 시 1회 재시도) ② 미사용 전용차량 페이지 배포 제거에 맞춰 관리자 상단 "전용차량 대시보드" 버튼
+  삭제 ③ 내 제출 기록 수정 목록의 data-plate/data-key 속성값 escapeHtml 처리(속성 주입형 XSS 방지) |
+  변경: getAuthToken(), 익명 로그인 초기화부, 관리자 상단 버튼영역, loadUserEditable() 목록 렌더
   [2026-10-27] '내 제출 기록 수정'에서 같은 휴대폰인데도 "제출 당시 기기가 아님"으로 막히는 문제 해소 —
   iOS Safari 7일 미사용 시 저장값 자동삭제, 카톡·카메라QR·홈화면 등 진입경로별 저장공간 분리로 기기토큰이
   바뀌는 것이 원인. 요청에 따라 기기토큰 일치 조건을 제거하고 운행자명 + 제출일 기준 10일 이내만으로 조회·수정
@@ -1203,7 +1208,6 @@
       <input type="file" id="restoreInput" accept=".json" style="display:none;" onchange="restoreData(this)">
       <button class="reset-btn" id="copyReadonlyUrlBtn" onclick="copyReadonlyUrl()" style="border-color:#7eb138;color:#7eb138;">🔗 열람전용URL</button>
       <button class="reset-btn" id="regionUrlBtn" onclick="openRegionUrlModal()" style="border-color:#7eb138;color:#7eb138;">🔗 지역별 열람URL</button>
-      <button class="reset-btn" id="dedicatedVehicleBtn" onclick="window.open('dedicated-admin-dashboard.html','_blank')" title="회장차·전무차(전용차량) 운행정보 대시보드를 새 창으로 엽니다" style="border-color:#5E4630;color:#5E4630;">🚘 전용차량 대시보드</button>
       <button class="reset-btn" id="logoutBtn" onclick="exitToRole()">로그아웃</button>
     </div>
   </div>
@@ -1818,14 +1822,21 @@ const authReadyPromise = new Promise(res=>{ _authReadyResolve = res; });
 firebase.auth().onAuthStateChanged(()=>{ _authReadyResolve(); });
 // 혹시 onAuthStateChanged 콜백 자체가 늦게 오는 경우를 대비한 안전장치(최대 5초)
 setTimeout(()=>_authReadyResolve(), 5000);
-firebase.auth().signInAnonymously().catch(e=>{
+// 최초 익명 로그인 진행 Promise — getAuthToken()이 이 완료를 기다린다(첫 접속 시 onAuthStateChanged가
+// 로그인 전 null 상태로 먼저 호출되어, 토큰 없이 조회가 나가 DB 읽기 규칙(auth != null)에 막히는 것을 방지).
+const _anonSignInPromise = firebase.auth().signInAnonymously().catch(e=>{
   console.error('[KSA 차량관리] 익명 인증 실패 — Firebase 콘솔에서 Authentication > 익명 로그인이 활성화되어 있는지 확인하세요.', e);
 });
 
 // 현재 유효한 인증 토큰을 반환 (SDK가 만료 전 자동 갱신하므로 매번 새로 요청)
 async function getAuthToken(){
   await authReadyPromise;
-  const user = firebase.auth().currentUser;
+  let user = firebase.auth().currentUser;
+  if(!user){ await _anonSignInPromise; user = firebase.auth().currentUser; }
+  if(!user){ // 최초 익명 로그인 실패/로그아웃 직후 등 → 1회 재시도
+    try{ await firebase.auth().signInAnonymously(); }catch(e){}
+    user = firebase.auth().currentUser;
+  }
   if(!user) return null;
   try{ return await user.getIdToken(); }catch(e){ return null; }
 }
@@ -9367,7 +9378,7 @@ function loadUserEditable(){
           const locked = isChainLocked(f.plate, f.trip);
           const lockAttr = locked ? 'readonly tabindex="-1" title="다음 운행기록에 이미 연동되어 수정할 수 없습니다."' : '';
           const lockStyle = locked ? 'background:var(--paper);color:var(--muted);cursor:not-allowed;' : '';
-          return `<div data-plate="${f.plate}" data-idx="${f.tripIdx}" data-key="${f.trip.isoDate}|${f.trip.startOdo}|${f.trip.endOdo}|${f.trip.submitter||''}" style="border:1.5px solid var(--line);border-radius:12px;margin:0 12px 10px;padding:12px 14px;">
+          return `<div data-plate="${escapeHtml(f.plate)}" data-idx="${f.tripIdx}" data-key="${escapeHtml(`${f.trip.isoDate}|${f.trip.startOdo}|${f.trip.endOdo}|${f.trip.submitter||''}`)}" style="border:1.5px solid var(--line);border-radius:12px;margin:0 12px 10px;padding:12px 14px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
             <span style="font-size:11px;font-weight:700;color:var(--muted);">운행기간</span>
             <span class="ue-saved" style="color:var(--good);font-size:11px;font-weight:600;display:none;">✓ 저장됨</span>
