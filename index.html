@@ -35,6 +35,21 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-10-28] 저장 시 다른 사용자 운행기록 유실 위험 제거 — ① 관리자 차량정보 변경(운용중지·재배치·재배치이력
+  날짜수정/삭제·차량개시일·차량추가)이 관리자 화면을 연 시점의 데이터로 DB 전체를 덮어쓰던 방식을 해당 차량 메타
+  필드만 부분저장(PATCH)으로 변경, 차량 완전삭제는 해당 차량 노드만 삭제 ② 운행기록 수정·삭제·점검완료/취소·
+  내 제출기록 수정·사고이력 수정/삭제/완료처리를 DB 전체 대신 해당 차량·사고 1건 단위로 읽고 쓰도록 변경(내 제출
+  기록 수정 속도 개선) ③ 최신 데이터 재조회 실패 시 오래된 데이터로 전체 저장하던 문제 차단(_staleData) ④ 2027년
+  이후 일자로 수정/업로드 시 연도 노드 미로드로 조용히 유실되던 문제 — 저장 전 해당 연도 선로드, 미로드 연도
+  기록이 있으면 저장 중단 ⑤ 2028년부터 직전 연도를 안 읽던 문제 — 2027~당해년도 전부 로드 ⑥ 연도 추가 로드 후
+  등록차량 기본값 누락 수정. 저장 경로·필드 구조 변경 없음 | 신규: fbPatch(), saveVehicleMeta(),
+  deleteVehicleFromStorage(), refreshAccidentFromStorage(), saveAccidentToStorage(), refreshVehicleOrWarn(),
+  unloadedTripYears(), ensureYearsLoadedFor(), applyRegistryDefaults() | 변경: saveData(), saveVehicleToStorage(),
+  refreshDataFromStorage(), loadData(), fetchMergedFleetData(), ensureYearLoaded(), toggleVehicleActive(),
+  deleteVehicleForever(), changeBranch(), saveBranchHistoryDate(), deleteBranchHistoryEntry(), setServiceStartDate(),
+  clearServiceStartDate(), confirmAddVehicle(), saveTripEdits(), deleteTrip(), resolveMaintenance(),
+  unresolveMaintenance(), resolveAccidentAsUser(), unresolveAccidentAsUser(), saveAccidentEdit(),
+  deleteAccidentRecord(), saveUserEdits(), applyTripRecordImport()
   [2026-10-27] 보안 점검 후속 조치 — ① DB 읽기를 인증(익명 포함) 사용자로 제한하는 규칙 전환에 대비해, 첫 접속
   (또는 iOS 저장값 삭제 후) 시 익명 로그인 완료 전에 조회가 토큰 없이 나가던 문제 수정(getAuthToken이 익명 로그인
   완료까지 대기, 실패 시 1회 재시도) ② 미사용 전용차량 페이지 배포 제거에 맞춰 관리자 상단 "전용차량 대시보드" 버튼
@@ -1873,6 +1888,17 @@ async function fbSet(path, value){
   if(!r.ok) throw new Error(`Firebase 쓰기 실패 (${r.status})`);
   return r.json();
 }
+// 부분 저장(PATCH) — value의 키만 갱신하고 나머지 하위 데이터는 그대로 둔다(null 값은 해당 키 삭제)
+async function fbPatch(path, value){
+  const token = await getAuthToken();
+  const url = `${FIREBASE_URL}/${path}.json${token?`?auth=${token}`:''}`;
+  const r = await fbFetchWithTimeout(url, {
+    method:'PATCH', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(value)
+  });
+  if(!r.ok) throw new Error(`Firebase 쓰기 실패 (${r.status})`);
+  return r.json();
+}
 
 // ============================================================
 // ★ 개인사용 주유영수증 OCR 검증 유틸 (RECEIPT_OCR_DESIGN.md 3, 4항) ★
@@ -3510,6 +3536,37 @@ function tripYear(t){
 // 이번 세션에서 메모리(data)에 병합되어 있는 "연도별 노드"(2027년 이후) 목록.
 // loadData()/refreshDataFromStorage() 시점에 채워지고, saveData()가 저장 대상 연도 노드를 판단하는 데 사용된다.
 let _loadedYearNodes = new Set();
+// 서버 최신 데이터 조회에 실패한 상태(true)에서는 전체 저장(saveData)을 막는다 — 오래된 메모리 데이터로
+// DB 전체를 덮어써 그 사이 다른 사용자가 제출한 기록이 지워지는 것을 방지
+let _staleData = false;
+// 메모리에 있는 운행기록 중 연도 노드(2027~)가 아직 로드되지 않은 연도 목록 — 이 상태로 저장하면 해당
+// 연도 기록이 어디에도 기록되지 않아 유실되므로 저장 전에 반드시 확인한다
+function unloadedTripYears(trips){
+  const ys=new Set();
+  (trips||[]).forEach(t=>{ const y=tripYear(t); if(y>LEGACY_DATA_MAX_YEAR && !_loadedYearNodes.has(y)) ys.add(y); });
+  return Array.from(ys);
+}
+// 입력값(YYYY-MM-DD 문자열 목록) 중 2027년 이후 연도 노드를 저장 전에 미리 불러온다
+async function ensureYearsLoadedFor(isoList){
+  const ys=new Set();
+  (isoList||[]).forEach(s=>{ const y=parseInt(String(s||'').slice(0,4),10); if(Number.isFinite(y) && y>LEGACY_DATA_MAX_YEAR && y<=2100) ys.add(y); });
+  for(const y of ys) await ensureYearLoaded(y);
+}
+// 등록 차량(FLEET_REGISTRY) 기본값 보정 — 서버에 노드가 없는 차량 추가, trips 배열 보장 등
+function applyRegistryDefaults(){
+  FLEET_REGISTRY.forEach(v=>{
+    if(!data.vehicles[v.plate]) data.vehicles[v.plate]={model:v.model,branch:v.branch,originalBranch:v.branch,active:true,trips:[],...(v.fee!==undefined?{fee:v.fee}:{}),...(v.serviceStartDate?{serviceStartDate:v.serviceStartDate}:{}),...(v.contractStartDate?{contractStartDate:v.contractStartDate}:{}),...(v.contractEndDate?{contractEndDate:v.contractEndDate}:{})};
+    else{
+      if(!data.vehicles[v.plate].model) data.vehicles[v.plate].model=v.model;
+      if(data.vehicles[v.plate].active===undefined) data.vehicles[v.plate].active=true;
+      if(!Array.isArray(data.vehicles[v.plate].trips)) data.vehicles[v.plate].trips=[];
+      if(data.vehicles[v.plate].fee===undefined&&v.fee!==undefined) data.vehicles[v.plate].fee=v.fee;
+      if(data.vehicles[v.plate].serviceStartDate===undefined&&v.serviceStartDate) data.vehicles[v.plate].serviceStartDate=v.serviceStartDate;
+      if(data.vehicles[v.plate].contractStartDate===undefined&&v.contractStartDate) data.vehicles[v.plate].contractStartDate=v.contractStartDate;
+      if(data.vehicles[v.plate].contractEndDate===undefined&&v.contractEndDate) data.vehicles[v.plate].contractEndDate=v.contractEndDate;
+    }
+  });
+}
 // fleet-data(메인, ~2026 고정) + 필요한 연도별 노드(2027~)를 함께 읽어 하나로 병합한다.
 // extraYears로 명시한 연도(예: 이전에 이미 화면에 불러와 있던 연도)는 항상 함께 재조회하고,
 // 당해년도(오늘 기준)는 LEGACY_DATA_MAX_YEAR를 넘겼다면 지정하지 않아도 항상 포함한다.
@@ -3519,7 +3576,9 @@ async function fetchMergedFleetData(extraYears){
   if(!merged.vehicles) merged.vehicles = {};
   const curYear = new Date().getFullYear();
   const yearsToLoad = new Set((extraYears||[]).filter(y=>y>LEGACY_DATA_MAX_YEAR));
-  if(curYear>LEGACY_DATA_MAX_YEAR) yearsToLoad.add(curYear);
+  // 2027년~당해년도 전부 로드 — 당해년도만 읽으면 연초 첫 입력의 "이전 종료거리"·중복/겹침 검사가
+  // 직전 연도가 아닌 2026년 마지막 기록 기준으로 계산되는 문제 방지
+  for(let y=LEGACY_DATA_MAX_YEAR+1; y<=curYear; y++) yearsToLoad.add(y);
   _loadedYearNodes = new Set(yearsToLoad);
   if(yearsToLoad.size){
     const years = Array.from(yearsToLoad);
@@ -3544,6 +3603,8 @@ async function ensureYearLoaded(year){
   const y = Number(year);
   if(!(y>LEGACY_DATA_MAX_YEAR) || _loadedYearNodes.has(y)) return;
   data = await fetchMergedFleetData([...Array.from(_loadedYearNodes), y]);
+  _staleData = false;
+  applyRegistryDefaults();
   applyRegionViewerFilter();
 }
 
@@ -3554,23 +3615,14 @@ async function loadData(){
     try{
       const [merged] = await Promise.all([ fetchMergedFleetData(), loadRemoteHolidays() ]);
       data = merged;
+      _staleData = false;
       document.getElementById('firebaseWarnBanner')?.remove();
     }catch(e){
       showFirebaseWarning(`Firebase 연결 실패: ${e.message}`);
+      _staleData = true; // 서버 데이터를 못 불러온 상태 — 빈/오래된 데이터로 전체 저장되지 않도록 차단
     }
   }
-  FLEET_REGISTRY.forEach(v=>{
-    if(!data.vehicles[v.plate]) data.vehicles[v.plate]={model:v.model,branch:v.branch,originalBranch:v.branch,active:true,trips:[],...(v.fee!==undefined?{fee:v.fee}:{}),...(v.serviceStartDate?{serviceStartDate:v.serviceStartDate}:{}),...(v.contractStartDate?{contractStartDate:v.contractStartDate}:{}),...(v.contractEndDate?{contractEndDate:v.contractEndDate}:{})};
-    else{
-      if(!data.vehicles[v.plate].model) data.vehicles[v.plate].model=v.model;
-      if(data.vehicles[v.plate].active===undefined) data.vehicles[v.plate].active=true;
-      if(!Array.isArray(data.vehicles[v.plate].trips)) data.vehicles[v.plate].trips=[];
-      if(data.vehicles[v.plate].fee===undefined&&v.fee!==undefined) data.vehicles[v.plate].fee=v.fee;
-      if(data.vehicles[v.plate].serviceStartDate===undefined&&v.serviceStartDate) data.vehicles[v.plate].serviceStartDate=v.serviceStartDate;
-      if(data.vehicles[v.plate].contractStartDate===undefined&&v.contractStartDate) data.vehicles[v.plate].contractStartDate=v.contractStartDate;
-      if(data.vehicles[v.plate].contractEndDate===undefined&&v.contractEndDate) data.vehicles[v.plate].contractEndDate=v.contractEndDate;
-    }
-  });
+  applyRegistryDefaults();
   applyRegionViewerFilter();
   if(currentRole==='admin') renderAll();
 }
@@ -3600,6 +3652,15 @@ async function adminRefresh(){
 
 async function saveData(){
   if(viewerMode){ console.warn('[KSA 차량관리] 열람 전용 모드에서는 저장할 수 없습니다.'); return false; }
+  if(_staleData){
+    showFirebaseWarning('서버의 최신 데이터를 불러오지 못해 저장을 중단했습니다(다른 사용자가 입력한 기록 보호). 인터넷 연결을 확인하고 새로고침한 뒤 다시 시도해 주세요.');
+    return false;
+  }
+  const missYears = unloadedTripYears(Object.values(data.vehicles).flatMap(v=>v.trips||[]));
+  if(missYears.length){
+    showFirebaseWarning(`${missYears.join(', ')}년 데이터를 아직 불러오지 않아 저장을 중단했습니다(해당 연도 기록 유실 방지). 새로고침한 뒤 다시 시도해 주세요.`);
+    return false;
+  }
   try{
     // ① 메인 fleet-data 노드: 차량 메타정보 전체 + 2026년까지의 운행기록만 저장(기존과 동일 위치·구조 유지)
     const legacyVehicles = {};
@@ -3633,19 +3694,13 @@ async function refreshDataFromStorage(){
   if(FIREBASE_URL.includes('YOUR-PROJECT')) return;
   try{
     data = await fetchMergedFleetData(Array.from(_loadedYearNodes));
-  }catch(e){}
-  FLEET_REGISTRY.forEach(v=>{
-    if(!data.vehicles[v.plate]) data.vehicles[v.plate]={model:v.model,branch:v.branch,originalBranch:v.branch,active:true,trips:[],...(v.fee!==undefined?{fee:v.fee}:{}),...(v.serviceStartDate?{serviceStartDate:v.serviceStartDate}:{}),...(v.contractStartDate?{contractStartDate:v.contractStartDate}:{}),...(v.contractEndDate?{contractEndDate:v.contractEndDate}:{})};
-    else{
-      if(!data.vehicles[v.plate].model) data.vehicles[v.plate].model=v.model;
-      if(data.vehicles[v.plate].active===undefined) data.vehicles[v.plate].active=true;
-      if(!Array.isArray(data.vehicles[v.plate].trips)) data.vehicles[v.plate].trips=[];
-      if(data.vehicles[v.plate].fee===undefined&&v.fee!==undefined) data.vehicles[v.plate].fee=v.fee;
-      if(data.vehicles[v.plate].serviceStartDate===undefined&&v.serviceStartDate) data.vehicles[v.plate].serviceStartDate=v.serviceStartDate;
-      if(data.vehicles[v.plate].contractStartDate===undefined&&v.contractStartDate) data.vehicles[v.plate].contractStartDate=v.contractStartDate;
-      if(data.vehicles[v.plate].contractEndDate===undefined&&v.contractEndDate) data.vehicles[v.plate].contractEndDate=v.contractEndDate;
-    }
-  });
+    _staleData = false;
+  }catch(e){
+    // 기존엔 실패를 무시하고 오래된 데이터로 그대로 저장 → 다른 사용자 기록이 지워질 수 있었음. 저장 차단 표시
+    _staleData = true;
+    console.error('[KSA 차량관리] 최신 데이터 조회 실패:', e.message);
+  }
+  applyRegistryDefaults();
 }
 
 // ── 차량 1대 단위 읽기/쓰기 (제출 속도 개선, 2026-10-27) ─────────────────────────────
@@ -3696,6 +3751,11 @@ async function refreshVehicleFromStorage(plate){
 // vehicles/{plate}/trips (saveData()와 동일한 분리 규칙). writeMeta=true면 차량 노드 전체(신규 차량)를 기록.
 async function saveVehicleToStorage(plate, writeMeta){
   if(viewerMode){ console.warn('[KSA 차량관리] 열람 전용 모드에서는 저장할 수 없습니다.'); return false; }
+  const missYears = unloadedTripYears((data.vehicles[plate]||{}).trips);
+  if(missYears.length){
+    showFirebaseWarning(`${missYears.join(', ')}년 데이터를 아직 불러오지 않아 저장을 중단했습니다(해당 연도 기록 유실 방지). 새로고침한 뒤 다시 시도해 주세요.`);
+    return false;
+  }
   try{
     const v = data.vehicles[plate];
     const all = v.trips||[];
@@ -3713,6 +3773,72 @@ async function saveVehicleToStorage(plate, writeMeta){
     console.error('[KSA 차량관리] 차량 저장 실패:', e.message);
     showFirebaseWarning(`저장 실패: ${e.message} — 방금 입력/수정한 내용이 서버에 반영되지 않았습니다. 새로고침하거나 다른 기기에서 열면 사라진 것처럼 보이는 것이 정상이며, 실제로 저장이 안 된 상태입니다.`);
     return false;
+  }
+}
+
+// 차량 메타정보(운용여부·지역·재배치이력·개시일 등)만 부분 저장 — trips는 건드리지 않는다.
+// 관리자 화면을 오래 열어둔 상태에서도 그 사이 사용자가 제출한 운행기록을 덮어쓰지 않도록
+// 기존 saveData()(DB 전체 덮어쓰기) 대신 사용. removedFields: 서버에서 지울 필드명 목록
+async function saveVehicleMeta(plate, removedFields){
+  if(viewerMode){ console.warn('[KSA 차량관리] 열람 전용 모드에서는 저장할 수 없습니다.'); return false; }
+  const v = data.vehicles[plate];
+  if(!v) return false;
+  try{
+    const patch = {};
+    Object.keys(v).forEach(k=>{ if(k!=='trips' && v[k]!==undefined) patch[k]=v[k]; });
+    (removedFields||[]).forEach(k=>{ if(v[k]===undefined) patch[k]=null; });
+    await fbPatch(vehicleNodePath(plate), patch);
+    document.getElementById('firebaseWarnBanner')?.remove();
+    return true;
+  }catch(e){
+    console.error('[KSA 차량관리] 차량정보 저장 실패:', e.message);
+    showFirebaseWarning(`저장 실패: ${e.message} — 방금 변경한 내용이 서버에 반영되지 않았습니다.`);
+    return false;
+  }
+}
+// 차량 노드 완전 삭제(메인 + 로드된 연도 노드의 해당 차량)
+async function deleteVehicleFromStorage(plate){
+  if(viewerMode) return false;
+  try{
+    const enc = encodeURIComponent(plate);
+    await fbSet(vehicleNodePath(plate), null);
+    await Promise.all(Array.from(_loadedYearNodes).map(y=>fbSet(`${yearNodeKey(y)}/vehicles/${enc}`, null)));
+    document.getElementById('firebaseWarnBanner')?.remove();
+    return true;
+  }catch(e){
+    console.error('[KSA 차량관리] 차량 삭제 실패:', e.message);
+    showFirebaseWarning(`저장 실패: ${e.message} — 삭제가 서버에 반영되지 않았습니다.`);
+    return false;
+  }
+}
+// 사고 이력 1건 단위 읽기/쓰기(fleet-data/accidents/{id}) — DB 전체를 주고받지 않음
+function accidentNodePath(id){ return `${STORAGE_KEY}/accidents/${encodeURIComponent(id)}`; }
+async function refreshAccidentFromStorage(id){
+  const a = await fbGet(accidentNodePath(id));
+  if(!data.accidents) data.accidents = {};
+  if(a && typeof a==='object') data.accidents[id] = a; else delete data.accidents[id];
+  return data.accidents[id] || null;
+}
+async function saveAccidentToStorage(id){
+  if(viewerMode) return false;
+  try{
+    const a = data.accidents ? data.accidents[id] : null;
+    await fbSet(accidentNodePath(id), a || null);
+    document.getElementById('firebaseWarnBanner')?.remove();
+    return true;
+  }catch(e){
+    console.error('[KSA 차량관리] 사고이력 저장 실패:', e.message);
+    showFirebaseWarning(`저장 실패: ${e.message} — 방금 변경한 내용이 서버에 반영되지 않았습니다.`);
+    return false;
+  }
+}
+// 차량 1대 최신화 — 실패 시 사용자 안내 후 false(오래된 데이터로 저장하지 않음)
+async function refreshVehicleOrWarn(plate){
+  try{ return await refreshVehicleFromStorage(plate); }
+  catch(e){
+    console.error('[KSA 차량관리] 차량 최신화 실패:', e.message);
+    showAdminToast('⚠ 서버의 최신 데이터를 불러오지 못했습니다. 인터넷 연결을 확인한 후 다시 시도해 주세요.','bad');
+    return null;
   }
 }
 
@@ -4045,8 +4171,8 @@ async function saveAccidentEdit(id){
     if(errEl){ errEl.textContent='사고일시·사고내용은 비워둘 수 없습니다.'; errEl.style.display='block'; }
     return;
   }
-  await refreshDataFromStorage();
-  const a = (data.accidents||{})[id];
+  let a;
+  try{ a = await refreshAccidentFromStorage(id); }catch(e){ if(errEl){ errEl.textContent='서버의 최신 데이터를 불러오지 못했습니다. 다시 시도해 주세요.'; errEl.style.display='block'; } return; }
   if(!a){ if(errEl){ errEl.textContent='이미 삭제된 사고 이력입니다.'; errEl.style.display='block'; } return; }
   const prevStatus = a.status || '접수';
   a.occurredAt = occurredAt;
@@ -4058,7 +4184,7 @@ async function saveAccidentEdit(id){
     if(!Array.isArray(a.statusHistory)) a.statusHistory = [];
     a.statusHistory.push({status, at:new Date().toISOString(), by:'관리자'});
   }
-  const saved = await saveData();
+  const saved = await saveAccidentToStorage(id);
   if(!saved){ if(errEl){ errEl.textContent='저장 실패: 서버에 반영되지 않았습니다.'; errEl.style.display='block'; } return; }
   closeModal();
   renderAccidentHistory();
@@ -4069,10 +4195,12 @@ async function deleteAccidentRecord(id){
   const a = (data.accidents||{})[id];
   const label = a ? `${a.ourVehicle?.plate||'미확인'} · ${formatAccidentDateTime(a.occurredAt)}` : id;
   if(!await appConfirm(`🚨 사고 이력을 삭제합니다.\n${label}\n첨부 사진을 포함해 완전히 삭제되며 되돌릴 수 없습니다.\n\n계속 진행하시겠습니까?`, {danger:true})) return;
-  await refreshDataFromStorage();
+  try{ await refreshAccidentFromStorage(id); }catch(e){ showAdminToast('⚠ 서버의 최신 데이터를 불러오지 못했습니다. 다시 시도해 주세요.','bad'); return; }
   if(!data.accidents || !data.accidents[id]){ renderAccidentHistory(); return; }
+  const accBackup = data.accidents[id];
   delete data.accidents[id];
-  const saved = await saveData();
+  const saved = await saveAccidentToStorage(id);
+  if(!saved) data.accidents[id] = accBackup;
   if(!saved) showAdminToast('⚠ 저장 실패: 삭제가 서버에 반영되지 않았습니다.','bad');
   renderAccidentHistory();
 }
@@ -5799,8 +5927,10 @@ async function saveTripEdits(plate){
     const t=oldTrips[idx];
     rowKeys.push(t?`${t.isoDate}|${t.startOdo}|${t.endOdo}|${t.submitter||''}`:null);
   });
-  // 저장 직전 최신 데이터 재조회 (다른 사용자 제출 유실 방지)
-  await refreshDataFromStorage();
+  // 저장 직전 해당 차량만 최신 재조회 (다른 사용자 제출 유실 방지). 2027년 이후로 바꾼 일자가 있으면 해당 연도도 미리 로드
+  await ensureYearsLoadedFor(Array.from(table.querySelectorAll('.adm-date-from, .adm-date-to')).map(i=>i.value));
+  const vr = await refreshVehicleOrWarn(plate);
+  if(!vr) return;
   const v=data.vehicles[plate];
   if(!v) return;
   table.querySelectorAll('tbody tr').forEach((tr,rowIdx)=>{
@@ -5853,7 +5983,7 @@ async function saveTripEdits(plate){
     // 관리자 수정 시각 기록 (최초 제출시각 submittedAt과 별개, 마지막 수정시각만 유지)
     target.lastEditedAt = new Date().toISOString();
   });
-  const saved = await saveData();
+  const saved = await saveVehicleToStorage(plate, !vr.exists);
   if(!saved){
     showAdminToast('⚠ 저장 실패: 서버에 반영되지 않았습니다. 인터넷 연결을 확인한 후 다시 "저장"을 눌러주세요.','bad');
     return; // 수정모드 유지 → 입력값 보존, 재시도 가능
@@ -5867,7 +5997,7 @@ async function toggleVehicleActive(plate){
   const v=data.vehicles[plate];
   if(!v) return;
   v.active=v.active===false?true:false;
-  const saved = await saveData();
+  const saved = await saveVehicleMeta(plate);
   if(!saved){ v.active=v.active===false?true:false; showAdminToast('⚠ 저장 실패: 서버에 반영되지 않았습니다.','bad'); return; }
   renderAll();
   closeModal();
@@ -5886,7 +6016,7 @@ async function deleteVehicleForever(plate){
   if(!await appConfirm(warnMsg, {danger:true})) return;
   const backup=data.vehicles[plate];
   delete data.vehicles[plate];
-  const saved = await saveData();
+  const saved = await deleteVehicleFromStorage(plate);
   if(!saved){ data.vehicles[plate]=backup; showAdminToast('⚠ 저장 실패: 서버에 반영되지 않았습니다.','bad'); return; }
   renderAll();
   closeModal();
@@ -5940,16 +6070,16 @@ async function deleteTrip(plate,idx){
   const warnMsg=`⚠️ '${plate}' 차량의 아래 운행기록을 삭제합니다.\n${dateLabel}${distLabel?' · '+distLabel:''}${target.dest?' · '+target.dest:''}\n이 작업은 되돌릴 수 없습니다.\n\n계속 진행하시겠습니까?`;
   if(!await appConfirm(warnMsg, {danger:true})) return;
   const key=`${target.isoDate}|${target.startOdo}|${target.endOdo}|${target.submitter||''}`;
-  // 최신 데이터 재조회 후 키 기반 삭제 (동시성 안전)
-  await refreshDataFromStorage();
-  if(!data.vehicles[plate]) return;
+  // 해당 차량만 최신 재조회 후 키 기반 삭제 (동시성 안전)
+  const vr = await refreshVehicleOrWarn(plate);
+  if(!vr || !data.vehicles[plate]) return;
   let removed=false;
   data.vehicles[plate].trips=data.vehicles[plate].trips.filter(t=>{
     if(removed) return true;
     if(`${t.isoDate}|${t.startOdo}|${t.endOdo}|${t.submitter||''}`===key){removed=true;return false;}
     return true;
   });
-  const saved = await saveData();
+  const saved = await saveVehicleToStorage(plate, !vr.exists);
   if(!saved) showAdminToast('⚠ 저장 실패: 삭제가 서버에 반영되지 않았습니다.','bad');
   renderAll();openVehicle(plate);
 }
@@ -5974,15 +6104,15 @@ async function resolveMaintenance(plate,idx){
   if(!target) return;
   if(!await appConfirm(`'${plate}' 차량의 점검요청 건을 점검·정비 완료로 표시합니다.\n비고: ${target.note||'미기재'}\n\n완료로 표시하면 안내 배너에는 완료 문구로 ${MAINTENANCE_RESOLVED_DISPLAY_DAYS}일간만 노출됩니다. 계속하시겠습니까?`)) return;
   const key=`${target.isoDate}|${target.startOdo}|${target.endOdo}|${target.submitter||''}`;
-  await refreshDataFromStorage();
-  if(!data.vehicles[plate]) return;
+  const vr = await refreshVehicleOrWarn(plate);
+  if(!vr || !data.vehicles[plate]) return;
   const t=(data.vehicles[plate].trips||[]).find(t=>`${t.isoDate}|${t.startOdo}|${t.endOdo}|${t.submitter||''}`===key);
   if(!t){ showAdminToast('⚠ 해당 운행기록을 찾을 수 없습니다(이미 변경되었을 수 있음).','bad'); refreshAfterResolveAction(plate); return; }
   t.maintenanceResolved=true;
   t.maintenanceResolvedAt=new Date().toISOString();
   if(!Array.isArray(t.maintenanceStatusHistory)) t.maintenanceStatusHistory=[];
   t.maintenanceStatusHistory.push({status:'완료',at:t.maintenanceResolvedAt,by:currentRole==='admin'?'관리자':'사용자'});
-  const saved=await saveData();
+  const saved=await saveVehicleToStorage(plate, !vr.exists);
   if(!saved){ showAdminToast('⚠ 저장 실패: 완료 처리가 서버에 반영되지 않았습니다.','bad'); return; }
   showAdminToast('✅ 점검·정비 완료로 처리되었습니다.','good');
   refreshAfterResolveAction(plate);
@@ -5994,14 +6124,14 @@ async function unresolveMaintenance(plate,idx){
   if(!target) return;
   if(!await appConfirm(`'${plate}' 차량의 점검요청 완료 처리를 취소하고 다시 미해결로 되돌립니다.\n계속하시겠습니까?`)) return;
   const key=`${target.isoDate}|${target.startOdo}|${target.endOdo}|${target.submitter||''}`;
-  await refreshDataFromStorage();
-  if(!data.vehicles[plate]) return;
+  const vr = await refreshVehicleOrWarn(plate);
+  if(!vr || !data.vehicles[plate]) return;
   const t=(data.vehicles[plate].trips||[]).find(t=>`${t.isoDate}|${t.startOdo}|${t.endOdo}|${t.submitter||''}`===key);
   if(!t){ showAdminToast('⚠ 해당 운행기록을 찾을 수 없습니다(이미 변경되었을 수 있음).','bad'); refreshAfterResolveAction(plate); return; }
   t.maintenanceResolved=false;
   if(!Array.isArray(t.maintenanceStatusHistory)) t.maintenanceStatusHistory=[];
   t.maintenanceStatusHistory.push({status:'완료취소',at:new Date().toISOString(),by:currentRole==='admin'?'관리자':'사용자'});
-  const saved=await saveData();
+  const saved=await saveVehicleToStorage(plate, !vr.exists);
   if(!saved){ showAdminToast('⚠ 저장 실패: 취소가 서버에 반영되지 않았습니다.','bad'); return; }
   showAdminToast('완료 처리가 취소되었습니다.','good');
   refreshAfterResolveAction(plate);
@@ -6010,31 +6140,34 @@ async function unresolveMaintenance(plate,idx){
 // 일반 사용자도 처리 상태를 "완료"로 바꿀 수 있게 한다. 사고내용/사고일시 등 다른 필드는
 // 건드리지 않고 status/statusHistory만 갱신(기존 saveAccidentEdit()과 동일한 이력 구조 사용).
 async function resolveAccidentAsUser(id,plate){
-  await refreshDataFromStorage();
-  const a=(data.accidents||{})[id];
+  const a0=(data.accidents||{})[id];
+  if(!a0){ showAdminToast('⚠ 해당 사고 이력을 찾을 수 없습니다(이미 변경되었을 수 있음).','bad'); refreshAfterResolveAction(plate); return; }
+  if(!await appConfirm(`'${plate}' 차량의 사고접수 건을 점검·정비 완료로 표시합니다.\n사고내용: ${a0.description||'미기재'}\n\n완료로 표시하면 안내 배너에는 완료 문구로 ${MAINTENANCE_RESOLVED_DISPLAY_DAYS}일간만 노출됩니다. 계속하시겠습니까?`)) return;
+  let a;
+  try{ a=await refreshAccidentFromStorage(id); }catch(e){ showAdminToast('⚠ 서버의 최신 데이터를 불러오지 못했습니다. 다시 시도해 주세요.','bad'); return; }
   if(!a){ showAdminToast('⚠ 해당 사고 이력을 찾을 수 없습니다(이미 변경되었을 수 있음).','bad'); refreshAfterResolveAction(plate); return; }
-  if(!await appConfirm(`'${plate}' 차량의 사고접수 건을 점검·정비 완료로 표시합니다.\n사고내용: ${a.description||'미기재'}\n\n완료로 표시하면 안내 배너에는 완료 문구로 ${MAINTENANCE_RESOLVED_DISPLAY_DAYS}일간만 노출됩니다. 계속하시겠습니까?`)) return;
   const prevStatus=a.status||'접수';
   a.status='완료';
   if(prevStatus!=='완료'){
     if(!Array.isArray(a.statusHistory)) a.statusHistory=[];
     a.statusHistory.push({status:'완료',at:new Date().toISOString(),by:currentRole==='admin'?'관리자':'사용자'});
   }
-  const saved=await saveData();
+  const saved=await saveAccidentToStorage(id);
   if(!saved){ showAdminToast('⚠ 저장 실패: 완료 처리가 서버에 반영되지 않았습니다.','bad'); return; }
   showAdminToast('✅ 점검·정비 완료로 처리되었습니다.','good');
   refreshAfterResolveAction(plate);
   if(document.getElementById('accidentHistoryList')) renderAccidentHistory();
 }
 async function unresolveAccidentAsUser(id,plate){
-  await refreshDataFromStorage();
-  const a=(data.accidents||{})[id];
-  if(!a){ showAdminToast('⚠ 해당 사고 이력을 찾을 수 없습니다(이미 변경되었을 수 있음).','bad'); refreshAfterResolveAction(plate); return; }
+  if(!(data.accidents||{})[id]){ showAdminToast('⚠ 해당 사고 이력을 찾을 수 없습니다(이미 변경되었을 수 있음).','bad'); refreshAfterResolveAction(plate); return; }
   if(!await appConfirm(`'${plate}' 차량의 사고접수 완료 처리를 취소하고 다시 처리중으로 되돌립니다.\n계속하시겠습니까?`)) return;
+  let a;
+  try{ a=await refreshAccidentFromStorage(id); }catch(e){ showAdminToast('⚠ 서버의 최신 데이터를 불러오지 못했습니다. 다시 시도해 주세요.','bad'); return; }
+  if(!a){ showAdminToast('⚠ 해당 사고 이력을 찾을 수 없습니다(이미 변경되었을 수 있음).','bad'); refreshAfterResolveAction(plate); return; }
   a.status='처리중';
   if(!Array.isArray(a.statusHistory)) a.statusHistory=[];
   a.statusHistory.push({status:'완료취소',at:new Date().toISOString(),by:currentRole==='admin'?'관리자':'사용자'});
-  const saved=await saveData();
+  const saved=await saveAccidentToStorage(id);
   if(!saved){ showAdminToast('⚠ 저장 실패: 취소가 서버에 반영되지 않았습니다.','bad'); return; }
   showAdminToast('완료 처리가 취소되었습니다.','good');
   refreshAfterResolveAction(plate);
@@ -6084,7 +6217,7 @@ async function changeBranch(plate){
   const changed=pushBranchReassignment(v,newBranch,reassignDate,reason);
   if(!changed){ showAdminToast('⚠ 기존 지역구분과 동일하며, 기록할 이전 소속 정보가 없습니다.','bad'); return; }
   const fromBranch=v.branchHistory[v.branchHistory.length-1].from;
-  const saved = await saveData();
+  const saved = await saveVehicleMeta(plate);
   if(!saved){ v.branch=prevBranch; v.branchHistory=prevHistory; showAdminToast('⚠ 저장 실패: 지역구분 변경이 서버에 반영되지 않았습니다.','bad'); return; }
   showAdminToast(`'${plate}' 재배치가 기록되었습니다. (${fromBranch} → ${newBranch}, ${reassignDate}, 사유: ${reason})`,'good');
   renderAll();openVehicle(plate);
@@ -6099,7 +6232,7 @@ async function saveBranchHistoryDate(plate,idx){
   if(!newDate){ showAdminToast('⚠ 날짜를 선택해주세요.','bad'); if(input) input.focus(); return; }
   const prevHistory=JSON.parse(JSON.stringify(v.branchHistory));
   v.branchHistory[idx].date=newDate;
-  const saved=await saveData();
+  const saved=await saveVehicleMeta(plate);
   if(!saved){ v.branchHistory=prevHistory; showAdminToast('⚠ 저장 실패: 재배치 이력 날짜 수정이 서버에 반영되지 않았습니다.','bad'); return; }
   showAdminToast(`'${plate}' 재배치 이력 날짜가 ${newDate}(으)로 수정되었습니다.`,'good');
   renderAll();openVehicle(plate);
@@ -6114,7 +6247,7 @@ async function deleteBranchHistoryEntry(plate,idx){
   if(!await appConfirm(warnMsg, {danger:true})) return;
   const prevHistory=v.branchHistory;
   v.branchHistory=v.branchHistory.filter((_,i)=>i!==idx);
-  const saved=await saveData();
+  const saved=await saveVehicleMeta(plate);
   if(!saved){ v.branchHistory=prevHistory; showAdminToast('⚠ 저장 실패: 재배치 이력 삭제가 서버에 반영되지 않았습니다.','bad'); return; }
   showAdminToast(`'${plate}' 재배치 이력이 삭제되었습니다.`,'good');
   renderAll();openVehicle(plate);
@@ -6129,7 +6262,7 @@ async function setServiceStartDate(plate){
   if(!v) return;
   const prev=v.serviceStartDate;
   v.serviceStartDate=val;
-  const saved = await saveData();
+  const saved = await saveVehicleMeta(plate);
   if(!saved){ v.serviceStartDate=prev; showAdminToast('⚠ 저장 실패: 차량개시일이 서버에 반영되지 않았습니다.','bad'); return; }
   showAdminToast(`'${plate}' 차량개시일이 ${val}로 저장되었습니다.`,'good');
   renderAll();openVehicle(plate);
@@ -6139,7 +6272,7 @@ async function clearServiceStartDate(plate){
   if(!v) return;
   const prev=v.serviceStartDate;
   delete v.serviceStartDate;
-  const saved = await saveData();
+  const saved = await saveVehicleMeta(plate, ['serviceStartDate']);
   if(!saved){ v.serviceStartDate=prev; showAdminToast('⚠ 저장 실패: 차량개시일 해제가 서버에 반영되지 않았습니다.','bad'); return; }
   renderAll();openVehicle(plate);
 }
@@ -6540,6 +6673,8 @@ function dateRangeIntersects(existingSet,startISO,endISO){
 
 async function applyTripRecordImport(rows,resultEl){
   if(!rows.length){ resultEl.innerHTML='<span style="color:var(--bad);">⚠ 시트에 데이터가 없습니다.</span>'; return; }
+  // 업로드 기록 중 2027년 이후 일자가 있으면 해당 연도 노드를 먼저 불러온다(안 불러오면 저장 시 유실)
+  await ensureYearsLoadedFor(rows.flatMap(r=>[parseUploadDateCell(r['시작일자']), parseUploadDateCell(r['종료일자'])]));
   await refreshDataFromStorage();
   const errors=[];
   const plan=[];
@@ -9266,11 +9401,21 @@ async function confirmAddVehicle(){
   const errEl=document.getElementById('addVehicleErr');
   if(!plate){errEl.textContent='차량번호를 입력해주세요.';errEl.style.display='block';return;}
   if(!branch){errEl.textContent='지역구분을 입력해주세요.';errEl.style.display='block';return;}
+  // Firebase 키에 쓸 수 없는 문자(. # $ [ ] /)가 들어가면 저장 자체가 실패하므로 사전 차단
+  if(/[.#$\[\]\/]/.test(plate)){errEl.textContent='차량번호에는 . # $ [ ] / 문자를 사용할 수 없습니다.';errEl.style.display='block';return;}
+  // 서버의 해당 차량 정보를 먼저 최신화(운용중지 차량 재등록 시 기존 계약·이력 정보 보존용)
+  const vr = await refreshVehicleOrWarn(plate);
+  if(!vr){errEl.textContent='⚠ 서버의 최신 데이터를 불러오지 못했습니다. 인터넷 연결을 확인한 후 다시 시도해 주세요.';errEl.style.display='block';return;}
   if(data.vehicles[plate]&&data.vehicles[plate].active!==false){
     errEl.textContent=`'${plate}'는 이미 등록된 차량입니다.`;errEl.style.display='block';return;
   }
-  data.vehicles[plate]={model,branch,originalBranch:branch,active:true,addedManually:true,addedAt:new Date().toISOString(),trips:data.vehicles[plate]?.trips||[]};
-  const saved = await saveData();
+  const prevV=data.vehicles[plate];
+  // 운용중지 차량을 다시 등록하면 기존 객체에 병합 — 계약단가·계약일·개시일·재배치이력·수기기록 등 보존
+  data.vehicles[plate]=prevV
+    ? {...prevV, model:model||prevV.model||'', branch, active:true, reactivatedAt:new Date().toISOString()}
+    : {model,branch,originalBranch:branch,active:true,addedManually:true,addedAt:new Date().toISOString(),trips:[]};
+  const saved = await saveVehicleMeta(plate);
+  if(!saved){ if(prevV) data.vehicles[plate]=prevV; else delete data.vehicles[plate]; }
   if(!saved){ errEl.textContent='⚠ 저장 실패: 서버에 반영되지 않았습니다. 인터넷 연결을 확인한 후 다시 시도해 주세요.'; errEl.style.display='block'; return; }
   renderAll();
   closeModal();
@@ -9722,8 +9867,22 @@ async function saveUserEdits(name){
   }
   if(err) err.style.display='none';
 
-  // 저장 직전 최신 데이터 재조회 후 키 기반 매칭 (동시 수정 유실 방지)
-  await refreshDataFromStorage();
+  // 저장 직전 "수정 대상 차량·사고 건만" 최신 재조회 후 키 기반 매칭 (동시 수정 유실 방지).
+  // 기존엔 DB 전체를 읽고 통째로 다시 써서 느리고, 그 사이 다른 사람이 제출한 기록을 덮어쓸 위험이 있었음.
+  // 2027년 이후로 바꾼 일자가 있으면 해당 연도 노드도 먼저 로드(안 하면 저장 시 유실)
+  await ensureYearsLoadedFor(Array.from(rows).flatMap(tr=>[tr.querySelector('.ue-date-from')?.value, tr.querySelector('.ue-date-to')?.value]));
+  const uePlates = Array.from(new Set(Array.from(rows).map(tr=>tr.dataset.plate).filter(Boolean)));
+  const ueAccIds = Array.from(accRows).map(tr=>tr.dataset.accidentId).filter(Boolean);
+  const ueExists = {};
+  try{
+    const res = await Promise.all(uePlates.map(p=>refreshVehicleFromStorage(p)));
+    uePlates.forEach((p,i)=>{ ueExists[p] = res[i].exists; });
+    await Promise.all(ueAccIds.map(id=>refreshAccidentFromStorage(id)));
+  }catch(e){
+    console.error('[내 제출기록 수정 - 최신 데이터 조회 실패]', e);
+    if(err){ err.textContent='⚠ 서버의 최신 데이터를 불러오지 못했습니다. 인터넷 연결을 확인한 후 다시 "수정 내용 저장"을 눌러주세요.'; err.style.display='block'; }
+    return;
+  }
   for(const tr of rows){
     const plate=tr.dataset.plate;
     const key=tr.dataset.key;
@@ -9810,7 +9969,11 @@ async function saveUserEdits(name){
     a.location={...(a.location||{}), manualNote:loc};
     a.description=desc;
   });
-  const saved = await saveData();
+  const saveResults = await Promise.all([
+    ...uePlates.map(p=>saveVehicleToStorage(p, !ueExists[p])),
+    ...ueAccIds.map(id=>saveAccidentToStorage(id))
+  ]);
+  const saved = saveResults.every(Boolean);
   if(!saved){
     if(err){ err.textContent='⚠ 서버 저장에 실패했습니다. 인터넷 연결을 확인한 후 다시 "수정 내용 저장"을 눌러주세요.'; err.style.display='block'; }
     return;

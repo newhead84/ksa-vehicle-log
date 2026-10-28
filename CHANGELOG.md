@@ -4,6 +4,16 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 형식: 각 항목은 `요청내용 요약 | 변경: 함수/영역`
 
+## 2026-10-28 (1)
+
+- 저장 시 다른 사용자 운행기록 유실 위험 제거
+  - 관리자 차량정보 변경(운용중지·재배치·재배치이력·차량개시일·차량추가)을 DB 전체 덮어쓰기 대신 해당 차량 메타 필드 부분저장(PATCH)으로 변경, 차량 완전삭제는 해당 차량 노드만 삭제
+  - 운행기록 수정·삭제·점검완료/취소, 내 제출기록 수정, 사고이력 수정/삭제/완료처리를 차량·사고 1건 단위 읽기/쓰기로 변경
+  - 최신 데이터 재조회 실패 시 전체 저장 차단(`_staleData`)
+  - 2027년 이후 일자 수정/업로드 시 연도 노드 선로드, 미로드 연도 기록이 있으면 저장 중단
+  - 2027~당해년도 연도 노드 전부 로드(2028년 연초 직전연도 미반영 방지), 연도 추가 로드 후 등록차량 기본값 보정
+  - 변경: `saveData()`, `saveVehicleToStorage()`, `refreshDataFromStorage()`, `fetchMergedFleetData()`, `ensureYearLoaded()`, 관리자 차량정보/운행기록/사고 저장 함수 전반, `saveUserEdits()` | 신규: `fbPatch()`, `saveVehicleMeta()`, `deleteVehicleFromStorage()`, `refreshAccidentFromStorage()`, `saveAccidentToStorage()`, `refreshVehicleOrWarn()`, `unloadedTripYears()`, `ensureYearsLoadedFor()`, `applyRegistryDefaults()`
+
 ## 2026-08-07 (7)
 
 - 전용차량 기사님 입력화면(회장차 수행기사 모드 중심) 일괄 수정요청 반영. KSA직원 모드·전무이사 차량 화면 레이아웃은 요청에 따라 변경하지 않음(QR 안내문구만 추가).
