@@ -35,6 +35,9 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-10-29] 관리자 대시보드 섹션 제목 이모지 제거(대차차량 사용이력·사고 이력) + 모바일(≤640px) 가독성 개선 —
+  ① 툴바 버튼 4줄 쌓임 → 한 줄 가로 스크롤 ② 통계카드 주유비·대여료도 2열 반폭 ③ data-table 셀 줄바꿈 방지(가로 스크롤)
+  PC 레이아웃 변경 없음 | 변경: 관리자 섹션 h2, 스타일시트 최하단 @media(max-width:640px)
   [2026-10-28] 영수증 첨부 개선 — ① 복수 영수증을 한 장씩 순서대로 올리던 것을 동시(병렬) 업로드로 변경(장별 1회
   재시도, 1장이라도 실패 시 전체 미반영 기존 원칙 유지) — 운행정보 제출·내 제출기록 수정·관리자 첨부 공통 ② 관리자가
   이미 증빙이 첨부된 개인사용 건에도 증빙 추가(➕, 합계 최대 5장)·교체(🔄) 가능. 교체 시 이전 증빙 경로·판정값은
@@ -1131,6 +1134,19 @@
   /* ===== 개인사용 영수증 첨부 3버튼(촬영/앨범/나중에 첨부) 중 선택된 옵션 표시 ===== */
   .receipt-opt-active{outline:2px solid #16A34A;outline-offset:1px;}
 
+  /* ===== 모바일 관리자 대시보드 가독성 개선 (PC 레이아웃 변경 없음) ===== */
+  @media (max-width:640px){
+    /* 툴바: 버튼 10개가 4줄로 쌓여 첫 화면을 차지하던 문제 → 한 줄 가로 스크롤 */
+    .admin-topbar-actions{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px;}
+    .admin-topbar-actions::-webkit-scrollbar{display:none;}
+    .admin-topbar-actions > *{flex:0 0 auto;white-space:nowrap;}
+    /* 통계 카드: 총 누적거리만 전체폭, 나머지(관리차량·건수·주유비·대여료)는 2열 반폭 */
+    .stat-strip .stat-card.stat-wide:not(:first-child){grid-column:auto;}
+    .stat-strip .stat-card:not(:first-child) .stat-plain{font-size:18px;}
+    /* 운행자·개인사용·출퇴근·대차 표: 지역명/이름이 글자 단위로 줄바꿈돼 행이 길어지던 문제 → 한 줄 유지 + 가로 스크롤 */
+    .table-scroll .data-table td{white-space:nowrap;}
+  }
+
 </style>
 </head>
 <body>
@@ -1383,7 +1399,7 @@
     </div>
 
     <div class="section-head">
-      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>🚗 대차차량 사용이력 조회 <span style="font-size:11px;color:var(--muted);font-weight:400;">(대차인수~반납 기간 기준)</span></h2>
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>대차차량 사용이력 조회 <span style="font-size:11px;color:var(--muted);font-weight:400;">(대차인수~반납 기간 기준)</span></h2>
     </div>
     <div class="section-body collapsed" id="daeChaHistoryWrap">
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
@@ -1411,7 +1427,7 @@
     </div>
 
     <div class="section-head">
-      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>🚨 사고 이력 <span id="accidentCountBadge" style="font-size:11px;color:var(--bad);font-weight:700;"></span></h2>
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>사고 이력 <span id="accidentCountBadge" style="font-size:11px;color:var(--bad);font-weight:700;"></span></h2>
     </div>
     <div class="section-body" id="accidentHistoryWrap">
       <input class="search-box" id="accidentSearchBox" placeholder="차량번호·사업장·제출자 검색…" oninput="renderAccidentHistory()" style="margin-bottom:12px;max-width:280px;">
