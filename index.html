@@ -35,6 +35,11 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-10-29] 관리자 대시보드 디자인 정리 — ① 툴바 10개 버튼을 [새로고침·엑셀 내보내기·데이터 관리▾·공유▾·로그아웃]으로
+  그룹화, 색상·SVG 아이콘 통일 ② 섹션별 흰 카드(dash-card)로 구획 ③ 공용차량 현황 접기 시 목록이 접히지 않던 문제 수정
+  (필터/검색줄을 section-body 안으로 이동) ④ 열람 전용(전체·지역별) 모드: 메뉴 안 버튼까지 화이트리스트 검사, 지역별 링크는
+  비교차트 카드(mccSection) 통째로 숨김 | 신규: toggleTbMenu(), closeTbMenus() | 변경: applyViewerModeUI(), adminRefresh(),
+  관리자 툴바·섹션 마크업, CSS(.tb-*, .dash-card)
   [2026-10-29] 관리자 대시보드 섹션 제목 이모지 제거(대차차량 사용이력·사고 이력) + 모바일(≤640px) 가독성 개선 —
   ① 툴바 버튼 4줄 쌓임 → 한 줄 가로 스크롤 ② 통계카드 주유비·대여료도 2열 반폭 ③ data-table 셀 줄바꿈 방지(가로 스크롤)
   PC 레이아웃 변경 없음 | 변경: 관리자 섹션 h2, 스타일시트 최하단 @media(max-width:640px)
@@ -512,6 +517,21 @@
   .admin-topbar .sub{font-size:13px;color:var(--muted);margin-top:4px;}
   .admin-badge{display:inline-flex;align-items:center;gap:5px;background:var(--navy);color:#fff;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;margin-left:10px;vertical-align:middle;}
   .admin-topbar-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  /* 관리자 툴바 버튼: 색상 통일(흰 배경 + 회색 테두리, hover 시 navy) + SVG 아이콘 */
+  .admin-topbar-actions .tb-btn{display:inline-flex;align-items:center;gap:6px;background:var(--card);border-color:var(--line);color:var(--ink);font-weight:500;}
+  .admin-topbar-actions .tb-btn:hover{border-color:var(--navy);color:var(--navy);}
+  .admin-topbar-actions .tb-btn:disabled{opacity:.6;cursor:default;}
+  .admin-topbar-actions .tb-ghost{background:none;color:var(--muted);}
+  .tb-btn svg{width:14px;height:14px;flex:0 0 auto;}
+  .tb-btn .tb-chev{width:12px;height:12px;margin-left:-2px;color:var(--muted);transition:transform .15s;}
+  .tb-menu{position:relative;}
+  .tb-menu.open > .tb-btn{border-color:var(--navy);color:var(--navy);}
+  .tb-menu.open > .tb-btn .tb-chev{transform:rotate(180deg);}
+  .tb-menu-list{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:250;min-width:200px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:6px;}
+  .tb-menu.open > .tb-menu-list{display:block;}
+  .tb-menu-item{display:block;width:100%;text-align:left;background:none;border:none;border-radius:8px;padding:9px 12px;font-family:'Paperlogy';font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap;}
+  .tb-menu-item:hover,.tb-menu-item:focus-visible{background:var(--paper);color:var(--navy);outline:none;}
+  .tb-menu-sep{height:1px;background:var(--line);margin:6px 4px;}
 
   /* ===== Submitted notice ===== */
   .submitted-notice{background:var(--good-soft);border:1px solid var(--good);border-radius:var(--radius);padding:18px 20px;margin-bottom:20px;}
@@ -583,6 +603,11 @@
   .chevron.rot{transform:rotate(-90deg);}
   .section-body{overflow:hidden;}
   .section-body.collapsed{display:none;}
+  /* 관리자 대시보드 섹션 카드: 섹션마다 흰 카드로 구획, 펼친 상태에서만 제목 아래 구분선 */
+  .dash-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:0 22px;margin-bottom:14px;}
+  .dash-card > .section-head{margin:0;padding:16px 0;align-items:center;}
+  .dash-card > .section-head:has(+ .section-body:not(.collapsed)){border-bottom:1px solid var(--line);margin-bottom:16px;}
+  .dash-card > .section-body:not(.collapsed){padding-bottom:20px;}
   .search-box{border:1px solid var(--line);border-radius:8px;padding:7px 11px;font-size:13px;font-family:'Paperlogy';width:220px;}
 
   /* ===== Vehicle grid ===== */
@@ -1134,12 +1159,16 @@
   /* ===== 개인사용 영수증 첨부 3버튼(촬영/앨범/나중에 첨부) 중 선택된 옵션 표시 ===== */
   .receipt-opt-active{outline:2px solid #16A34A;outline-offset:1px;}
 
-  /* ===== 모바일 관리자 대시보드 가독성 개선 (PC 레이아웃 변경 없음) ===== */
+  /* ===== 모바일 관리자 대시보드 가독성 개선 ===== */
   @media (max-width:640px){
-    /* 툴바: 버튼 10개가 4줄로 쌓여 첫 화면을 차지하던 문제 → 한 줄 가로 스크롤 */
-    .admin-topbar-actions{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px;}
-    .admin-topbar-actions::-webkit-scrollbar{display:none;}
-    .admin-topbar-actions > *{flex:0 0 auto;white-space:nowrap;}
+    /* 툴바: 메뉴 그룹화로 버튼이 5개로 줄어 1~2줄에 표시. 드롭다운은 버튼 오른쪽 끝 기준으로 펼침 */
+    .tb-menu-list{min-width:180px;}
+    .tb-menu-item{padding:10px 12px;}
+    /* 섹션 카드: 좁은 화면 여백 축소 */
+    .dash-card{padding:0 14px;border-radius:14px;margin-bottom:10px;}
+    .dash-card > .section-head{padding:13px 0;}
+    .dash-card > .section-head:has(+ .section-body:not(.collapsed)){margin-bottom:12px;}
+    .dash-card > .section-body:not(.collapsed){padding-bottom:14px;}
     /* 통계 카드: 총 누적거리만 전체폭, 나머지(관리차량·건수·주유비·대여료)는 2열 반폭 */
     .stat-strip .stat-card.stat-wide:not(:first-child){grid-column:auto;}
     .stat-strip .stat-card:not(:first-child) .stat-plain{font-size:18px;}
@@ -1244,18 +1273,31 @@
       </div>
     </div>
     <div class="admin-topbar-actions">
-      <button class="reset-btn" id="refreshBtn" onclick="adminRefresh()" style="border-color:var(--accent);color:var(--accent);">⟳ 새로고침</button>
-      <button class="reset-btn" id="contractMgmtBtn" onclick="openContractImportModal()" title="계약 연장(단가·기간 변경) 또는 차량 교체(반납 후 신차 투입)로 계약정보가 바뀌면, 지정 엑셀 양식으로 일괄 반영합니다" style="border-color:#B45309;color:#B45309;">📋 차량계약정보 관리</button>
-      <button class="reset-btn" id="exportExcelBtn" onclick="exportToExcel()" style="border-color:var(--good);color:var(--good);">엑셀 내보내기</button>
-      <button class="reset-btn" id="manualUploadBtn" onclick="triggerManualMonthlyUpload()" title="1~7월 수기기록(가동율·거리)만 반영하는 별도 기능입니다. 실제 운행기록 복원/병합은 '전체기록 업로드'를 사용하세요." style="border-color:#7C3AED;color:#7C3AED;">📊 엑셀 업로드(수기기록)</button>
+      <!-- 툴바: 자주 쓰는 기능만 노출, 나머지는 "데이터 관리"·"공유" 메뉴로 그룹화.
+           열람 전용 모드(applyViewerModeUI)는 화이트리스트 id(refreshBtn·exportExcelBtn)만 남기고 메뉴 전체를 숨김 -->
+      <button class="reset-btn tb-btn" id="refreshBtn" onclick="adminRefresh()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg><span class="tb-label">새로고침</span></button>
+      <button class="reset-btn tb-btn" id="exportExcelBtn" onclick="exportToExcel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>엑셀 내보내기</button>
+      <div class="tb-menu" id="tbDataMenu">
+        <button type="button" class="reset-btn tb-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleTbMenu(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>데이터 관리<svg class="tb-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="tb-menu-list" role="menu">
+          <button type="button" class="tb-menu-item" role="menuitem" id="contractMgmtBtn" onclick="openContractImportModal()" title="계약 연장(단가·기간 변경) 또는 차량 교체(반납 후 신차 투입)로 계약정보가 바뀌면, 지정 엑셀 양식으로 일괄 반영합니다">차량계약정보 관리</button>
+          <button type="button" class="tb-menu-item" role="menuitem" id="manualUploadBtn" onclick="triggerManualMonthlyUpload()" title="1~7월 수기기록(가동율·거리)만 반영하는 별도 기능입니다. 실제 운행기록 복원/병합은 '전체기록 업로드'를 사용하세요.">엑셀 업로드(수기기록)</button>
+          <button type="button" class="tb-menu-item" role="menuitem" id="tripRecordUploadBtn" onclick="openTripRecordImportModal()" title="'엑셀 내보내기'로 받은 파일의 '전체운행기록' 시트를 업로드하여, 아직 없는 일자의 운행기록만 채워 넣습니다">전체기록 업로드</button>
+          <div class="tb-menu-sep"></div>
+          <button type="button" class="tb-menu-item" role="menuitem" id="backupDataBtn" onclick="backupData()">데이터 백업</button>
+          <button type="button" class="tb-menu-item" role="menuitem" id="restoreDataBtn" onclick="document.getElementById('restoreInput').click()">데이터 복원</button>
+        </div>
+      </div>
+      <div class="tb-menu" id="tbShareMenu">
+        <button type="button" class="reset-btn tb-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleTbMenu(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>공유<svg class="tb-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="tb-menu-list" role="menu">
+          <button type="button" class="tb-menu-item" role="menuitem" id="copyReadonlyUrlBtn" onclick="copyReadonlyUrl()">열람전용URL</button>
+          <button type="button" class="tb-menu-item" role="menuitem" id="regionUrlBtn" onclick="openRegionUrlModal()">지역별 열람URL</button>
+        </div>
+      </div>
+      <button class="reset-btn tb-btn tb-ghost" id="logoutBtn" onclick="exitToRole()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>로그아웃</button>
       <input type="file" id="manualMonthlyInput" accept=".xlsx,.xls" style="display:none;" onchange="handleManualMonthlyUpload(this)">
-      <button class="reset-btn" id="tripRecordUploadBtn" onclick="openTripRecordImportModal()" title="'엑셀 내보내기'로 받은 파일의 '전체운행기록' 시트를 업로드하여, 아직 없는 일자의 운행기록만 채워 넣습니다" style="border-color:#0E7C86;color:#0E7C86;">🚗 전체기록 업로드</button>
-      <button class="reset-btn" id="backupDataBtn" onclick="backupData()" style="border-color:var(--navy);color:var(--navy);">💾 데이터 백업</button>
-      <button class="reset-btn" id="restoreDataBtn" onclick="document.getElementById('restoreInput').click()" style="border-color:var(--accent);color:var(--accent);">📂 데이터 복원</button>
       <input type="file" id="restoreInput" accept=".json" style="display:none;" onchange="restoreData(this)">
-      <button class="reset-btn" id="copyReadonlyUrlBtn" onclick="copyReadonlyUrl()" style="border-color:#7eb138;color:#7eb138;">🔗 열람전용URL</button>
-      <button class="reset-btn" id="regionUrlBtn" onclick="openRegionUrlModal()" style="border-color:#7eb138;color:#7eb138;">🔗 지역별 열람URL</button>
-      <button class="reset-btn" id="logoutBtn" onclick="exitToRole()">로그아웃</button>
     </div>
   </div>
 
@@ -1333,13 +1375,16 @@
 
   <!-- ===== 관리자 전용: 통계 및 차량 현황 ===== -->
   <div id="adminSections" style="display:none;padding:0 24px;">
+    <section class="dash-card">
     <div class="section-head">
       <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>지역구분별 가동현황</h2>
     </div>
     <div class="section-body" id="regionSummaryWrap">
       <div id="regionSummary"></div>
     </div>
+    </section>
 
+    <section class="dash-card">
     <div class="section-head">
       <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>월별 가동율 및 운행거리</h2>
       <div class="month-controls">
@@ -1350,7 +1395,9 @@
     <div class="section-body" id="monthlyAreaWrap">
       <div id="monthlyArea"></div>
     </div>
+    </section>
 
+    <section class="dash-card" id="mccSection">
     <div class="section-head" id="mccSectionHead">
       <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>사업장별 차량 가동율 운행거리 비교차트</h2>
       <div class="month-controls">
@@ -1365,7 +1412,9 @@
       <div class="muted mcc-caption" id="mccCaption" style="margin-bottom:10px;">선택한 연도의 연평균 가동율·운행거리를 기준으로 15개 사업장을 순위 막대로 비교합니다 (버튼으로 가동율/운행거리 전환, 막대 클릭 시 소속 차량별 상세를 펼치거나 접음, 사업장명 클릭 시 하단 공용차량 현황으로 이동).</div>
       <div class="mcc-wrap" id="monthlyCompareChart"></div>
     </div>
+    </section>
 
+    <section class="dash-card">
     <div class="section-head">
       <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>운행자별 사용 현황</h2>
     </div>
@@ -1373,7 +1422,9 @@
       <input class="search-box" id="driverSearchBox" placeholder="운행자 이름 검색…" oninput="renderDriverSummary()" style="margin-bottom:12px;max-width:280px;">
       <div id="driverSummary"></div>
     </div>
+    </section>
 
+    <section class="dash-card">
     <div class="section-head">
       <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>주말 및 공휴일 개인사용 현황 <span style="font-size:11px;color:var(--muted);font-weight:400;">(가동율 미반영)</span> <span id="personalProblemCountBadge" style="font-size:11px;color:var(--bad);font-weight:700;"></span></h2>
     </div>
@@ -1386,7 +1437,9 @@
       </div>
       <div id="personalUseList"></div>
     </div>
+    </section>
 
+    <section class="dash-card">
     <div class="section-head">
       <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>출퇴근사용 현황 <span style="font-size:11px;color:var(--muted);font-weight:400;">(단신부임자 급여공제, 가동율 미반영)</span></h2>
     </div>
@@ -1397,7 +1450,9 @@
       </div>
       <div id="commuteUseList"></div>
     </div>
+    </section>
 
+    <section class="dash-card">
     <div class="section-head">
       <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>대차차량 사용이력 조회 <span style="font-size:11px;color:var(--muted);font-weight:400;">(대차인수~반납 기간 기준)</span></h2>
     </div>
@@ -1408,10 +1463,13 @@
       </div>
       <div id="daeChaHistoryList"></div>
     </div>
+    </section>
 
-    <div class="section-head" style="margin-bottom:10px;">
+    <section class="dash-card">
+    <div class="section-head">
       <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>공용차량 현황 (<span id="vehicleCount">0</span>대) <span id="vehicleIdleCountBadge" style="font-size:11px;color:var(--bad);font-weight:700;"></span></h2>
     </div>
+    <div class="section-body" id="vehicleAreaWrap">
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px;">
       <div class="view-toggle" id="viewToggle" style="flex-shrink:0;">
         <button class="vt-btn active" data-mode="grouped" onclick="setViewMode('grouped')">지역구분별</button>
@@ -1422,10 +1480,11 @@
       <button id="qrBulkPdfBtn" class="reset-btn" onclick="printAllQrCodes()" style="border-color:#17593d;color:#17593d;font-size:12px;flex-shrink:0;">📄 QR 일괄 PDF 다운로드</button>
       <input class="search-box" id="searchBox" placeholder="차량번호 또는 지역본부 검색…" oninput="renderVehicles()" style="flex:1;min-width:140px;">
     </div>
-    <div class="section-body" id="vehicleAreaWrap">
       <div id="vehicleArea"></div>
     </div>
+    </section>
 
+    <section class="dash-card">
     <div class="section-head">
       <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>사고 이력 <span id="accidentCountBadge" style="font-size:11px;color:var(--bad);font-weight:700;"></span></h2>
     </div>
@@ -1433,6 +1492,7 @@
       <input class="search-box" id="accidentSearchBox" placeholder="차량번호·사업장·제출자 검색…" oninput="renderAccidentHistory()" style="margin-bottom:12px;max-width:280px;">
       <div id="accidentHistoryList"></div>
     </div>
+    </section>
   </div>
 
 </div><!-- /mainWrap -->
@@ -2773,7 +2833,9 @@ function applyViewerModeUI(){
     badge.textContent = regionInfo ? `열람 전용 · ${regionInfo.label}` : '열람 전용';
     badge.style.background = '#7eb138';
   }
-  document.querySelectorAll('#adminTopbar .admin-topbar-actions > button').forEach(el=>{
+  // 툴바 직속 요소(버튼·"데이터 관리"/"공유" 메뉴 묶음)와 메뉴 안쪽 버튼까지 모두 검사 — 메뉴로 그룹화된 관리 버튼이
+  // 직속 자식(> button) 검사에서 빠져 열람 링크에 노출되지 않도록 함(화이트리스트 외 전부 숨김)
+  document.querySelectorAll('#adminTopbar .admin-topbar-actions > *:not(input), #adminTopbar .admin-topbar-actions button').forEach(el=>{
     if(!VIEWER_ALLOWED_TOOLBAR_BTN_IDS.includes(el.id)) el.style.display = 'none';
   });
   // 상단 관리자 툴바(admin-topbar-actions) 밖에 있는 차량목록 영역의 관리 전용 버튼(차량추가/QR PDF)은
@@ -2786,12 +2848,30 @@ function applyViewerModeUI(){
   // "사업장별 차량 가동율 운행거리 비교차트"가 다른 사업장 정보까지 노출/비교되어
   // 지역 스코프에 맞지 않으므로 숨긴다. (전체 열람 링크에서는 계속 노출)
   if(viewerRegionToken){
-    ['mccSectionHead','monthlyCompareChartWrap'].forEach(id=>{
+    ['mccSection','mccSectionHead','monthlyCompareChartWrap'].forEach(id=>{
       const el = document.getElementById(id);
       if(el) el.style.display = 'none';
     });
   }
 }
+
+// 관리자 툴바 드롭다운("데이터 관리"·"공유") — 바깥 클릭·메뉴 항목 클릭·Esc로 닫힘
+function closeTbMenus(){
+  document.querySelectorAll('.tb-menu.open').forEach(m=>{
+    m.classList.remove('open');
+    m.querySelector('[aria-haspopup]')?.setAttribute('aria-expanded','false');
+  });
+}
+function toggleTbMenu(btn){
+  const menu=btn.closest('.tb-menu');
+  const willOpen=!menu.classList.contains('open');
+  closeTbMenus();
+  if(willOpen){ menu.classList.add('open'); btn.setAttribute('aria-expanded','true'); }
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.tb-menu') || e.target.closest('.tb-menu-item')) closeTbMenus();
+});
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeTbMenus(); });
 
 function enterUserMode(){
   document.getElementById('driveWarnModal').style.display = 'flex';
@@ -3689,12 +3769,13 @@ function applyRegionViewerFilter(){
 
 async function adminRefresh(){
   const btn=document.getElementById('refreshBtn');
-  if(btn){btn.textContent='⟳ 갱신 중…';btn.disabled=true;}
+  const btnLbl=btn?.querySelector('.tb-label')||btn;
+  if(btn){btnLbl.textContent='갱신 중…';btn.disabled=true;}
   await loadData();
   const now=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   const lbl=document.getElementById('lastSyncLabel');
   if(lbl) lbl.textContent=`마지막 갱신 ${now}`;
-  if(btn){btn.textContent='⟳ 새로고침';btn.disabled=false;}
+  if(btn){btnLbl.textContent='새로고침';btn.disabled=false;}
 }
 
 async function saveData(){
