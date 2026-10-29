@@ -35,6 +35,9 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-10-29] 모바일 관리자 화면 개선 — ① 공유 메뉴가 화면 왼쪽 밖으로 잘리던 문제(버튼 위치에 따라 펼침 방향 자동 전환)
+  ② 맨 위로 버튼이 모달 위에 겹치던 문제 ③ 공용차량 카드 통계 4항목 한 줄 배치(카드 높이 축소) ④ 차량 상세 건별 운행거리 차트
+  축 글자 확대 — PC 화면 변경 없음 | 변경: toggleTbMenu(), openVehicle(), #scrollTopBtn, CSS(.tb-menu-list, 최하단 @media .vcard)
   [2026-10-29] 차량 상세 모달 정리 — ① 재배치·운용중지·차량개시일 설정을 접이식 "차량 관리" 패널로 묶음(기본 접힘,
   펼침 상태 유지) ② 요약 수치 타일형, 헤더에 지역구분·운용중지 표시 ③ 이모지 정리 ④ 모바일: 월별 가동율 6칸×2줄, 운행기록
   카드에서 빈 항목 숨김(수정 모드에서는 전체 표시) ⑤ "오도미터" 용어를 "누적 주행거리"로 변경 |
@@ -533,6 +536,9 @@
   .tb-menu.open > .tb-btn .tb-chev{transform:rotate(180deg);}
   .tb-menu-list{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:250;min-width:200px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:6px;}
   .tb-menu.open > .tb-menu-list{display:block;}
+  .tb-menu-list{max-width:calc(100vw - 16px);}
+  /* 버튼이 화면 왼쪽에 있어 오른쪽 끝 기준으로 펼치면 화면 밖으로 잘리는 경우(모바일 줄바꿈) → 왼쪽 끝 기준으로 펼침 */
+  .tb-menu-list.tb-align-left{left:0;right:auto;}
   .tb-menu-item{display:block;width:100%;text-align:left;background:none;border:none;border-radius:8px;padding:9px 12px;font-family:'Paperlogy';font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap;}
   .tb-menu-item:hover,.tb-menu-item:focus-visible{background:var(--paper);color:var(--navy);outline:none;}
   .tb-menu-sep{height:1px;background:var(--line);margin:6px 4px;}
@@ -1193,6 +1199,11 @@
     .stat-strip .stat-card:not(:first-child) .stat-plain{font-size:18px;}
     /* 운행자·개인사용·출퇴근·대차 표: 지역명/이름이 글자 단위로 줄바꿈돼 행이 길어지던 문제 → 한 줄 유지 + 가로 스크롤 */
     .table-scroll .data-table td{white-space:nowrap;}
+    /* 공용차량 카드: 46대가 1열로 길게 이어지므로 카드 높이 축소 — 통계 4항목을 한 줄에 배치 */
+    .vcard{padding:12px 14px;}
+    .vcard .region{margin-bottom:6px!important;}
+    .vcard .vstats{grid-template-columns:repeat(4,auto);justify-content:space-between;gap:4px 8px;font-size:11px;margin-top:4px;}
+    .vcard .vstats b{font-size:13px;white-space:nowrap;}
   }
 
 </style>
@@ -1780,7 +1791,7 @@
 <button id="scrollTopBtn" onclick="scrollToTop()" title="맨 위로 이동" aria-label="맨 위로 이동"
   style="position:fixed;right:16px;bottom:max(16px, calc(var(--safe-bottom) + 8px));width:46px;height:46px;border-radius:50%;
   background:var(--navy);color:#fff;border:none;box-shadow:0 4px 14px rgba(22,35,63,.35);
-  font-size:20px;line-height:1;cursor:pointer;z-index:90;display:flex;align-items:center;justify-content:center;">⬆</button>
+  font-size:20px;line-height:1;cursor:pointer;z-index:45;display:flex;align-items:center;justify-content:center;">⬆</button>
 
 <script>
 // ============================================================
@@ -2885,7 +2896,12 @@ function toggleTbMenu(btn){
   const menu=btn.closest('.tb-menu');
   const willOpen=!menu.classList.contains('open');
   closeTbMenus();
-  if(willOpen){ menu.classList.add('open'); btn.setAttribute('aria-expanded','true'); }
+  if(willOpen){
+    menu.classList.add('open'); btn.setAttribute('aria-expanded','true');
+    // 기본은 버튼 오른쪽 끝 기준으로 펼침. 화면 왼쪽 밖으로 잘리면 왼쪽 끝 기준으로 전환
+    const list=menu.querySelector('.tb-menu-list');
+    if(list){ list.classList.remove('tb-align-left'); if(list.getBoundingClientRect().left<8) list.classList.add('tb-align-left'); }
+  }
 }
 document.addEventListener('click',e=>{
   if(!e.target.closest('.tb-menu') || e.target.closest('.tb-menu-item')) closeTbMenus();
@@ -5329,7 +5345,10 @@ function openVehicle(plate){
   const trips=(v.trips||[]).slice().sort(tripChronoCompare);
   const totalDist=trips.reduce((s,t)=>s+(Number(t.distance)||0),0);
   const totalFuel=trips.reduce((s,t)=>s+(Number(t.fuel)||0),0);
-  const w=560,h=112,padTop=8,padBottom=20,padLeft=40,padRight=8;
+  // 모바일: viewBox 폭을 줄여 축 글자가 너무 작게 축소되지 않도록 함(PC는 기존 560 유지)
+  const _sparkMob=window.matchMedia('(max-width:640px)').matches;
+  const sparkFs=_sparkMob?8:7;
+  const w=_sparkMob?340:560,h=112,padTop=8,padBottom=20,padLeft=_sparkMob?32:40,padRight=8;
   const plotW=w-padLeft-padRight, plotH=h-padTop-padBottom;
   // x축 기준 연도: 위쪽 "월별 가동율" 표와 동일한 monthlyYear를 사용해 두 영역의 달 위치가 항상 서로 대응되도록 한다.
   const sparkYear=Number(monthlyYear)||new Date().getFullYear();
@@ -5364,13 +5383,13 @@ function openVehicle(plate){
   const sparkGridSvg=sparkTicks.map(tv=>{
     const y=yOf(tv);
     return `<line x1="${padLeft}" y1="${y}" x2="${w-padRight}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`
-         + `<text x="${padLeft-6}" y="${y+3}" font-size="7" fill="var(--muted)" text-anchor="end">${tv.toLocaleString()}</text>`;
+         + `<text x="${padLeft-6}" y="${y+3}" font-size="${sparkFs}" fill="var(--muted)" text-anchor="end">${tv.toLocaleString()}</text>`;
   }).join('');
   // 월 구분 세로선(점선) + 하단 1~12월 라벨 — 위쪽 월별 가동율 표와 x축 위치를 시각적으로 대응시킴
   const sparkMonthGridSvg=Array.from({length:12},(_,mi)=>{
     const x=xOfTime(new Date(sparkYear,mi,1).getTime());
     const line=mi===0?'':`<line x1="${x}" y1="${padTop}" x2="${x}" y2="${padTop+plotH}" stroke="var(--line)" stroke-width="1" stroke-dasharray="2,2"/>`;
-    return `${line}<text x="${x}" y="${h-4}" font-size="7" fill="var(--ink)" text-anchor="start">${mi+1}월</text>`;
+    return `${line}<text x="${x}" y="${h-4}" font-size="${sparkFs}" fill="var(--ink)" text-anchor="start">${mi+1}월</text>`;
   }).join('');
   const sparkDotsSvg=distances.map((d,i)=>`<circle cx="${xs[i]}" cy="${yOf(d)}" r="2.5" fill="var(--accent)"/>`).join('');
   const avgRate=ytdAvgUtilRate(plate);
