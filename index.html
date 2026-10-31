@@ -35,6 +35,13 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-01] 입력·관리 보완 — ① 제출 시 날짜 형식·실재(2/31 등)·미래 날짜 검증(신규·내 기록 수정·관리자 수정 공통)
+  ② 동시 제출 유실 방지: 사진 업로드 후 재조회 + ETag 조건부 저장(412 시 최대 3회 재시도) ③ 오류 칸 빨간 표시·칸 아래 사유
+  ④ 운행자 이름 기기 기억 ⑤ 시작거리 공백 확인 ⑥ 수정 이력(editLog)·삭제 보관(deletedTrips) ⑦ 주행거리 공백 감지·확인완료
+  ⑧ 처리 대기 요약 카드 | 신규: tripDateError(), fbGetWithEtag(), fbSetIfMatch(), appendEditLog(), archiveDeletedTrip(),
+  changeHistoryHtml(), odoGapsForPlate(), ackOdoGap(), renderPendingSummary() 등 | 변경: submitDirectInput(), doSubmit(),
+  refreshVehicleFromStorage(), saveVehicleToStorage(), saveVehicleMeta(), saveTripEdits(), saveUserEdits(), deleteTrip(),
+  showUserFormErr(), addTripRow(), vcardHtml(), openVehicle(), renderAll()
   [2026-10-29] 모바일 관리자 화면 개선 — ① 공유 메뉴가 화면 왼쪽 밖으로 잘리던 문제(버튼 위치에 따라 펼침 방향 자동 전환)
   ② 맨 위로 버튼이 모달 위에 겹치던 문제 ③ 공용차량 카드 통계 4항목 한 줄 배치(카드 높이 축소) ④ 차량 상세 건별 운행거리 차트
   축 글자 확대 — PC 화면 변경 없음 | 변경: toggleTbMenu(), openVehicle(), #scrollTopBtn, CSS(.tb-menu-list, 최하단 @media .vcard)
@@ -1009,6 +1016,34 @@
     color:var(--bad);font-size:14px;padding:14px 16px;
     background:var(--bad-soft);border-radius:12px;margin:8px 16px;display:none;
   }
+  /* 제출 검증 오류 칸 표시(showUserFormErr) — 인라인 border 스타일보다 우선하도록 !important */
+  .field-err{border-color:var(--bad) !important;box-shadow:0 0 0 3px var(--bad-soft) !important;border-radius:12px;}
+  .field-err-msg{margin-top:6px;padding:6px 10px;font-size:12px;font-weight:600;color:var(--bad);background:var(--bad-soft);
+    border-radius:8px;line-height:1.5;word-break:keep-all;overflow-wrap:break-word;}
+  /* 관리자 처리 대기 요약 (renderPendingSummary) */
+  .pending-summary{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;}
+  .pending-head{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:10px;}
+  .pending-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;}
+  .pending-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid var(--line);
+    border-radius:10px;background:var(--paper);font-family:'Paperlogy',sans-serif;cursor:pointer;text-align:left;}
+  .pending-item:disabled{cursor:default;opacity:.6;}
+  .pending-item.has{background:var(--bad-soft);border-color:var(--bad);}
+  .pending-label{font-size:12.5px;color:var(--ink);word-break:keep-all;overflow-wrap:break-word;}
+  .pending-n{font-size:17px;font-weight:700;color:var(--muted);flex-shrink:0;}
+  .pending-item.has .pending-n{color:var(--bad);}
+  /* 차량 상세: 주행거리 공백(odoGapListHtml) · 변경 이력(changeHistoryHtml) */
+  .gap-box{margin-top:14px;padding:12px 14px;border:1px solid #F59E0B;background:#FFFBEB;border-radius:12px;font-size:12.5px;line-height:1.6;}
+  .gap-title{font-weight:700;color:#92400E;margin-bottom:6px;word-break:keep-all;overflow-wrap:break-word;}
+  .gap-item{padding:8px 0;border-top:1px dashed #FCD34D;word-break:keep-all;overflow-wrap:break-word;}
+  .gap-km{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:20px;background:#FEF3C7;color:#92400E;font-weight:700;font-size:11.5px;}
+  .gap-ack-btn{margin-top:6px;padding:5px 12px;font-size:12px;}
+  .chg-history{margin-top:14px;border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:12.5px;}
+  .chg-history summary{cursor:pointer;font-weight:700;color:var(--navy);}
+  .chg-item{padding:8px 0;border-top:1px solid var(--line);line-height:1.6;word-break:keep-all;overflow-wrap:break-word;}
+  .chg-item:first-of-type{margin-top:8px;}
+  .chg-kind{display:inline-block;margin-right:6px;padding:1px 8px;border-radius:20px;background:var(--accent-soft);color:var(--navy);font-size:11px;font-weight:700;}
+  .chg-kind.chg-del{background:var(--bad-soft);color:var(--bad);}
+  .chg-diff{color:var(--muted);font-size:12px;}
 
   .user-edit-wrap{margin-top:28px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
   .user-edit-head{background:var(--navy);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}
@@ -1405,6 +1440,7 @@
 
   <!-- ===== 관리자 전용: 통계 및 차량 현황 ===== -->
   <div id="adminSections" style="display:none;padding:0 24px;">
+    <div class="pending-summary" id="pendingSummary"></div>
     <section class="dash-card">
     <div class="section-head">
       <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron">▾</span>지역구분별 가동현황</h2>
@@ -2018,6 +2054,28 @@ async function fbPatch(path, value){
     method:'PATCH', headers:{'Content-Type':'application/json'},
     body: JSON.stringify(value)
   });
+  if(!r.ok) throw new Error(`Firebase 쓰기 실패 (${r.status})`);
+  return r.json();
+}
+
+// ETag 조회 / 조건부 저장(if-match) — 동시 저장 시 덮어쓰기 유실 방지용.
+// 응답 412(Precondition Failed)면 그 사이 다른 저장이 있었다는 뜻이므로 conflict 오류를 던진다.
+async function fbGetWithEtag(path){
+  const token = await getAuthToken();
+  const url = `${FIREBASE_URL}/${path}.json${token?`?auth=${token}`:''}`;
+  const r = await fbFetchWithTimeout(url, {headers:{'X-Firebase-ETag':'true'}});
+  if(!r.ok) throw new Error(`Firebase 읽기 실패 (${r.status})`);
+  return {value: await r.json(), etag: r.headers.get('ETag')};
+}
+async function fbSetIfMatch(path, value, etag){
+  if(!etag) return fbSet(path, value); // ETag를 모르면 기존 방식(무조건 저장)
+  const token = await getAuthToken();
+  const url = `${FIREBASE_URL}/${path}.json${token?`?auth=${token}`:''}`;
+  const r = await fbFetchWithTimeout(url, {
+    method:'PUT', headers:{'Content-Type':'application/json','if-match':etag},
+    body: JSON.stringify(value)
+  });
+  if(r.status===412){ const e = new Error('동시 저장 충돌(412)'); e.conflict = true; throw e; }
   if(!r.ok) throw new Error(`Firebase 쓰기 실패 (${r.status})`);
   return r.json();
 }
@@ -2928,6 +2986,7 @@ function proceedEnterUserMode(){
   document.getElementById('submitLog').style.display = 'block';
   document.getElementById('userEditWrap').style.display = 'block';
   document.getElementById('userInputSection').style.display = 'block';
+  { const si=document.getElementById('searchSubmitterInput'); if(si && !si.value) si.value = getRememberedDriverName(); }
   pushAppState('user');
 
   // 사업장 목록은 정적 FLEET_REGISTRY만으로 구성 가능하므로 Firebase 데이터 로드(loadData)를
@@ -3279,6 +3338,17 @@ function todayLocalISO(){
   const m = String(d.getMonth()+1).padStart(2,'0');
   const day = String(d.getDate()).padStart(2,'0');
   return `${y}-${m}-${day}`;
+}
+// 운행일자 입력값 검증 — 형식(YYYY-MM-DD)·실재 날짜(2/31 등 자동 이월 차단)·미래 날짜 차단.
+// 반환: '' (정상) | 오류 사유 문자열. 신규 제출·내 제출기록 수정·관리자 수정에서 공통 사용.
+function tripDateError(s){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s||'')) return '날짜 형식이 올바르지 않습니다(예: 2026-10-31)';
+  const [y,m,d] = s.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  if(isNaN(dt) || dt.getFullYear()!==y || dt.getMonth()!==m-1 || dt.getDate()!==d) return `존재하지 않는 날짜입니다(${s})`;
+  if(y < 2020) return `날짜(${s})를 확인해 주세요`;
+  if(s > todayLocalISO()) return `오늘 이후 날짜(${s})는 입력할 수 없습니다`;
+  return '';
 }
 
 // ── 탭을 켜둔 채 날짜가 바뀐 경우 안내 ───────────────────────────────
@@ -3885,14 +3955,20 @@ async function refreshVehicleFromStorage(plate){
   if(FIREBASE_URL.includes('YOUR-PROJECT')) return {exists:true};
   const enc = encodeURIComponent(plate);
   const years = Array.from(_loadedYearNodes);
-  const [remote, ...yearTrips] = await Promise.all([
-    fbGet(vehicleNodePath(plate)),
-    ...years.map(y=>fbGet(`${yearNodeKey(y)}/vehicles/${enc}/trips`))
+  // 운행기록(trips) 경로는 ETag와 함께 읽어 두고, 저장 시 if-match 조건부 쓰기에 사용한다
+  // (읽은 뒤 저장 전까지 다른 사람이 같은 차량에 저장했으면 412로 거부 → 덮어쓰기 유실 방지).
+  const [nodeRes, legacyRes, ...yearRes] = await Promise.all([
+    fbGetWithEtag(vehicleNodePath(plate)),
+    fbGetWithEtag(`${vehicleNodePath(plate)}/trips`),
+    ...years.map(y=>fbGetWithEtag(`${yearNodeKey(y)}/vehicles/${enc}/trips`))
   ]);
+  const remote = nodeRes.value;
   const exists = !!(remote && typeof remote==='object');
+  _tripEtags[plate] = {node: nodeRes.etag, legacy: legacyRes.etag, years: {}};
+  years.forEach((y,i)=>{ _tripEtags[plate].years[y] = yearRes[i].etag; });
   if(exists){
-    let trips = tripsToArray(remote.trips);
-    yearTrips.forEach(yt=>{ trips = trips.concat(tripsToArray(yt)); });
+    let trips = tripsToArray(legacyRes.value);
+    yearRes.forEach(yr=>{ trips = trips.concat(tripsToArray(yr.value)); });
     data.vehicles[plate] = {...remote, trips};
   }
   const v = REGISTRY_MAP[plate];
@@ -3912,27 +3988,41 @@ async function refreshVehicleFromStorage(plate){
 }
 // 해당 차량의 운행기록만 저장: ~2026년분은 fleet-data/vehicles/{plate}/trips, 2027년 이후는 연도 노드의
 // vehicles/{plate}/trips (saveData()와 동일한 분리 규칙). writeMeta=true면 차량 노드 전체(신규 차량)를 기록.
-async function saveVehicleToStorage(plate, writeMeta){
+// 운행기록 경로별 ETag(refreshVehicleFromStorage에서 기록) — {plate:{node, legacy, years:{2027:..}}}
+const _tripEtags = {};
+let _lastSaveConflict = false; // 직전 saveVehicleToStorage()가 동시 저장 충돌(412)로 실패했는지
+async function saveVehicleToStorage(plate, writeMeta, silentConflict){
   if(viewerMode){ console.warn('[KSA 차량관리] 열람 전용 모드에서는 저장할 수 없습니다.'); return false; }
   const missYears = unloadedTripYears((data.vehicles[plate]||{}).trips);
   if(missYears.length){
     showFirebaseWarning(`${missYears.join(', ')}년 데이터를 아직 불러오지 않아 저장을 중단했습니다(해당 연도 기록 유실 방지). 새로고침한 뒤 다시 시도해 주세요.`);
     return false;
   }
+  _lastSaveConflict = false;
+  // refreshVehicleFromStorage()가 읽어 둔 ETag — 저장 1회에만 사용하고 비운다(재저장은 반드시 다시 읽은 뒤)
+  const tags = _tripEtags[plate] || null;
+  delete _tripEtags[plate];
   try{
     const v = data.vehicles[plate];
     const all = v.trips||[];
     const legacyTrips = all.filter(t=>tripYear(t)<=LEGACY_DATA_MAX_YEAR);
-    if(writeMeta) await fbSet(vehicleNodePath(plate), {...v, trips:legacyTrips});
-    else await fbSet(`${vehicleNodePath(plate)}/trips`, legacyTrips);
+    if(writeMeta) await fbSetIfMatch(vehicleNodePath(plate), {...v, trips:legacyTrips}, tags?.node);
+    else await fbSetIfMatch(`${vehicleNodePath(plate)}/trips`, legacyTrips, tags?.legacy);
     const enc = encodeURIComponent(plate);
     await Promise.all(Array.from(_loadedYearNodes).map(y=>{
       const yt = all.filter(t=>tripYear(t)===y);
-      return fbSet(`${yearNodeKey(y)}/vehicles/${enc}/trips`, yt.length ? yt : null);
+      return fbSetIfMatch(`${yearNodeKey(y)}/vehicles/${enc}/trips`, yt.length ? yt : null, tags?.years?.[y]);
     }));
     document.getElementById('firebaseWarnBanner')?.remove();
     return true;
   }catch(e){
+    if(e && e.conflict){
+      // 다른 사용자의 저장과 겹침 — 내 변경은 서버에 쓰지 않았음. 호출부에서 다시 읽고 재시도/안내
+      _lastSaveConflict = true;
+      console.warn('[KSA 차량관리] 동시 저장 감지(412) — 저장 보류:', plate);
+      if(!silentConflict) appAlert('그 사이 다른 사용자가 같은 차량의 기록을 저장했습니다.\n덮어쓰기를 막기 위해 이번 변경은 반영하지 않았습니다. 같은 작업을 한 번 더 해 주세요(최신 기록에 합쳐 저장됩니다).', {title:'저장 보류'});
+      return false;
+    }
     console.error('[KSA 차량관리] 차량 저장 실패:', e.message);
     showFirebaseWarning(`저장 실패: ${e.message} — 방금 입력/수정한 내용이 서버에 반영되지 않았습니다. 새로고침하거나 다른 기기에서 열면 사라진 것처럼 보이는 것이 정상이며, 실제로 저장이 안 된 상태입니다.`);
     return false;
@@ -3948,7 +4038,8 @@ async function saveVehicleMeta(plate, removedFields){
   if(!v) return false;
   try{
     const patch = {};
-    Object.keys(v).forEach(k=>{ if(k!=='trips' && v[k]!==undefined) patch[k]=v[k]; });
+    // deletedTrips는 archiveDeletedTrip()이 하위 키 단위로만 추가 — 메모리 사본으로 통째 덮어쓰지 않도록 제외
+    Object.keys(v).forEach(k=>{ if(k!=='trips' && k!=='deletedTrips' && v[k]!==undefined) patch[k]=v[k]; });
     (removedFields||[]).forEach(k=>{ if(v[k]===undefined) patch[k]=null; });
     await fbPatch(vehicleNodePath(plate), patch);
     document.getElementById('firebaseWarnBanner')?.remove();
@@ -4171,7 +4262,7 @@ async function applyContractImport(rows,resultEl){
 // ============================================================
 // 렌더 (관리자 전용)
 // ============================================================
-function renderAll(){ renderStats(); renderVehicles(); renderMonthly(monthlyYear); renderAccidentHistory(); }
+function renderAll(){ renderStats(); renderVehicles(); renderMonthly(monthlyYear); renderAccidentHistory(); renderPendingSummary(); }
 
 // ============================================================
 // 사고 이력 (관리자 대시보드) — accident-report.html이 fleet-data/accidents/{accidentId}에
@@ -5231,6 +5322,99 @@ function renderCommuteUseList(){
   document.getElementById('commuteUseList').innerHTML=`<div class="table-scroll"><table class="data-table"><thead><tr><th>일자</th><th>차량번호</th><th>지역구분</th><th>운행자</th><th>구분</th><th>주행거리</th><th>당일합계(왕복)</th><th>행선지</th><th>제출자</th></tr></thead><tbody>${rows||`<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">검색 결과가 없습니다</td></tr>`}</tbody></table></div>`;
 }
 
+// ── 주행거리 공백(누락 의심) 감지 ─────────────────────────────────────
+// 시간순으로 이어지는 두 기록에서 뒤 기록의 시작거리가 앞 기록의 종료거리보다 크면, 그 사이에
+// 입력되지 않은 운행이 있었을 가능성이 높다(가동율 과소 집계 원인). 대차 인수~반납 구간과 그 직후
+// 1건은 계기판이 이어지지 않으므로 비교하지 않는다. 관리자가 확인완료(odoGapCheckedAt)한 건은 제외.
+function tripKeyOf(t){ return `${t.isoDate}|${t.startOdo}|${t.endOdo}|${t.submitter||''}`; }
+function odoGapsForPlate(plate){
+  const v = data.vehicles[plate];
+  if(!v) return [];
+  const sorted = (v.trips||[]).filter(Boolean).slice().sort(tripChronoCompare);
+  const gaps = [];
+  let prev = null, inDaeCha = false;
+  sorted.forEach(t=>{
+    if(t.isDaeChaPickup){ inDaeCha = !t.isDaeChaReturn; prev = null; return; }
+    if(inDaeCha){ if(t.isDaeChaReturn) inDaeCha = false; prev = null; return; }
+    if(t.isDaeChaReturn){ prev = null; return; }
+    const s = Number(t.startOdo), pe = prev ? Number(prev.endOdo) : NaN;
+    if(prev && s>0 && pe>0 && s>pe && !t.odoGapCheckedAt) gaps.push({prev, trip:t, gap:s-pe});
+    prev = t;
+  });
+  return gaps;
+}
+function odoGapListHtml(plate){
+  const gaps = odoGapsForPlate(plate);
+  if(!gaps.length) return '';
+  const items = gaps.map(g=>`<div class="gap-item">
+      <div><b>${escapeHtml(g.prev.date||g.prev.isoDate||'')}</b> 종료 ${Number(g.prev.endOdo).toLocaleString()}km → <b>${escapeHtml(g.trip.date||g.trip.isoDate||'')}</b> 시작 ${Number(g.trip.startOdo).toLocaleString()}km
+        <span class="gap-km">${g.gap.toLocaleString()}km 공백</span></div>
+      <div class="muted" style="font-size:11.5px;">다음 기록 운행자: ${escapeHtml(g.trip.user||'')}</div>
+      ${viewerMode?'':`<button type="button" class="btn btn-ghost gap-ack-btn" data-plate="${escapeHtml(plate)}" data-key="${escapeHtml(tripKeyOf(g.trip))}" onclick="ackOdoGap(this)">확인완료</button>`}
+    </div>`).join('');
+  return `<div class="gap-box"><div class="gap-title">⚠ 주행거리 공백 ${gaps.length}건 <span class="muted" style="font-weight:400;font-size:11.5px;">— 중간 운행기록 누락 의심. 누락분을 확인해 추가하거나, 문제없으면 "확인완료"</span></div>${items}</div>`;
+}
+async function ackOdoGap(btn){
+  if(viewerMode) return;
+  const plate = btn.dataset.plate, key = btn.dataset.key;
+  if(!await appConfirm('이 주행거리 공백을 확인완료 처리합니다.\n(누락 운행이 없거나 이미 조치한 경우)\n이후 공백 목록과 처리대기 건수에서 제외됩니다.', {title:'공백 확인완료'})) return;
+  btn.disabled = true;
+  const vr = await refreshVehicleOrWarn(plate);
+  if(!vr || !data.vehicles[plate]){ btn.disabled = false; return; }
+  const t = (data.vehicles[plate].trips||[]).find(x=>x && tripKeyOf(x)===key);
+  if(!t){ showAdminToast('해당 기록을 찾지 못했습니다(그 사이 수정·삭제됨). 화면을 새로고침해 주세요.','bad'); btn.disabled=false; return; }
+  t.odoGapCheckedAt = new Date().toISOString();
+  const saved = await saveVehicleToStorage(plate, !vr.exists, true);
+  if(!saved){ showAdminToast(_lastSaveConflict ? '⚠ 그 사이 다른 저장이 있어 반영하지 않았습니다. 다시 눌러 주세요.' : '⚠ 저장 실패: 서버에 반영되지 않았습니다.','bad'); btn.disabled=false; return; }
+  showAdminToast('확인완료 처리되었습니다.','good');
+  renderAll(); openVehicle(plate);
+}
+
+// ── 처리 대기 요약(관리자 대시보드 최상단) ─────────────────────────────
+// 여러 섹션에 흩어진 "확인이 필요한 건"을 한 곳에 모아 보여주고, 누르면 해당 위치로 이동한다.
+function pendingSummaryCounts(){
+  let maint=0, gaps=0, late=0;
+  const lateSince = Date.now() - 30*86400000;
+  Object.keys(data.vehicles||{}).forEach(p=>{
+    const v = data.vehicles[p];
+    if(!v || v.active===false) return;
+    (v.trips||[]).filter(Boolean).forEach(t=>{
+      if(t.status==='점검요망' && !t.maintenanceResolved) maint++;
+      if(t.lateEntryConflict && t.submittedAt && new Date(t.submittedAt).getTime() >= lateSince) late++;
+    });
+    gaps += odoGapsForPlate(p).length;
+  });
+  const monitored = personalUseTrips().filter(isMonitoredTrip);
+  const receipt = new Set([...monitored.filter(isReceiptProblem), ...monitored.filter(isFuelUnderpaid)]).size;
+  const accident = accidentListSorted().filter(a=>(a.status||'접수')!=='완료').length;
+  return {maint, accident, receipt, gaps, late};
+}
+function renderPendingSummary(){
+  const el = document.getElementById('pendingSummary');
+  if(!el) return;
+  const c = pendingSummaryCounts();
+  const items = [
+    {k:'maint',    label:'점검요청 미처리', n:c.maint,    target:'vehicleAreaWrap'},
+    {k:'accident', label:'사고 미완료',     n:c.accident, target:'accidentHistoryWrap'},
+    {k:'receipt',  label:'개인사용 증빙·주유비 확인', n:c.receipt, target:'personalUseWrap'},
+    {k:'gaps',     label:'주행거리 공백',   n:c.gaps,     target:'vehicleAreaWrap'},
+    {k:'late',     label:'늦은입력 겹침(30일)', n:c.late, target:'vehicleAreaWrap'}
+  ];
+  const total = items.reduce((s,i)=>s+i.n,0);
+  el.innerHTML = `<div class="pending-head">처리 대기 <b style="color:${total?'var(--bad)':'var(--good)'};">${total}건</b>${total?'':' — 모두 처리됨'}</div>
+    <div class="pending-grid">${items.map(i=>`<button type="button" class="pending-item${i.n?' has':''}" onclick="scrollToPendingTarget('${i.target}')" ${i.n?'':'disabled'}>
+      <span class="pending-label">${i.label}</span><span class="pending-n">${i.n}</span></button>`).join('')}</div>`;
+}
+function scrollToPendingTarget(id){
+  const wrap = document.getElementById(id);
+  if(!wrap) return;
+  if(wrap.classList.contains('collapsed')){
+    const h2 = wrap.previousElementSibling?.querySelector('.collapsible-title');
+    if(h2) toggleSection(h2);
+  }
+  (wrap.closest('.dash-card')||wrap).scrollIntoView({behavior:'smooth', block:'start'});
+}
+
 function vcardHtml(p){
   const{v,trips,totalDist,totalFuel,issues,lastDate,idleDays}=vehicleStatsOf(p,true);
   const avgRate=ytdAvgUtilRate(p);
@@ -5245,6 +5429,8 @@ function vcardHtml(p){
     badgeParts.push(`<span class="badge" style="background:#E5E7EB;color:#9CA3AF;">운용중지</span>`);
   }else{
     if(issues>0) badgeParts.push(`<span class="badge badge-bad">점검필요 ${issues}건</span>`);
+    const gapCnt=odoGapsForPlate(p).length;
+    if(gapCnt>0) badgeParts.push(`<span class="badge" style="background:#FEF3C7;color:#92400E;">거리공백 ${gapCnt}건</span>`);
     if(isIdle){
       const idleLabel = idleDays===null ? '운행기록 없음' : `⚠ 미운행 ${idleDays}일째`;
       badgeParts.push(`<span class="badge" style="background:var(--bad-soft);color:var(--bad);">${idleLabel}</span>`);
@@ -5619,7 +5805,9 @@ function openVehicle(plate){
     </div>
     ${displayList.length===0?`<div class="empty-state" style="padding:24px;">해당 조건의 운행기록이 없습니다.</div>`:''}
     ${remaining>0?`<div class="trip-loadmore-wrap"><button class="trip-loadmore-btn" onclick="loadMoreTrips('${plate}')">이전 기록 더보기 (${remaining}건 남음)</button></div>`:''}`;
-    })()}`;
+    })()}
+    ${odoGapListHtml(plate)}
+    ${(!viewerMode && currentRole==='admin') ? changeHistoryHtml(plate) : ''}`;
   // 이미 열려있는 모달을 재렌더링(삭제/필터변경/더보기 등)하는 경우 lockBodyScroll을 중복 호출하지 않도록 방지
   // (중복 호출 시 unlockBodyScroll과 호출 횟수가 어긋나 팝업을 닫아도 배경 스크롤이 계속 잠기는 버그가 있었음)
   const _alreadyShown = document.getElementById('modalOverlay').classList.contains('show');
@@ -5991,8 +6179,7 @@ function autoFormatAdminDate(inp){
   if(raw.length > 6) formatted = raw.slice(0,4)+'-'+raw.slice(4,6)+'-'+raw.slice(6);
   inp.value = formatted;
   if(formatted.length === 10){
-    const d = new Date(formatted+'T00:00:00');
-    inp.style.borderColor = isNaN(d) ? 'var(--bad)' : 'var(--good)';
+    inp.style.borderColor = tripDateError(formatted) ? 'var(--bad)' : 'var(--good)';
   } else {
     inp.style.borderColor = 'var(--line)';
   }
@@ -6118,12 +6305,12 @@ async function saveTripEdits(plate){
       showAdminToast(`저장 실패: 주유비가 ${fuel.toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`,'bad');
       return;
     }
-    if(fromVal.length!==10 || isNaN(new Date(fromVal+'T00:00:00'))){
-      showAdminToast(`저장 실패: 시작일자를 YYYY-MM-DD 형식으로 올바르게 입력해 주세요. (입력값: ${fromVal||'(비어있음)'})`,'bad');
+    if(tripDateError(fromVal)){
+      showAdminToast(`저장 실패: 시작일자 — ${tripDateError(fromVal)} (입력값: ${fromVal||'(비어있음)'})`,'bad');
       return;
     }
-    if(toVal.length!==10 || isNaN(new Date(toVal+'T00:00:00'))){
-      showAdminToast(`저장 실패: 종료일자를 YYYY-MM-DD 형식으로 올바르게 입력해 주세요. (입력값: ${toVal||'(비어있음)'})`,'bad');
+    if(tripDateError(toVal)){
+      showAdminToast(`저장 실패: 종료일자 — ${tripDateError(toVal)} (입력값: ${toVal||'(비어있음)'})`,'bad');
       return;
     }
     if(toVal<fromVal){
@@ -6150,6 +6337,7 @@ async function saveTripEdits(plate){
     if(!key) return;
     const target=(v.trips||[]).find(x=>`${x.isoDate}|${x.startOdo}|${x.endOdo}|${x.submitter||''}`===key);
     if(!target) return;
+    const beforeSnap = snapshotTrip(target);
     tr.querySelectorAll('.edit-inp').forEach(inp=>{
       const f=inp.dataset.f;
       if(!f) return;
@@ -6194,10 +6382,11 @@ async function saveTripEdits(plate){
     }
     // 관리자 수정 시각 기록 (최초 제출시각 submittedAt과 별개, 마지막 수정시각만 유지)
     target.lastEditedAt = new Date().toISOString();
+    appendEditLog(target, beforeSnap, '관리자');
   });
-  const saved = await saveVehicleToStorage(plate, !vr.exists);
+  const saved = await saveVehicleToStorage(plate, !vr.exists, true);
   if(!saved){
-    showAdminToast('⚠ 저장 실패: 서버에 반영되지 않았습니다. 인터넷 연결을 확인한 후 다시 "저장"을 눌러주세요.','bad');
+    showAdminToast(_lastSaveConflict ? '⚠ 그 사이 다른 사용자가 이 차량 기록을 저장해 반영하지 않았습니다. 다시 "저장"을 누르면 최신 기록에 합쳐 저장됩니다.' : '⚠ 저장 실패: 서버에 반영되지 않았습니다. 인터넷 연결을 확인한 후 다시 "저장"을 눌러주세요.','bad');
     return; // 수정모드 유지 → 입력값 보존, 재시도 가능
   }
   renderAll();
@@ -6273,6 +6462,71 @@ function closeDoneModal(){
   document.getElementById('doneOverlay').style.display = 'none';
   unlockBodyScroll();
 }
+// ── 운행기록 변경 이력 ─────────────────────────────────────────────
+// 관리자 수정·내 제출기록 수정 시 바뀐 항목의 이전값/변경값을 기록마다 editLog(최근 20건)로 누적하고,
+// 관리자 삭제 건은 차량 노드의 deletedTrips에 원본 그대로 보관한다(신규 필드 추가만, 기존 필드 변경 없음).
+const EDIT_LOG_FIELDS = ['isoDate','dateTo','startOdo','endOdo','distance','dest','user','fuel','status','note','isPersonal','isCommute','commuteDir','isDaeCha','daeChaPate'];
+const EDIT_LOG_LABELS = {isoDate:'시작일',dateTo:'종료일',startOdo:'시작거리',endOdo:'종료거리',distance:'주행거리',dest:'행선지',user:'운행자',fuel:'주유비',status:'상태',note:'비고',isPersonal:'개인사용',isCommute:'출퇴근',commuteDir:'출퇴근구분',isDaeCha:'대차',daeChaPate:'대차번호'};
+function snapshotTrip(t){
+  const o = {};
+  EDIT_LOG_FIELDS.forEach(f=>{ o[f] = (t[f]===undefined) ? null : t[f]; });
+  return o;
+}
+// before 스냅샷과 현재 값을 비교해 바뀐 항목이 있으면 editLog에 1건 추가. 반환: 변경 여부
+function appendEditLog(t, before, by){
+  const changes = {};
+  EDIT_LOG_FIELDS.forEach(f=>{
+    const a = before[f], b = (t[f]===undefined) ? null : t[f];
+    // 과거 기록(종료일 필드 없음)에 종료일=시작일이 채워지는 것은 실제 변경이 아니므로 제외
+    if(f==='dateTo' && (a==null || a==='') && b===t.isoDate) return;
+    if(String(a ?? '') !== String(b ?? '')) changes[f] = {from: a ?? '', to: b ?? ''};
+  });
+  if(!Object.keys(changes).length) return false;
+  const log = Array.isArray(t.editLog) ? t.editLog.filter(Boolean).slice(-19) : [];
+  log.push({at: new Date().toISOString(), by, changes});
+  t.editLog = log;
+  return true;
+}
+// 삭제된 운행기록 보관 — 하위 키 단위 PATCH라 다른 보관 건을 덮어쓰지 않는다
+async function archiveDeletedTrip(plate, trip){
+  if(!trip) return;
+  const key = `${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+  const rec = {...trip, deletedAt: new Date().toISOString(), deletedBy: currentRole==='admin' ? '관리자' : '사용자'};
+  try{
+    await fbPatch(`${vehicleNodePath(plate)}/deletedTrips`, {[key]: rec});
+    const v = data.vehicles[plate];
+    if(v){ v.deletedTrips = {...(v.deletedTrips||{}), [key]: rec}; }
+  }catch(e){
+    console.error('[KSA 차량관리] 삭제 기록 보관 실패:', e.message);
+  }
+}
+function changeHistoryHtml(plate){
+  const v = data.vehicles[plate];
+  if(!v) return '';
+  const items = [];
+  (v.trips||[]).filter(Boolean).forEach(t=>{
+    (Array.isArray(t.editLog) ? t.editLog : []).filter(Boolean).forEach(l=>{
+      const diff = Object.keys(l.changes||{}).map(f=>{
+        const c = l.changes[f]||{};
+        const fmt = x => (x===true?'예':x===false?'아니오':(x===''||x==null?'(없음)':String(x)));
+        return `${EDIT_LOG_LABELS[f]||f}: ${fmt(c.from)} → ${fmt(c.to)}`;
+      }).join(' / ');
+      items.push({at:l.at||'', kind:'수정', by:l.by||'', label:`${t.date||t.isoDate||''} ${t.user||''}`, diff});
+    });
+  });
+  Object.values(v.deletedTrips||{}).filter(Boolean).forEach(d=>{
+    items.push({at:d.deletedAt||'', kind:'삭제', by:d.deletedBy||'', label:`${d.date||d.isoDate||''} ${d.user||''}`,
+      diff:`${d.startOdo??''}→${d.endOdo??''}km${d.dest?' · '+d.dest:''}${d.fuel?' · 주유 '+Number(d.fuel).toLocaleString()+'원':''}`});
+  });
+  if(!items.length) return '';
+  items.sort((a,b)=>String(b.at).localeCompare(String(a.at)));
+  const rows = items.slice(0,50).map(it=>{
+    const when = it.at ? new Date(it.at).toLocaleString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+    return `<div class="chg-item"><span class="chg-kind ${it.kind==='삭제'?'chg-del':''}">${it.kind}</span><b>${escapeHtml(it.label)}</b> <span class="muted">· ${escapeHtml(it.by)} · ${escapeHtml(when)}</span><div class="chg-diff">${escapeHtml(it.diff)}</div></div>`;
+  }).join('');
+  return `<details class="chg-history"><summary>변경 이력 (${items.length}건${items.length>50?', 최근 50건 표시':''})</summary>${rows}</details>`;
+}
+
 async function deleteTrip(plate,idx){
   const trips=data.vehicles[plate].trips.slice().sort(tripChronoCompare);
   const target=trips[idx];
@@ -6285,14 +6539,15 @@ async function deleteTrip(plate,idx){
   // 해당 차량만 최신 재조회 후 키 기반 삭제 (동시성 안전)
   const vr = await refreshVehicleOrWarn(plate);
   if(!vr || !data.vehicles[plate]) return;
-  let removed=false;
+  let removed=false, removedTrip=null;
   data.vehicles[plate].trips=data.vehicles[plate].trips.filter(t=>{
     if(removed) return true;
-    if(`${t.isoDate}|${t.startOdo}|${t.endOdo}|${t.submitter||''}`===key){removed=true;return false;}
+    if(t && `${t.isoDate}|${t.startOdo}|${t.endOdo}|${t.submitter||''}`===key){removed=true;removedTrip=t;return false;}
     return true;
   });
-  const saved = await saveVehicleToStorage(plate, !vr.exists);
-  if(!saved) showAdminToast('⚠ 저장 실패: 삭제가 서버에 반영되지 않았습니다.','bad');
+  const saved = await saveVehicleToStorage(plate, !vr.exists, true);
+  if(!saved) showAdminToast(_lastSaveConflict ? '⚠ 그 사이 다른 사용자가 이 차량 기록을 저장해 삭제를 반영하지 않았습니다. 다시 삭제해 주세요.' : '⚠ 저장 실패: 삭제가 서버에 반영되지 않았습니다.','bad');
+  else if(removedTrip) await archiveDeletedTrip(plate, removedTrip);
   renderAll();openVehicle(plate);
 }
 
@@ -7471,8 +7726,7 @@ function autoFormatDate(inp, id){
   inp.value = formatted;
   // 유효성 표시
   if(formatted.length === 10){
-    const d = new Date(formatted+'T00:00:00');
-    inp.style.borderColor = isNaN(d) ? 'var(--bad)' : 'var(--good)';
+    inp.style.borderColor = tripDateError(formatted) ? 'var(--bad)' : 'var(--good)';
   } else {
     inp.style.borderColor = 'var(--line)';
   }
@@ -7614,7 +7868,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
               oninput="autoFormatDate(this,'${id}')"
               style="border:1.5px solid var(--good);border-radius:12px;padding:12px 32px 12px 10px;font-size:14px;background:#fff;width:100%;text-align:center;font-family:'Paperlogy',sans-serif;display:block;box-sizing:border-box;">
             <label style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;line-height:1;">
-              <input type="date" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;" onchange="syncFromPicker(this,'${id}','from')">
+              <input type="date" max="${todayLocalISO()}" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;" onchange="syncFromPicker(this,'${id}','from')">
               📅
             </label>
           </div>
@@ -7625,7 +7879,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
               oninput="autoFormatDate(this,'${id}')"
               style="border:1.5px solid var(--good);border-radius:12px;padding:12px 32px 12px 10px;font-size:14px;background:#fff;width:100%;text-align:center;font-family:'Paperlogy',sans-serif;display:block;box-sizing:border-box;">
             <label style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;line-height:1;">
-              <input type="date" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;" onchange="syncFromPicker(this,'${id}','to')">
+              <input type="date" max="${todayLocalISO()}" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;" onchange="syncFromPicker(this,'${id}','to')">
               📅
             </label>
           </div>
@@ -7825,6 +8079,21 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
     if(lastUserVal){
       const userInp = card.querySelector('.tr-user');
       if(userInp && !userInp.value){ userInp.value = lastUserVal; userInp.dataset.autoFilled='true'; }
+    }
+  }
+  // 첫 행은 이 기기에서 마지막으로 제출한 운행자 이름을 미리 채움(본인이 아니면 수정하도록 안내 표시)
+  else {
+    const remembered = getRememberedDriverName();
+    const userInp = card.querySelector('.tr-user');
+    if(remembered && userInp && !userInp.value){
+      userInp.value = remembered;
+      userInp.dataset.autoFilled = 'true';
+      const hint = document.createElement('div');
+      hint.className = 'tr-user-remembered-hint';
+      hint.style.cssText = 'font-size:11px;color:var(--muted);margin-top:4px;word-break:keep-all;overflow-wrap:break-word;';
+      hint.textContent = '이 기기에서 마지막으로 입력한 이름입니다 · 실제 운행자가 다르면 수정해 주세요';
+      userInp.insertAdjacentElement('afterend', hint);
+      userInp.addEventListener('input', ()=>hint.remove(), {once:true});
     }
   }
   // 운행기간 기본값(오늘~오늘)에 대한 업무일 기준 안내문구를 사용자가 날짜를 직접 건드리지 않아도
@@ -8277,6 +8546,7 @@ function applyDaeChaAuxRestrictions(id){
   const commuteBtns = card.querySelectorAll('.commute-btn');
   const userInp = card.querySelector('.tr-user');
   if(active){
+    card.querySelector('.tr-user-remembered-hint')?.remove();
     if(personalChk && personalChk.checked){ personalChk.checked = false; togglePersonalUse(personalChk, id); }
     card.querySelectorAll('.commute-btn.active-commute').forEach(b=>setCommuteDirection(b, id));
     if(fuelChk && fuelChk.checked){ fuelChk.checked = false; toggleFuelField(fuelChk, id); }
@@ -8713,6 +8983,17 @@ function checkFuelVsDistance(id){
 function sanitizeNameInput(str){
   return (str||'').replace(/\s+/g, '');
 }
+// 이 기기에서 마지막으로 제출한 운행자 이름 기억(기기 로컬에만 저장, 서버 전송 없음) —
+// 매번 재입력 부담과 이름 오타(운행자별 집계 분리)를 줄이기 위함. 대차(롯데렌탈) 자동입력명은 저장하지 않음.
+const LAST_DRIVER_NAME_KEY = 'ksaLastDriverName';
+function getRememberedDriverName(){
+  try{ return sanitizeNameInput(localStorage.getItem(LAST_DRIVER_NAME_KEY)||''); }catch(e){ return ''; }
+}
+function rememberDriverName(rows){
+  const r = (rows||[]).find(x=>x && x.user && !x.isDaeCha);
+  if(!r) return;
+  try{ localStorage.setItem(LAST_DRIVER_NAME_KEY, r.user); }catch(e){}
+}
 
 function collectRows(){
   const cards = document.querySelectorAll('.trip-card');
@@ -8768,11 +9049,36 @@ function collectRows(){
   });
 }
 
-function showUserFormErr(msg){
+// 입력 오류 표시 — field(문제 입력칸)를 넘기면 해당 칸을 빨간 테두리로 표시하고 그 칸 아래에 사유를
+// 함께 띄운 뒤 그 위치로 스크롤한다(상단 문구만으로는 모바일에서 어느 칸인지 찾기 어려웠음).
+// 표시는 해당 칸을 다시 입력/선택하면 사라진다. field가 없으면 기존처럼 상단 문구만 15초간 표시.
+function clearUserFieldErrs(){
+  document.querySelectorAll('#tripRows .field-err').forEach(f=>f.classList.remove('field-err'));
+  document.querySelectorAll('#tripRows .field-err-msg').forEach(m=>m.remove());
+}
+function showUserFormErr(msg, field){
   const el = document.getElementById('userFormErr');
+  clearUserFieldErrs();
+  clearTimeout(el._hideTimer);
   el.textContent = msg; el.style.display = 'block';
-  el.scrollIntoView({behavior:'smooth', block:'nearest'});
-  setTimeout(()=>el.style.display='none', 15000);
+  if(field){
+    field.classList.add('field-err');
+    const wrap = field.closest('.form-field, .check-field') || field.parentElement;
+    const m = document.createElement('div');
+    m.className = 'field-err-msg';
+    m.textContent = msg.replace(/^\d+번 운행기록:\s*/, '');
+    wrap.appendChild(m);
+    const evs = field.matches('input,textarea,select') ? ['input','change'] : ['click'];
+    const clear = ()=>{
+      field.classList.remove('field-err'); m.remove(); el.style.display = 'none';
+      evs.forEach(ev=>field.removeEventListener(ev, clear));
+    };
+    evs.forEach(ev=>field.addEventListener(ev, clear));
+    field.scrollIntoView({behavior:'smooth', block:'center'});
+  } else {
+    el.scrollIntoView({behavior:'smooth', block:'nearest'});
+    el._hideTimer = setTimeout(()=>el.style.display='none', 15000);
+  }
 }
 
 // 제출 확인 팝업
@@ -8881,7 +9187,9 @@ async function confirmAndSubmit(){
       closeSubmitConfirm();
     }else{
       setSubmitConfirmBusy(false);
-      showSubmitConfirmErr('⚠ 저장에 실패했습니다. 통신 상태를 확인한 후 "제출 확인"을 다시 눌러주세요.');
+      showSubmitConfirmErr(_lastSaveConflict
+        ? '⚠ 같은 차량에 다른 사람의 제출이 계속 겹쳐 저장하지 못했습니다. 잠시 후 "제출 확인"을 다시 눌러주세요(입력 내용은 그대로 유지됩니다).'
+        : '⚠ 저장에 실패했습니다. 통신 상태를 확인한 후 "제출 확인"을 다시 눌러주세요.');
     }
   }catch(e){
     setSubmitConfirmBusy(false);
@@ -8890,6 +9198,8 @@ async function confirmAndSubmit(){
 }
 
 async function submitDirectInput(){
+  clearUserFieldErrs();
+  { const fe=document.getElementById('userFormErr'); if(fe){ clearTimeout(fe._hideTimer); fe.style.display='none'; } }
   const plate = document.getElementById('userPlateSelect').value;
   if(!plate){ showUserFormErr('차량번호를 선택해 주세요.'); return; }
 
@@ -8907,19 +9217,32 @@ async function submitDirectInput(){
   // 유효성 검사
   for(let i=0; i<rows.length; i++){
     const r = rows[i];
-    if(!r.dateFrom){ showUserFormErr(`${i+1}번 운행기록: 운행기간 시작일을 입력해 주세요.`); return; }
-    if(!r.user){ showUserFormErr(`${i+1}번 운행기록: 운행자 이름을 입력해 주세요.`); return; }
+    // 오류 시 해당 입력칸을 표시하기 위한 조회 헬퍼(숨겨진 칸이면 fallback 사용)
+    const card = document.getElementById(r.id);
+    const fld = (sel, fallbackSel)=>{
+      const el = card?.querySelector(sel);
+      if(el && el.offsetParent!==null) return el;
+      return fallbackSel ? (card?.querySelector(fallbackSel)||null) : (el||null);
+    };
+    if(!r.dateFrom){ showUserFormErr(`${i+1}번 운행기록: 운행기간 시작일을 입력해 주세요.`, fld('.tr-date-from')); return; }
+    // 날짜 형식·실재 여부·미래 날짜 검증(기존엔 비어있는지만 확인해 "2026-10" 같은 미완성 값이 그대로 저장될 수 있었음)
+    const fromErr = tripDateError(r.dateFrom);
+    if(fromErr){ showUserFormErr(`${i+1}번 운행기록: 시작일 — ${fromErr}`, fld('.tr-date-from')); return; }
+    const toErr = (r.dateTo && r.dateTo!==r.dateFrom) ? tripDateError(r.dateTo) : '';
+    if(toErr){ showUserFormErr(`${i+1}번 운행기록: 종료일 — ${toErr}`, fld('.tr-date-to')); return; }
+    if(r.dateTo && r.dateTo < r.dateFrom){ showUserFormErr(`${i+1}번 운행기록: 종료일이 시작일보다 빠릅니다.`, fld('.tr-date-to')); return; }
+    if(!r.user){ showUserFormErr(`${i+1}번 운행기록: 운행자 이름을 입력해 주세요.`, fld('.tr-user')); return; }
     // 대차인수만 하고(반납 아님) 그날 운행하지 않은 건은 종료거리=시작거리(주행 0km)로 자동 처리되어 제출 가능
     const isDaeChaPickupOnly = r.isDaeChaPickup && !r.isDaeChaReturn;
-    if(!r.endOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리를 입력해 주세요.`); return; }
-    if(r.endOdo <= r.startOdo && !(isDaeChaPickupOnly && r.endOdo === r.startOdo)){ showUserFormErr(`${i+1}번 운행기록: 종료거리가 시작거리보다 작습니다.`); return; }
-    if(!r.dest){ showUserFormErr(`${i+1}번 운행기록: 행선지를 입력해 주세요.`); return; }
-    if(r.isDaeCha && !r.daeChaPate){ showUserFormErr(`${i+1}번 운행기록: 대차인수/대차반납 체크 시 대차 차량번호를 반드시 입력해 주세요.`); return; }
-    if(r.isPersonal && !r.fuel){ showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유비를 입력해 주세요.`); return; }
+    if(!r.endOdo){ showUserFormErr(`${i+1}번 운행기록: 종료거리를 입력해 주세요.`, fld('.tr-end')); return; }
+    if(r.endOdo <= r.startOdo && !(isDaeChaPickupOnly && r.endOdo === r.startOdo)){ showUserFormErr(`${i+1}번 운행기록: 종료거리가 시작거리보다 작습니다.`, fld('.tr-end')); return; }
+    if(!r.dest){ showUserFormErr(`${i+1}번 운행기록: 행선지를 입력해 주세요.`, fld('.tr-dest')); return; }
+    if(r.isDaeCha && !r.daeChaPate){ showUserFormErr(`${i+1}번 운행기록: 대차인수/대차반납 체크 시 대차 차량번호를 반드시 입력해 주세요.`, r.isDaeChaPickup ? fld('.tr-daecha-plate-pickup') : fld('.tr-daecha-plate-return')); return; }
+    if(r.isPersonal && !r.fuel){ showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유비를 입력해 주세요.`, fld('.tr-fuel', '.tr-fuel-chk')); return; }
     // 개인사용(주말·공휴일) 체크 시, 실제 운행기간이 주말·공휴일(및 그 전후 1일)에 해당하는지 검증.
     // 해당하지 않으면(예: 평일 하루만 선택) 운행기간 확인 알람과 함께 제출을 차단한다.
     if(r.isPersonal && !isValidPersonalWeekendRange(r.dateFrom, r.dateTo)){
-      showUserFormErr(`${i+1}번 운행기록: 선택하신 운행기간(${r.dateFrom}${r.dateTo&&r.dateTo!==r.dateFrom?' ~ '+r.dateTo:''})에 실제 주말·공휴일이 포함되어 있지 않습니다. 개인사용(주말·공휴일)은 실제 주말·공휴일 및 그 전후 1일까지만 인정됩니다. 운행기간을 확인해 주세요.`);
+      showUserFormErr(`${i+1}번 운행기록: 선택하신 운행기간(${r.dateFrom}${r.dateTo&&r.dateTo!==r.dateFrom?' ~ '+r.dateTo:''})에 실제 주말·공휴일이 포함되어 있지 않습니다. 개인사용(주말·공휴일)은 실제 주말·공휴일 및 그 전후 1일까지만 인정됩니다. 운행기간을 확인해 주세요.`, fld('.tr-date-from'));
       return;
     }
     // 개인사용 체크 시 영수증 첨부 3버튼(촬영/앨범/나중에 첨부) 중 하나도 선택하지 않은 채
@@ -8927,13 +9250,41 @@ async function submitDirectInput(){
     if(r.isPersonal){
       const fileAttached = window._receiptFileMap && window._receiptFileMap[r.id];
       if(!r.receiptDeferred && !fileAttached){
-        showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유영수증 "촬영", "앨범에서 선택", "나중에 첨부" 중 하나를 반드시 선택해 주세요.`);
+        showUserFormErr(`${i+1}번 운행기록: 개인사용 시 주유영수증 "촬영", "앨범에서 선택", "나중에 첨부" 중 하나를 반드시 선택해 주세요.`, fld(`#receiptButtons-${r.id}`, '.tr-personal-chk'));
         return;
       }
     }
-    if(r.status==='점검요망' && !r.note){ showUserFormErr(`${i+1}번 운행기록: 점검요청 선택 시 비고(사유)를 입력해 주세요.`); return; }
-    if(r.distance >= MAX_TRIP_DISTANCE_KM){ showUserFormErr(`${i+1}번 운행기록: 주행거리가 ${r.distance.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`); return; }
-    if(r.fuel >= MAX_FUEL_AMOUNT){ showUserFormErr(`${i+1}번 운행기록: 주유비가 ${Number(r.fuel).toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`); return; }
+    if(r.status==='점검요망' && !r.note){ showUserFormErr(`${i+1}번 운행기록: 점검요청 선택 시 비고(사유)를 입력해 주세요.`, fld('.tr-note')); return; }
+    if(r.distance >= MAX_TRIP_DISTANCE_KM){ showUserFormErr(`${i+1}번 운행기록: 주행거리가 ${r.distance.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`, fld('.tr-end')); return; }
+    if(r.fuel >= MAX_FUEL_AMOUNT){ showUserFormErr(`${i+1}번 운행기록: 주유비가 ${Number(r.fuel).toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`, fld('.tr-fuel', '.tr-fuel-chk')); return; }
+  }
+
+  // 시작거리 공백 확인 — 시작거리가 직전 운행(저장된 마지막 기록 또는 바로 앞 입력 행)의 종료거리보다 크면
+  // 중간 운행이 입력되지 않았을 가능성이 있으므로 한 번 확인한다(제출 차단은 아님).
+  // 대차 운행 건, 직전이 미반납 대차인수 건, 마지막 기록보다 이전 날짜의 늦은입력 건은 비교하지 않는다.
+  {
+    const savedTrips = (data.vehicles[plate]?.trips||[]).filter(Boolean).slice().sort(tripChronoCompare);
+    const lastSaved = savedTrips[savedTrips.length-1] || null;
+    const gapRows = [];
+    rows.forEach((r,i)=>{
+      if(r.isDaeCha) return;
+      let expected = null;
+      if(i===0){
+        if(lastSaved && !(lastSaved.isDaeChaPickup && !lastSaved.isDaeChaReturn) && (lastSaved.isoDate||'') <= r.dateFrom) expected = Number(lastSaved.endOdo)||null;
+      } else {
+        const p = rows[i-1];
+        if(!(p.isDaeChaPickup && !p.isDaeChaReturn)) expected = Number(p.endOdo)||null;
+      }
+      if(expected && r.startOdo > expected) gapRows.push({i, expected, start:r.startOdo});
+    });
+    if(gapRows.length){
+      const msg = gapRows.map(g=>`운행 #${g.i+1}: 이전 종료거리 ${g.expected.toLocaleString()}km → 입력한 시작거리 ${g.start.toLocaleString()}km (${(g.start-g.expected).toLocaleString()}km 차이)`).join('\n');
+      if(!await appConfirm(`시작거리가 이전 종료거리보다 큽니다.\n\n${msg}\n\n중간에 입력하지 않은 운행이 있다면, 그 운행을 먼저 추가해 주세요.\n입력한 시작거리가 맞으면 계속 진행하세요.`, {title:'시작거리 확인', okText:'계속 진행', cancelText:'시작거리 수정'})){
+        const c = document.getElementById(rows[gapRows[0].i].id);
+        c?.querySelector('.tr-start')?.scrollIntoView({behavior:'smooth', block:'center'});
+        return;
+      }
+    }
   }
 
   // 개인사용 건: 주행거리 대비 주유비 과소 입력 경고 (네이버지도 방식, 4등급 연비 휘발유 기준)
@@ -9088,37 +9439,19 @@ async function doSubmit(submitter, plate, rows){
   for(const y of new Set(rows.map(r=>tripYear({isoDate:r.dateFrom})))){
     if(y>LEGACY_DATA_MAX_YEAR && !_loadedYearNodes.has(y)) await ensureYearLoaded(y);
   }
-  // 전체 DB가 아닌 해당 차량만 최신화(제출 속도 개선). 읽기 실패 시 예외로 제출 중단 → 낡은 데이터로 덮어쓰지 않음
-  const vehRefresh = await refreshVehicleFromStorage(plate);
-  if(!data.vehicles[plate]) data.vehicles[plate]={model:REGISTRY_MAP[plate]?.model||'',branch:REGISTRY_MAP[plate]?.branch||'미배정',originalBranch:REGISTRY_MAP[plate]?.branch||'미배정',active:true,trips:[]};
-  if(!Array.isArray(data.vehicles[plate].trips)) data.vehicles[plate].trips=[];
-  const branchAtTime = data.vehicles[plate].branch;
-
-  const existingKeys = new Set((data.vehicles[plate].trips||[]).map(t=>`${t.isoDate}|${t.startOdo}|${t.endOdo}`));
-  let added=0, skipped=0;
-  const addedDates=[];
-  const lateAdjustments=[]; // 늦은입력으로 인해 다른 기록이 자동 보정된 건 (관리자 이메일 알림용)
-  const lateConflicts=[];   // 겹침은 있으나 자동 보정 불가(수동확인 필요)한 건
+  // [1단계] 첨부 사진(영수증·대차 주유게이지) 업로드 — 서버의 차량 기록을 읽기 "전에" 먼저 끝낸다.
+  // 기존엔 읽기 → 업로드(수 초~수십 초) → 저장 순서라 그 사이 같은 차량에 다른 사람이 제출하면
+  // 그 기록이 덮어써져 사라질 수 있었음. 읽기~저장 간격을 최소화하고, 아래 2단계에서 조건부 저장으로 이중 차단한다.
+  const preKeys = new Set(((data.vehicles[plate]||{}).trips||[]).filter(Boolean).map(t=>`${t.isoDate}|${t.startOdo}|${t.endOdo}`));
   const receiptUploadFailures=[]; // 개인사용 영수증을 첨부했으나(나중에첨부 아님) 업로드 자체가 실패한 건
                                    // — 제출은 그대로 진행되지만 사용자에게 반드시 알려야 "증빙상태 대기중"으로
                                    // 표시되는 이유를 알고 재첨부(내 제출기록 수정)할 수 있음
-
+  const uploaded = {}; // row.id → 업로드 결과(경로)
   for(const r of rows){
     const isoDate = r.dateFrom;
-    const dateTo = r.dateTo || r.dateFrom;
-    // 날짜 범위 내 모든 날짜 생성
-    const allDates = [];
-    let d = new Date(r.dateFrom + 'T00:00:00');
-    const endD = new Date(dateTo + 'T00:00:00');
-    while(d <= endD){ allDates.push(iso(d)); d = new Date(d.getTime()+86400000); }
-    const dateDisplay = formatTripDateDisplay(r.dateFrom, dateTo);
-    const key = `${isoDate}|${r.startOdo}|${r.endOdo}`;
-    if(existingKeys.has(key)){ skipped++; continue; }
-    existingKeys.add(key);
-    // 이 기록의 시작거리가 이미 저장된 다른 기록의 시작거리와 겹치는지 확인(늦은입력 케이스).
-    // 겹치면 대상 기록을 이 함수 내부에서 직접 보정하고(startOdo/distance 갱신), 결과를 반환한다.
-    const resolution = resolveLateEntryInsert(plate, r);
-
+    const dateDisplay = formatTripDateDisplay(r.dateFrom, r.dateTo || r.dateFrom);
+    // 이미 저장된 동일 기록(재제출)은 아래에서 건너뛰므로 업로드도 생략
+    if(preKeys.has(`${isoDate}|${r.startOdo}|${r.endOdo}`)) continue;
     // 개인사용 영수증: 지금 첨부를 선택한 건은 여기서 압축+업로드를 수행.
     // OCR(금액/일자) 판정 결과는 이미 첨부 시점에 계산되어 r에 담겨 있음(collectRows() 참고).
     // 업로드 실패 시에도 전체 제출은 막지 않고 "나중에 첨부"와 동일하게 receiptPath=null로 저장.
@@ -9182,50 +9515,98 @@ async function doSubmit(submitter, plate, rows){
         daeChaReturnFuelGaugePath = r.daeChaReturnFuelGauge;
       }
     }
-
-    const newTrip = {
-      date: dateDisplay, isoDate, dateTo, usageDates: allDates,
-      startOdo:r.startOdo, endOdo:r.endOdo, distance:r.distance,
-      user:r.user, dest:r.dest, fuel:r.fuel, status:r.status, note:r.note,
-      submitter:r.user, branchAtTime, imgKey:null, isPersonal:r.isPersonal||false,
-      isDaeCha:r.isDaeCha||false, daeChaPate:r.daeChaPate||'',
-      isDaeChaPickup:r.isDaeChaPickup||false, isDaeChaReturn:r.isDaeChaReturn||false,
-      daeChaModel:r.daeChaModel||'', daeChaPickupHipass:r.daeChaPickupHipass||false,
-      daeChaPickupFuelGauge:daeChaPickupFuelGaugePath, daeChaPickupFuelGaugeNote:r.daeChaPickupFuelGaugeNote||'',
-      daeChaPickupCondition:r.daeChaPickupCondition||'',
-      daeChaReturnHipass:r.daeChaReturnHipass||false, daeChaReturnFuelGauge:daeChaReturnFuelGaugePath,
-      daeChaReturnFuelGaugeNote:r.daeChaReturnFuelGaugeNote||'',
-      daeChaReturnCondition:r.daeChaReturnCondition||'',
-      isCommute:r.isCommute||false, commuteDir:r.commuteDir||'',
-      submittedAt: new Date().toISOString(),
-      editToken: getDeviceEditToken(), // 이 트립을 제출한 기기 식별용(본인수정화면 접근 제어에 사용)
-      // 개인사용 주유영수증 OCR 검증 필드 (RECEIPT_OCR_DESIGN.md 2항) — 개인사용이 아니면 전부 null
-      receiptPath,
-      ...(receiptPaths ? { receiptPaths } : {}),
-      receiptOcrAmount: r.isPersonal ? (r.receiptOcrAmount ?? null) : null,
-      receiptOcrMatched: r.isPersonal ? (r.receiptOcrMatched ?? null) : null,
-      receiptOcrDate: r.isPersonal ? (r.receiptOcrDate ?? null) : null,
-      receiptDateValid: r.isPersonal ? (r.receiptDateValid ?? null) : null,
-      receiptTypeValid: r.isPersonal ? (r.receiptTypeValid ?? null) : null,
-      receiptUploadedAt
-    };
-    // 관리자가 "왜 확인필요인지" 배지 툴팁만으로 바로 판단할 수 있도록, 겹친 상대 기록의
-    // 식별정보(일자·운행자·시작~종료거리)를 함께 저장해 둔다(기존엔 겹침 여부만 저장해
-    // 상대 기록을 직접 찾아야 했음).
-    if(resolution && resolution.conflict){
-      newTrip.lateEntryConflict = true;
-      newTrip.lateEntryConflictWith = {
-        isoDate: resolution.targetTrip.isoDate||'', submitter: resolution.targetTrip.submitter||resolution.targetTrip.user||'',
-        startOdo: resolution.targetTrip.startOdo, endOdo: resolution.targetTrip.endOdo
-      };
-    }
-    data.vehicles[plate].trips.push(newTrip);
-    if(resolution && resolution.adjusted) lateAdjustments.push({row:r, target:resolution.targetTrip, oldStart:resolution.oldStart, oldDistance:resolution.oldDistance});
-    else if(resolution && resolution.conflict) lateConflicts.push({row:r, target:resolution.targetTrip});
-    addedDates.push(isoDate);
-    added++;
+    uploaded[r.id] = {receiptPath, receiptPaths, receiptUploadedAt, daeChaPickupFuelGaugePath, daeChaReturnFuelGaugePath};
   }
-  const saved = await saveVehicleToStorage(plate, !vehRefresh.exists);
+
+  // [2단계] 해당 차량만 최신 재조회 → 신규 기록 추가 → 조건부(ETag) 저장. 읽은 뒤 저장 전에 다른 저장이
+  // 끼어들면(412) 서버에 쓰지 않고 다시 읽어 최대 3회까지 재시도한다. 읽기 실패 시 예외로 제출 중단.
+  let added=0, skipped=0, addedDates=[], lateAdjustments=[], lateConflicts=[], branchAtTime='';
+  // lateAdjustments: 늦은입력으로 인해 다른 기록이 자동 보정된 건 (관리자 이메일 알림용)
+  // lateConflicts: 겹침은 있으나 자동 보정 불가(수동확인 필요)한 건
+  const ownKeys = new Set(); // 이전 시도에서 내가 추가한 기록 키(부분 저장 후 재시도 시 '중복'이 아닌 '추가'로 집계)
+  let saved = false, prevExists = true;
+  for(let attempt=0; attempt<3 && !saved; attempt++){
+    if(attempt>0){
+      await new Promise(res=>setTimeout(res, 300 + Math.floor(Math.random()*700)));
+      // 서버에 차량 노드가 없던 경우엔 재조회가 메모리를 덮어쓰지 않으므로, 지난 시도에서 추가한 기록을 직접 비운다
+      if(!prevExists) delete data.vehicles[plate];
+    }
+    const vehRefresh = await refreshVehicleFromStorage(plate);
+    prevExists = vehRefresh.exists;
+    if(!data.vehicles[plate]) data.vehicles[plate]={model:REGISTRY_MAP[plate]?.model||'',branch:REGISTRY_MAP[plate]?.branch||'미배정',originalBranch:REGISTRY_MAP[plate]?.branch||'미배정',active:true,trips:[]};
+    if(!Array.isArray(data.vehicles[plate].trips)) data.vehicles[plate].trips=[];
+    branchAtTime = data.vehicles[plate].branch;
+    const existingKeys = new Set((data.vehicles[plate].trips||[]).filter(Boolean).map(t=>`${t.isoDate}|${t.startOdo}|${t.endOdo}`));
+    added=0; skipped=0; addedDates=[]; lateAdjustments=[]; lateConflicts=[];
+
+    for(const r of rows){
+      const isoDate = r.dateFrom;
+      const dateTo = r.dateTo || r.dateFrom;
+      // 날짜 범위 내 모든 날짜 생성
+      const allDates = [];
+      let d = new Date(r.dateFrom + 'T00:00:00');
+      const endD = new Date(dateTo + 'T00:00:00');
+      while(d <= endD){ allDates.push(iso(d)); d = new Date(d.getTime()+86400000); }
+      const dateDisplay = formatTripDateDisplay(r.dateFrom, dateTo);
+      const key = `${isoDate}|${r.startOdo}|${r.endOdo}`;
+      if(existingKeys.has(key)){
+        if(ownKeys.has(key)){ added++; addedDates.push(isoDate); } else skipped++;
+        continue;
+      }
+      existingKeys.add(key);
+      // 이 기록의 시작거리가 이미 저장된 다른 기록의 시작거리와 겹치는지 확인(늦은입력 케이스).
+      // 겹치면 대상 기록을 이 함수 내부에서 직접 보정하고(startOdo/distance 갱신), 결과를 반환한다.
+      const resolution = resolveLateEntryInsert(plate, r);
+      const up = uploaded[r.id] || {};
+      const receiptPath = up.receiptPath ?? null, receiptPaths = up.receiptPaths ?? null, receiptUploadedAt = up.receiptUploadedAt ?? null;
+      const daeChaPickupFuelGaugePath = up.daeChaPickupFuelGaugePath || '', daeChaReturnFuelGaugePath = up.daeChaReturnFuelGaugePath || '';
+
+      const newTrip = {
+        date: dateDisplay, isoDate, dateTo, usageDates: allDates,
+        startOdo:r.startOdo, endOdo:r.endOdo, distance:r.distance,
+        user:r.user, dest:r.dest, fuel:r.fuel, status:r.status, note:r.note,
+        submitter:r.user, branchAtTime, imgKey:null, isPersonal:r.isPersonal||false,
+        isDaeCha:r.isDaeCha||false, daeChaPate:r.daeChaPate||'',
+        isDaeChaPickup:r.isDaeChaPickup||false, isDaeChaReturn:r.isDaeChaReturn||false,
+        daeChaModel:r.daeChaModel||'', daeChaPickupHipass:r.daeChaPickupHipass||false,
+        daeChaPickupFuelGauge:daeChaPickupFuelGaugePath, daeChaPickupFuelGaugeNote:r.daeChaPickupFuelGaugeNote||'',
+        daeChaPickupCondition:r.daeChaPickupCondition||'',
+        daeChaReturnHipass:r.daeChaReturnHipass||false, daeChaReturnFuelGauge:daeChaReturnFuelGaugePath,
+        daeChaReturnFuelGaugeNote:r.daeChaReturnFuelGaugeNote||'',
+        daeChaReturnCondition:r.daeChaReturnCondition||'',
+        isCommute:r.isCommute||false, commuteDir:r.commuteDir||'',
+        submittedAt: new Date().toISOString(),
+        editToken: getDeviceEditToken(), // 이 트립을 제출한 기기 식별용(본인수정화면 접근 제어에 사용)
+        // 개인사용 주유영수증 OCR 검증 필드 (RECEIPT_OCR_DESIGN.md 2항) — 개인사용이 아니면 전부 null
+        receiptPath,
+        ...(receiptPaths ? { receiptPaths } : {}),
+        receiptOcrAmount: r.isPersonal ? (r.receiptOcrAmount ?? null) : null,
+        receiptOcrMatched: r.isPersonal ? (r.receiptOcrMatched ?? null) : null,
+        receiptOcrDate: r.isPersonal ? (r.receiptOcrDate ?? null) : null,
+        receiptDateValid: r.isPersonal ? (r.receiptDateValid ?? null) : null,
+        receiptTypeValid: r.isPersonal ? (r.receiptTypeValid ?? null) : null,
+        receiptUploadedAt
+      };
+      // 관리자가 "왜 확인필요인지" 배지 툴팁만으로 바로 판단할 수 있도록, 겹친 상대 기록의
+      // 식별정보(일자·운행자·시작~종료거리)를 함께 저장해 둔다(기존엔 겹침 여부만 저장해
+      // 상대 기록을 직접 찾아야 했음).
+      if(resolution && resolution.conflict){
+        newTrip.lateEntryConflict = true;
+        newTrip.lateEntryConflictWith = {
+          isoDate: resolution.targetTrip.isoDate||'', submitter: resolution.targetTrip.submitter||resolution.targetTrip.user||'',
+          startOdo: resolution.targetTrip.startOdo, endOdo: resolution.targetTrip.endOdo
+        };
+      }
+      data.vehicles[plate].trips.push(newTrip);
+      if(resolution && resolution.adjusted) lateAdjustments.push({row:r, target:resolution.targetTrip, oldStart:resolution.oldStart, oldDistance:resolution.oldDistance});
+      else if(resolution && resolution.conflict) lateConflicts.push({row:r, target:resolution.targetTrip});
+      addedDates.push(isoDate);
+      ownKeys.add(key);
+      added++;
+    }
+    saved = await saveVehicleToStorage(plate, !vehRefresh.exists, true);
+    if(!saved && !_lastSaveConflict) break; // 충돌이 아닌 저장 실패(네트워크 등)는 재시도하지 않음
+  }
   if(!saved){
     // 저장 실패 시에는 첨부파일 참조를 지우지 않는다 — 지우면 "제출 확인" 재시도 때 영수증/게이지 사진이
     // 조용히 누락된 채 제출되던 문제 수정(재시도하면 다시 업로드됨)
@@ -9237,6 +9618,7 @@ async function doSubmit(submitter, plate, rows){
     if(window._daeChaFuelFileMap){ delete window._daeChaFuelFileMap[r.id+'_pickup']; delete window._daeChaFuelFileMap[r.id+'_return']; }
   });
   await clearDraft();
+  rememberDriverName(rows);
 
   // 점검요망 상태로 제출된 건이 있으면 관리자에게 이메일 알림 (실패해도 제출 자체는 정상 처리됨)
   notifyMaintenanceNeeded(plate, branchAtTime, submitter, rows);
@@ -9407,6 +9789,7 @@ async function doRestoreDraft(draft){
       card.querySelector('.tr-end').value = r.endOdo?Number(r.endOdo).toLocaleString():'';
       card.querySelector('.tr-dest').value = r.dest||'';
       card.querySelector('.tr-user').value = r.user||'';
+      card.querySelector('.tr-user-remembered-hint')?.remove();
       if(r.isPersonal){
         const pChk=card.querySelector('.tr-personal-chk');
         if(pChk){pChk.checked=true;togglePersonalUse(pChk,card.id);}
@@ -9942,8 +10325,7 @@ function autoFormatUeDate(inp){
   if(raw.length > 6) formatted = raw.slice(0,4)+'-'+raw.slice(4,6)+'-'+raw.slice(6);
   inp.value = formatted;
   if(formatted.length === 10){
-    const d = new Date(formatted+'T00:00:00');
-    inp.style.borderColor = isNaN(d) ? 'var(--bad)' : 'var(--good)';
+    inp.style.borderColor = tripDateError(formatted) ? 'var(--bad)' : 'var(--good)';
   } else {
     inp.style.borderColor = 'var(--line)';
   }
@@ -9997,12 +10379,12 @@ async function saveUserEdits(){
     const toInp=tr.querySelector('.ue-date-to');
     const fromVal=fromInp?.value||'';
     const toVal=toInp?.value||fromVal;
-    if(fromVal.length!==10 || isNaN(new Date(fromVal+'T00:00:00'))){
-      if(err){ err.textContent='저장 실패: 시작일자를 YYYY-MM-DD 형식으로 올바르게 입력해 주세요.'; err.style.display='block'; }
+    if(tripDateError(fromVal)){
+      if(err){ err.textContent=`저장 실패: 시작일자 — ${tripDateError(fromVal)}`; err.style.display='block'; }
       return;
     }
-    if(toVal.length!==10 || isNaN(new Date(toVal+'T00:00:00'))){
-      if(err){ err.textContent='저장 실패: 종료일자를 YYYY-MM-DD 형식으로 올바르게 입력해 주세요.'; err.style.display='block'; }
+    if(tripDateError(toVal)){
+      if(err){ err.textContent=`저장 실패: 종료일자 — ${tripDateError(toVal)}`; err.style.display='block'; }
       return;
     }
     const startInp=tr.querySelector('[data-f="startOdo"]');
@@ -10077,6 +10459,7 @@ async function saveUserEdits(){
     const t=(data.vehicles[plate]?.trips||[]).find(x=>`${x.isoDate}|${x.startOdo}|${x.endOdo}|${x.submitter||''}`===key);
     if(!t) continue;
     const locked = isChainLocked(plate, t); // 다음 기록에 이미 연동된 경우, 화면 조작과 무관하게 서버측에서도 재확인 후 차단
+    const beforeSnap = snapshotTrip(t);
     tr.querySelectorAll('.ue-inp').forEach(inp=>{
       const f=inp.dataset.f;
       if(f==='startOdo'||f==='endOdo'||f==='distance'){ if(!locked) t[f]=Number(inp.value)||0; }
@@ -10118,6 +10501,7 @@ async function saveUserEdits(){
         t.usageDates = allDates;
       }
     }
+    appendEditLog(t, beforeSnap, `사용자(${t.user||''})`);
     // 나중에 첨부: 이 화면에서 새로 선택한 영수증 파일이 있으면 지금 압축+업로드하여 반영.
     // 업로드 실패해도 나머지 저장은 계속 진행(영수증만 미반영, receiptPath는 기존 상태 유지).
     // 복수 영수증(최대 MAX_RECEIPT_FILES장)은 전부 업로드 성공한 경우에만 반영(일부 실패 시 전체 미반영).
@@ -10155,12 +10539,12 @@ async function saveUserEdits(){
     a.description=desc;
   });
   const saveResults = await Promise.all([
-    ...uePlates.map(p=>saveVehicleToStorage(p, !ueExists[p])),
+    ...uePlates.map(p=>saveVehicleToStorage(p, !ueExists[p], true)),
     ...ueAccIds.map(id=>saveAccidentToStorage(id))
   ]);
   const saved = saveResults.every(Boolean);
   if(!saved){
-    if(err){ err.textContent='⚠ 서버 저장에 실패했습니다. 인터넷 연결을 확인한 후 다시 "수정 내용 저장"을 눌러주세요.'; err.style.display='block'; }
+    if(err){ err.textContent = _lastSaveConflict ? '⚠ 그 사이 다른 사용자가 같은 차량 기록을 저장해 반영하지 않았습니다. 다시 "수정 내용 저장"을 눌러주세요.' : '⚠ 서버 저장에 실패했습니다. 인터넷 연결을 확인한 후 다시 "수정 내용 저장"을 눌러주세요.'; err.style.display='block'; }
     return;
   }
   document.querySelectorAll('.ue-saved').forEach(el=>el.style.display='inline');

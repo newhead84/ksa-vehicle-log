@@ -4,6 +4,20 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 형식: 각 항목은 `요청내용 요약 | 변경: 함수/영역`
 
+## 2026-11-01
+
+- 입력·관리 기능 보완 (시스템 검토 후속)
+  - 제출 날짜 검증: 형식(YYYY-MM-DD)·실재 날짜(2/31 등 자동 이월 차단)·미래 날짜 차단 — 신규 제출·내 제출기록 수정·관리자 수정 공통(`tripDateError()`), 달력 선택 최대값 오늘
+  - 동시 제출 유실 방지: 사진 업로드를 서버 재조회 전으로 이동 + 운행기록 경로 ETag 조건부 저장(if-match). 그 사이 다른 저장이 있으면(412) 다시 읽어 최대 3회 재시도, 관리자/내 기록 수정은 재저장 안내
+  - 입력 오류 표시: 문제 칸 빨간 테두리 + 칸 아래 사유, 해당 칸으로 스크롤(다시 입력하면 해제)
+  - 운행자 이름 기기 기억(localStorage, 대차 자동입력명 제외) — 첫 운행 행·내 제출기록 조회칸 자동 입력
+  - 시작거리 공백 확인: 시작거리가 이전 종료거리보다 크면 제출 전 확인(대차·늦은입력 건 제외)
+  - 변경 이력: 관리자/사용자 수정 시 바뀐 항목 `editLog`(기록별 최근 20건), 관리자 삭제 건 `deletedTrips` 보관 — 차량 상세 "변경 이력"
+  - 주행거리 공백(누락 의심) 감지: 차량 카드 배지·차량 상세 목록, "확인완료"(`odoGapCheckedAt`)
+  - 관리자 대시보드 상단 "처리 대기" 요약(점검요청·사고·개인사용 증빙·거리공백·늦은입력 겹침), 누르면 해당 섹션으로 이동
+  - 신규 필드: `editLog`, `deletedTrips`, `odoGapCheckedAt` (기존 필드 변경 없음, DB 경로 추가 없음 → 규칙 변경 불필요)
+  - 변경: `submitDirectInput()`, `doSubmit()`, `confirmAndSubmit()`, `refreshVehicleFromStorage()`, `saveVehicleToStorage()`, `saveVehicleMeta()`, `saveTripEdits()`, `saveUserEdits()`, `deleteTrip()`, `showUserFormErr()`, `addTripRow()`, `autoFormat*Date()`, `vcardHtml()`, `openVehicle()`, `renderAll()`
+
 ## 2026-10-29
 
 - 모바일 관리자 화면 개선 (PC 화면 변경 없음)
