@@ -35,6 +35,13 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-01] 2차 점검 보완 — ① 사용자 차량 선택을 DB 등록 차량 기준으로(관리자 추가·교체 차량 입력 가능)
+  ② QR 차량이 미등록·운용중지면 안내 후 직접 선택 ③ 사고보고서 완료를 기기 저장소로도 전달(원래 탭이 정리돼도 제출 잠김 해소)
+  ④ QR 진입 시 해당 차량만 로드(전체는 내 기록 조회 때) ⑤ QR 제출 후 같은 차량 자동 재선택 ⑥ 계약정보·전체운행기록·수기기록
+  업로드를 차량 단위 저장으로 전환(saveData 제거) ⑦ 시작거리 < 이전 종료거리 확인 | 신규: userSelectableVehicles(),
+  loadVehicleForQr(), ensureFullDataLoaded(), syncAccidentCompletionsFromStorage() | 변경: buildBranchDropdown(), onBranchSelect(),
+  proceedEnterUserMode(), loadUserEditable(), doSubmit(), doRestoreDraft(), submitDirectInput(), applyContractImport(),
+  applyTripRecordImport(), handleManualMonthlyUpload(), accident-report.html submitAccidentReport()
   [2026-11-01] 입력·관리 보완 — ① 제출 시 날짜 형식·실재(2/31 등)·미래 날짜 검증(신규·내 기록 수정·관리자 수정 공통)
   ② 동시 제출 유실 방지: 사진 업로드 후 재조회 + ETag 조건부 저장(412 시 최대 3회 재시도) ③ 오류 칸 빨간 표시·칸 아래 사유
   ④ 운행자 이름 기기 기억 ⑤ 시작거리 공백 확인 ⑥ 수정 이력(editLog)·삭제 보관(deletedTrips) ⑦ 주행거리 공백 감지·확인완료
@@ -2975,6 +2982,32 @@ function confirmDriveWarnModal(){
   proceedEnterUserMode();
 }
 
+// QR 진입 시 빠른 로드 — DB 전체(수 MB, 전 차량 운행기록) 대신 해당 차량 노드만 받는다.
+// 다른 차량 기록이 필요한 기능("내 제출 기록 수정" 조회 등)은 ensureFullDataLoaded()로 그때 전체를 불러온다.
+// 실패하면 기존 방식(전체 로드)으로 대체한다.
+let _partialData = false; // true면 메모리에 QR 차량 1대만 서버 기준으로 로드된 상태(전체 저장 금지)
+async function loadVehicleForQr(plate){
+  if(FIREBASE_URL.includes('YOUR-PROJECT')) return loadData();
+  try{
+    const curYear = new Date().getFullYear();
+    const ys = new Set();
+    for(let y=LEGACY_DATA_MAX_YEAR+1; y<=curYear; y++) ys.add(y);
+    _loadedYearNodes = ys;
+    data = {vehicles:{}};
+    await Promise.all([ refreshVehicleFromStorage(plate), loadRemoteHolidays() ]);
+    _partialData = true;
+    _staleData = false;
+    document.getElementById('firebaseWarnBanner')?.remove();
+  }catch(e){
+    console.warn('[KSA 차량관리] QR 차량 단건 로드 실패 — 전체 로드로 전환:', e.message);
+    return loadData();
+  }
+  applyRegistryDefaults();
+}
+async function ensureFullDataLoaded(){
+  if(_partialData) await loadData();
+}
+
 function proceedEnterUserMode(){
   currentRole = 'user';
   document.getElementById('roleOverlay').style.display = 'none';
@@ -2994,7 +3027,9 @@ function proceedEnterUserMode(){
   // 문제 수정(2026-08-18) — 이전에는 loadData() 완료(최대 15초 타임아웃) 후에야 채워졌음.
   buildVehicleDropdown();
 
-  loadData().then(()=>{
+  // QR 진입(?plate=)이면 DB 전체 대신 해당 차량 노드만 먼저 불러와 표시 속도를 높인다(loadVehicleForQr).
+  const _qrParam = new URLSearchParams(window.location.search).get('plate');
+  (_qrParam ? loadVehicleForQr(decodeURIComponent(_qrParam)) : loadData()).then(()=>{
     // 사용자가 그 사이 이미 사업장을 선택(및 운행기록 입력을 시작)했다면 재구성으로 선택값·
     // 입력중인 내용을 초기화하지 않도록, 아직 선택 전인 경우에만 최신 active/branch 데이터로
     // 재구성한다(드물게 그 사이 관리자가 차량을 비활성화/재배치한 경우 반영).
@@ -3009,7 +3044,18 @@ function proceedEnterUserMode(){
       const plate = decodeURIComponent(_p);
       const branch = data.vehicles[plate]?.branch
         || FLEET_REGISTRY.find(v=>v.plate===plate)?.branch || '';
-      if(branch){
+      const qrV = data.vehicles[plate];
+      // QR의 차량이 명단·DB 어디에도 없거나 운용중지(반납·교체)된 경우, 기존엔 선택창이 빈 채로 잠겨
+      // 아무것도 할 수 없었음 → 사유를 안내하고 잠그지 않아 직접 선택할 수 있게 한다.
+      if(!qrV && !REGISTRY_MAP[plate]){
+        appAlert(`QR의 차량(${plate})이 현재 운용 차량 명단에 없습니다.\n사업장·차량을 직접 선택해 입력하거나, 관리자에게 문의해 주세요.`, {title:'등록되지 않은 차량'});
+      } else if(qrV && qrV.active===false){
+        appAlert(`${plate} 차량은 운용중지(반납) 처리된 차량입니다.${qrV.replacedBy?`\n교체 차량: ${qrV.replacedBy}`:''}\n실제 운행한 차량을 직접 선택해 입력하거나, 관리자에게 문의해 주세요.`, {title:'운용중지 차량'});
+      }
+      // 잠그지 않는 경우(직접 선택)엔 다른 차량 기록·DB 등록 차량이 필요하므로 전체 데이터를 불러와 목록을 다시 구성
+      if(!qrV && !REGISTRY_MAP[plate] || (qrV && qrV.active===false)){
+        ensureFullDataLoaded().then(()=>{ if(!document.getElementById('userBranchSelect').value) buildVehicleDropdown(); });
+      } else if(branch){
         // Step1: 사업장 선택 → 차량 목록 채움
         const bSel = document.getElementById('userBranchSelect');
         bSel.value = branch;
@@ -3848,6 +3894,7 @@ async function loadData(){
       const [merged] = await Promise.all([ fetchMergedFleetData(), loadRemoteHolidays() ]);
       data = merged;
       _staleData = false;
+      _partialData = false;
       document.getElementById('firebaseWarnBanner')?.remove();
     }catch(e){
       showFirebaseWarning(`Firebase 연결 실패: ${e.message}`);
@@ -3883,44 +3930,8 @@ async function adminRefresh(){
   if(btn){btnLbl.textContent='새로고침';btn.disabled=false;}
 }
 
-async function saveData(){
-  if(viewerMode){ console.warn('[KSA 차량관리] 열람 전용 모드에서는 저장할 수 없습니다.'); return false; }
-  if(_staleData){
-    showFirebaseWarning('서버의 최신 데이터를 불러오지 못해 저장을 중단했습니다(다른 사용자가 입력한 기록 보호). 인터넷 연결을 확인하고 새로고침한 뒤 다시 시도해 주세요.');
-    return false;
-  }
-  const missYears = unloadedTripYears(Object.values(data.vehicles).flatMap(v=>v.trips||[]));
-  if(missYears.length){
-    showFirebaseWarning(`${missYears.join(', ')}년 데이터를 아직 불러오지 않아 저장을 중단했습니다(해당 연도 기록 유실 방지). 새로고침한 뒤 다시 시도해 주세요.`);
-    return false;
-  }
-  try{
-    // ① 메인 fleet-data 노드: 차량 메타정보 전체 + 2026년까지의 운행기록만 저장(기존과 동일 위치·구조 유지)
-    const legacyVehicles = {};
-    Object.keys(data.vehicles).forEach(plate=>{
-      const v = data.vehicles[plate];
-      legacyVehicles[plate] = {...v, trips:(v.trips||[]).filter(t=>tripYear(t)<=LEGACY_DATA_MAX_YEAR)};
-    });
-    await fbSet(STORAGE_KEY, {...data, vehicles:legacyVehicles});
-    // ② 2027년 이후 연도별 노드: 현재 메모리에 병합돼 있는 연도들만 해당 연도분 운행기록으로 다시 씀
-    //   (해당 연도 운행기록이 전부 삭제된 경우도 빈 배열로 반영되도록 명시적으로 매 저장마다 다시 씀)
-    const yearWrites = Array.from(_loadedYearNodes).map(async y=>{
-      const yearVehicles = {};
-      Object.keys(data.vehicles).forEach(plate=>{
-        const trips = (data.vehicles[plate].trips||[]).filter(t=>tripYear(t)===y);
-        if(trips.length) yearVehicles[plate] = {trips};
-      });
-      await fbSet(yearNodeKey(y), {vehicles:yearVehicles});
-    });
-    await Promise.all(yearWrites);
-    document.getElementById('firebaseWarnBanner')?.remove();
-    return true;
-  }catch(e){
-    console.error('[KSA 차량관리] 저장 실패:', e.message);
-    showFirebaseWarning(`저장 실패: ${e.message} — 방금 입력/수정한 내용이 서버에 반영되지 않았습니다. 새로고침하거나 다른 기기에서 열면 사라진 것처럼 보이는 것이 정상이며, 실제로 저장이 안 된 상태입니다.`);
-    return false;
-  }
-}
+// (2026-11-01) DB 전체 덮어쓰기 saveData() 제거 — 마지막 사용처(계약정보·전체운행기록·수기기록 업로드)를
+// 차량 단위 저장(saveVehicleMeta / saveVehicleToStorage)으로 전환함.
 
 // 저장 직전 최신 데이터를 다시 읽어 병합 (동시 제출 데이터 유실 방지)
 async function refreshDataFromStorage(){
@@ -4220,8 +4231,10 @@ async function applyContractImport(rows,resultEl){
   const ok=await appConfirm(`⚠️ 아래 ${plan.length}건을 차량계약정보에 반영합니다.\n\n${summary.join('\n')}\n\n계속 진행하시겠습니까?`);
   if(!ok) return;
   await refreshDataFromStorage();
+  if(_staleData){ resultEl.innerHTML='<span style="color:var(--bad);">⚠ 서버의 최신 데이터를 불러오지 못해 반영을 중단했습니다. 인터넷 연결을 확인한 후 다시 시도해 주세요.</span>'; return; }
   const today=todayLocalISO();
   let updated=0, added=0, retired=0;
+  const touchedPlates=new Set();
   plan.forEach(p=>{
     if(!p.exists){
       data.vehicles[p.plate]={
@@ -4246,13 +4259,17 @@ async function applyContractImport(rows,resultEl){
         updated++;
       }
     }
+    touchedPlates.add(p.plate);
     if(p.prevPlate && data.vehicles[p.prevPlate] && p.prevPlate!==p.plate){
       data.vehicles[p.prevPlate].active=false;
       data.vehicles[p.prevPlate].replacedBy=p.plate;
+      touchedPlates.add(p.prevPlate);
       retired++;
     }
   });
-  const saved=await saveData();
+  // DB 전체 덮어쓰기(saveData) 대신 바뀐 차량의 정보만 부분 저장 — 반영 중 다른 사용자가 제출한 운행기록 보호
+  const saveRes=await Promise.all(Array.from(touchedPlates).map(pl=>saveVehicleMeta(pl)));
+  const saved=saveRes.every(Boolean);
   if(!saved){ resultEl.innerHTML='<span style="color:var(--bad);">⚠ 저장 실패: 변경 내용이 서버에 반영되지 않았습니다. 인터넷 연결을 확인한 후 다시 시도해 주세요.</span>'; return; }
   resultEl.innerHTML=`<span style="color:var(--good);font-weight:600;">✅ 반영 완료 — 신규 ${added}건, 계약 갱신 ${updated}건, 반납 처리 ${retired}건</span>`;
   showAdminToast(`차량계약정보가 반영되었습니다. (신규 ${added}, 갱신 ${updated}, 반납 ${retired})`,'good');
@@ -7221,13 +7238,9 @@ async function applyTripRecordImport(rows,resultEl){
   const ok=await appConfirm(`⚠️ 아래 내용을 전체운행기록에 반영합니다.\n\n신규 추가: 총 ${plan.length}건 (차량 ${plateNames.length}대)\n${summaryLines.slice(0,15).join('\n')}${summaryLines.length>15?`\n... 외 ${summaryLines.length-15}대`:''}\n\n이미 데이터가 있는 일자 ${skippedExisting}건은 자동으로 건너뜁니다.${unmatchedPlates.size?`\n미등록 차량번호 ${unmatchedPlates.size}건은 제외됩니다.`:''}\n\n계속 진행하시겠습니까?`);
   if(!ok) return;
 
-  plan.forEach(p=>{
-    if(!data.vehicles[p.plate]){
-      data.vehicles[p.plate]={model:REGISTRY_MAP[p.plate]?.model||'',branch:REGISTRY_MAP[p.plate]?.branch||'미배정',originalBranch:REGISTRY_MAP[p.plate]?.branch||'미배정',active:true,trips:[]};
-    }
-    const v=data.vehicles[p.plate];
-    if(!Array.isArray(v.trips)) v.trips=[];
-    v.trips.push({
+  // 차량 단위로 "해당 차량만 재조회 → 아직 없는 일자만 추가 → 조건부(ETag) 저장". DB 전체 덮어쓰기(saveData)로
+  // 반영 중 다른 사용자가 제출한 기록이 지워지던 위험 제거. 그 사이 저장이 끼어들면(412) 최대 3회 재시도.
+  const buildImportedTrip=(p,v)=>({
       date:p.date, isoDate:p.isoDate, dateTo:p.dateTo, usageDates:p.usageDates,
       startOdo:p.startOdo, endOdo:p.endOdo, distance:p.distance,
       user:p.user, dest:p.dest, fuel:p.fuel, status:p.status, note:p.note,
@@ -7244,13 +7257,40 @@ async function applyTripRecordImport(rows,resultEl){
       receiptPath:null, receiptOcrAmount:null, receiptOcrMatched:null,
       receiptOcrDate:null, receiptDateValid:null, receiptTypeValid:null, receiptUploadedAt:null,
       importedFromExcel:true
-    });
   });
-
-  const saved=await saveData();
-  if(!saved){ resultEl.innerHTML='<span style="color:var(--bad);">⚠ 저장 실패: 변경 내용이 서버에 반영되지 않았습니다. 인터넷 연결을 확인한 후 다시 시도해 주세요.</span>'; return; }
-  resultEl.innerHTML=`<span style="color:var(--good);font-weight:600;">✅ 반영 완료 — 신규 ${plan.length}건 추가 (차량 ${plateNames.length}대), 이미 존재하는 일자 ${skippedExisting}건 제외${unmatchedPlates.size?`, 미등록 차량번호 ${unmatchedPlates.size}건 제외`:''}</span>`;
-  showAdminToast(`전체운행기록 업로드 완료 · 신규 ${plan.length}건 (차량 ${plateNames.length}대)`,'good');
+  let addedCnt=0;
+  const failedPlates=[];
+  for(const plate of plateNames){
+    let ok=false;
+    for(let attempt=0; attempt<3 && !ok; attempt++){
+      let vr;
+      try{ vr=await refreshVehicleFromStorage(plate); }catch(e){ break; }
+      if(!data.vehicles[plate]){
+        data.vehicles[plate]={model:REGISTRY_MAP[plate]?.model||'',branch:REGISTRY_MAP[plate]?.branch||'미배정',originalBranch:REGISTRY_MAP[plate]?.branch||'미배정',active:true,trips:[]};
+      }
+      const v=data.vehicles[plate];
+      if(!Array.isArray(v.trips)) v.trips=[];
+      const existing=existingDateSetForPlate(plate);
+      let n=0;
+      byPlate[plate].forEach(p=>{
+        if(dateRangeIntersects(existing,p.isoDate,p.dateTo)) return;
+        p.usageDates.forEach(dt=>existing.add(dt));
+        v.trips.push(buildImportedTrip(p,v)); n++;
+      });
+      ok=await saveVehicleToStorage(plate, !vr.exists, true);
+      if(ok){ addedCnt+=n; break; }
+      if(!vr.exists) delete data.vehicles[plate]; // 재시도 시 지난 시도의 추가분이 남지 않도록
+      if(!_lastSaveConflict) break;
+    }
+    if(!ok) failedPlates.push(plate);
+  }
+  if(failedPlates.length){
+    resultEl.innerHTML=`<span style="color:var(--bad);">⚠ 일부 차량 저장 실패: ${failedPlates.map(escapeHtml).join(', ')} — 나머지 ${addedCnt}건은 반영되었습니다. 같은 파일을 다시 업로드하면 아직 없는 일자만 추가됩니다.</span>`;
+    renderAll();
+    return;
+  }
+  resultEl.innerHTML=`<span style="color:var(--good);font-weight:600;">✅ 반영 완료 — 신규 ${addedCnt}건 추가 (차량 ${plateNames.length}대), 이미 존재하는 일자 ${skippedExisting}건 제외${unmatchedPlates.size?`, 미등록 차량번호 ${unmatchedPlates.size}건 제외`:''}</span>`;
+  showAdminToast(`전체운행기록 업로드 완료 · 신규 ${addedCnt}건 (차량 ${plateNames.length}대)`,'good');
   renderAll();
 }
 
@@ -7362,7 +7402,9 @@ async function handleManualMonthlyUpload(input){
     if(!rows) throw new Error('"차량번호" 열을 찾을 수 없습니다. 제공된 템플릿 형식을 확인해 주세요.');
 
     await refreshDataFromStorage();
+    if(_staleData) throw new Error('서버의 최신 데이터를 불러오지 못했습니다. 인터넷 연결을 확인한 후 다시 시도해 주세요.');
     let monthsFilled=0, vehiclesTouched=new Set(), unmatched=[], branchChanges=0, startOdoFilled=0;
+    const metaTouched=new Set(); // 수기기록·재배치·1월 시작거리 중 하나라도 반영된 차량(부분 저장 대상)
 
     // 같은 차량번호가 여러 행(재배치 전/후 구간)으로 나뉘어 입력될 수 있으므로 plate별로 먼저 모은다.
     const rowsByPlate={};
@@ -7383,6 +7425,7 @@ async function handleManualMonthlyUpload(input){
       }
       const v=data.vehicles[plate];
       const plateRows=rowsByPlate[plate];
+      metaTouched.add(plate);
 
       // 1) 지역구분+조정배치일자가 모두 기재된 행 = 재배치 건. 날짜 오름차순으로 순서대로 재배치 이력에 반영.
       plateRows
@@ -7422,7 +7465,9 @@ async function handleManualMonthlyUpload(input){
       });
     });
     if(monthsFilled===0) throw new Error('반영할 1~7월 데이터를 찾지 못했습니다. 값이 비어있지 않은지 확인해 주세요.');
-    const saved = await saveData();
+    // DB 전체 덮어쓰기 대신 해당 차량 정보만 부분 저장(운행기록은 건드리지 않음)
+    const saveRes = await Promise.all(Array.from(metaTouched).map(pl=>saveVehicleMeta(pl)));
+    const saved = saveRes.every(Boolean);
     if(!saved) throw new Error('서버 저장에 실패했습니다. 인터넷 연결을 확인한 후 다시 시도해 주세요.');
     renderAll();
     showAdminToast(`수기기록 반영 완료 · ${year}년 · 차량 ${vehiclesTouched.size}대 · ${monthsFilled}개 월 데이터${startOdoFilled?` · 1월 시작거리 ${startOdoFilled}건 반영`:''}${branchChanges?` · 재배치 이력 ${branchChanges}건 추가`:''}${unmatched.length?` (미등록 차량번호 ${unmatched.length}건은 제외됨)`:''}`,'good');
@@ -7473,15 +7518,22 @@ function modelShort(model){
   return model.split(' ')[0];
 }
 
+// 사용자 입력 화면에서 선택 가능한 차량 목록 — 코드의 고정 명단(FLEET_REGISTRY)뿐 아니라 관리자가
+// "차량 추가"·"차량계약정보 업로드(차량 교체)"로 DB에 등록한 차량도 포함한다(기존엔 명단에 없는 신규
+// 차량은 드롭다운에 나타나지 않아 운행기록을 입력할 수 없었음). 운용중지 차량은 제외.
+function userSelectableVehicles(){
+  const plates = new Set([...FLEET_REGISTRY.map(v=>v.plate), ...Object.keys(data.vehicles||{})]);
+  return Array.from(plates).map(p=>{
+    const v = data.vehicles?.[p], r = REGISTRY_MAP[p];
+    return {plate:p, branch:(v?.branch || r?.branch || ''), model:(v?.model || r?.model || ''), active:(v?.active !== false)};
+  }).filter(x=>x.active && x.branch);
+}
+
 function buildBranchDropdown(){
   const sel = document.getElementById('userBranchSelect');
   if(!sel) return;
   sel.innerHTML = '<option value="">-- 사업장을 먼저 선택하세요 --</option>';
-  const branches = Array.from(new Set(
-    FLEET_REGISTRY
-      .filter(v => data.vehicles[v.plate]?.active !== false)
-      .map(v => data.vehicles[v.plate]?.branch || v.branch)
-  )).sort(compareByOrg);
+  const branches = Array.from(new Set(userSelectableVehicles().map(v => v.branch))).sort(compareByOrg);
   branches.forEach(b => {
     const opt = document.createElement('option');
     opt.value = b; opt.textContent = b;
@@ -7508,18 +7560,18 @@ function onBranchSelect(){
   if(!branch){ wrap.style.display='none'; sel.innerHTML='<option value="">-- 차량번호를 선택하세요 --</option>'; return; }
 
   // 해당 사업장 차량 필터링 후 정렬 (그랜저→소나타→아반떼, 번호순)
-  const vehicles = FLEET_REGISTRY
-    .filter(v => (data.vehicles[v.plate]?.branch||v.branch)===branch && data.vehicles[v.plate]?.active!==false)
+  const vehicles = userSelectableVehicles()
+    .filter(v => v.branch===branch)
     .sort((a,b) => {
-      const ma = modelOrder(data.vehicles[a.plate]?.model||a.model);
-      const mb = modelOrder(data.vehicles[b.plate]?.model||b.model);
+      const ma = modelOrder(a.model);
+      const mb = modelOrder(b.model);
       if(ma!==mb) return ma-mb;
       return a.plate.localeCompare(b.plate);
     });
 
   sel.innerHTML = '<option value="">-- 차량번호를 선택하세요 --</option>';
   vehicles.forEach(v => {
-    const model = data.vehicles[v.plate]?.model || v.model;
+    const model = v.model;
     const opt = document.createElement('option');
     opt.value = v.plate;
     opt.textContent = `${v.plate}  ·  ${modelShort(model)}`;
@@ -8216,7 +8268,7 @@ function openAccidentPopup(btn){
   const plate = document.getElementById('userPlateSelect')?.value || '';
   const branch = document.getElementById('userBranchSelect')?.value || '';
   const submitter = sanitizeNameInput(card?.querySelector('.tr-user')?.value) || '';
-  const model = REGISTRY_MAP[plate]?.model || '';
+  const model = data.vehicles[plate]?.model || REGISTRY_MAP[plate]?.model || '';
 
   if(card && card.dataset.accidentCompleted !== '1'){
     markAccidentPending(card);
@@ -8348,6 +8400,35 @@ window.addEventListener('message', (e)=>{
   // "사고접수 안내" 팝업이 더 이상 유효하지 않으므로(완료 상태로 이미 갱신됨) 자동으로 닫는다.
   if(document.getElementById('modalOverlay')?.classList.contains('show')) closeModal();
 });
+
+// 사고보고서 완료 통지 보조 경로 — 휴대폰에서 원래 탭이 정리·새로고침되면 postMessage를 받을 수 없어
+// 카드가 "작성 필요" 상태로 남고 제출이 잠기던 문제 대응. accident-report.html이 접수 완료 시
+// 같은 기기 저장소(localStorage, 키: ksaAccidentDone_{reqId})에 접수번호를 남기면, 이 화면이 다른 탭의
+// 저장 이벤트·화면 복귀·임시저장 복원 시점에 확인해 해당 카드를 자동으로 "완료" 처리한다.
+const ACC_DONE_PREFIX = 'ksaAccidentDone_';
+function syncAccidentCompletionsFromStorage(){
+  let changed = false;
+  document.querySelectorAll('.trip-card').forEach(card=>{
+    const reqId = card.dataset.accidentReqId;
+    if(!reqId || card.dataset.accidentPending!=='1' || card.dataset.accidentCompleted==='1') return;
+    let rec = null;
+    try{ rec = JSON.parse(localStorage.getItem(ACC_DONE_PREFIX+reqId) || 'null'); }catch(e){}
+    if(rec && rec.accidentId){ markAccidentCompleted(card, rec.accidentId); changed = true; }
+  });
+  if(changed){
+    if(document.getElementById('modalOverlay')?.classList.contains('show')) closeModal();
+    scheduleDraft();
+  }
+}
+window.addEventListener('storage', e=>{ if(e.key && e.key.startsWith(ACC_DONE_PREFIX)) syncAccidentCompletionsFromStorage(); });
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') syncAccidentCompletionsFromStorage(); });
+// 7일 지난 완료 표시는 정리(기기 저장공간 누적 방지)
+try{
+  Object.keys(localStorage).filter(k=>k.startsWith(ACC_DONE_PREFIX)).forEach(k=>{
+    let at = 0; try{ at = Number(JSON.parse(localStorage.getItem(k)||'{}').at)||0; }catch(e){}
+    if(Date.now()-at > 7*86400000) localStorage.removeItem(k);
+  });
+}catch(e){}
 
 // 대차인수·대차반납 체크박스 중 하나라도 켜져 있으면 이 운행기록은 "대차 사용 중"으로 취급한다
 // (계기판 연속성 경고·시작거리 자동채움 해제 등 기존 대차 운행 로직과 동일하게 동작).
@@ -9265,7 +9346,7 @@ async function submitDirectInput(){
   {
     const savedTrips = (data.vehicles[plate]?.trips||[]).filter(Boolean).slice().sort(tripChronoCompare);
     const lastSaved = savedTrips[savedTrips.length-1] || null;
-    const gapRows = [];
+    const gapRows = [], overlapRows = [];
     rows.forEach((r,i)=>{
       if(r.isDaeCha) return;
       let expected = null;
@@ -9276,7 +9357,17 @@ async function submitDirectInput(){
         if(!(p.isDaeChaPickup && !p.isDaeChaReturn)) expected = Number(p.endOdo)||null;
       }
       if(expected && r.startOdo > expected) gapRows.push({i, expected, start:r.startOdo});
+      else if(expected && r.startOdo && r.startOdo < expected) overlapRows.push({i, expected, start:r.startOdo});
     });
+    if(overlapRows.length){
+      // 시작거리가 이전 종료거리보다 작음 — 오타이거나, 이미 저장된 기록과 주행 구간이 겹침
+      const msg = overlapRows.map(g=>`운행 #${g.i+1}: 이전 종료거리 ${g.expected.toLocaleString()}km → 입력한 시작거리 ${g.start.toLocaleString()}km (${(g.expected-g.start).toLocaleString()}km 겹침)`).join('\n');
+      if(!await appConfirm(`시작거리가 이전 종료거리보다 작습니다.\n\n${msg}\n\n계기판 숫자를 다시 확인해 주세요. 이전 운행보다 먼저 운행한 기록을 늦게 입력하는 경우라면 계속 진행하세요.`, {title:'시작거리 확인', okText:'계속 진행', cancelText:'시작거리 수정'})){
+        const c = document.getElementById(rows[overlapRows[0].i].id);
+        c?.querySelector('.tr-start')?.scrollIntoView({behavior:'smooth', block:'center'});
+        return;
+      }
+    }
     if(gapRows.length){
       const msg = gapRows.map(g=>`운행 #${g.i+1}: 이전 종료거리 ${g.expected.toLocaleString()}km → 입력한 시작거리 ${g.start.toLocaleString()}km (${(g.start-g.expected).toLocaleString()}km 차이)`).join('\n');
       if(!await appConfirm(`시작거리가 이전 종료거리보다 큽니다.\n\n${msg}\n\n중간에 입력하지 않은 운행이 있다면, 그 운행을 먼저 추가해 주세요.\n입력한 시작거리가 맞으면 계속 진행하세요.`, {title:'시작거리 확인', okText:'계속 진행', cancelText:'시작거리 수정'})){
@@ -9619,6 +9710,7 @@ async function doSubmit(submitter, plate, rows){
   });
   await clearDraft();
   rememberDriverName(rows);
+  rows.forEach(r=>{ if(r.accidentReqId){ try{ localStorage.removeItem(ACC_DONE_PREFIX+r.accidentReqId); }catch(e){} } });
 
   // 점검요망 상태로 제출된 건이 있으면 관리자에게 이메일 알림 (실패해도 제출 자체는 정상 처리됨)
   notifyMaintenanceNeeded(plate, branchAtTime, submitter, rows);
@@ -9633,6 +9725,13 @@ async function doSubmit(submitter, plate, rows){
   document.getElementById('addRowBtn').style.display='none';
   document.getElementById('submitBar').style.display='none';
   rowCounter=0;
+  // QR로 잠긴 차량이면 같은 차량을 다시 선택해 둔다(기존엔 선택이 비워진 채 잠겨 추가 입력하려면 QR을
+  // 다시 스캔해야 했음). 방금 제출한 기록 기준으로 이전 종료거리·새 입력 행이 바로 준비된다.
+  if(qrLockedPlate && qrLockedPlate===plate){
+    document.getElementById('userPlateSelect').value = plate;
+    onVehicleSelect();
+    clearTimeout(draftTimer); // 빈 새 행이 임시저장본으로 남지 않도록
+  }
 
   // 영수증을 분명히 첨부(촬영/앨범 선택)했는데도 업로드 자체가 실패한 건이 있으면, 운행기록
   // 제출은 정상 처리되었지만 영수증은 저장되지 못해 증빙상태가 "⏳ 대기중"으로 표시됨을
@@ -9865,6 +9964,8 @@ async function doRestoreDraft(draft){
       else if(r.accidentPending) markAccidentPending(card);
       calcRowDist(card.id);
     });
+    // 복원된 "사고보고서 작성 필요" 카드 중 그 사이 다른 탭에서 접수가 끝난 건은 완료로 전환
+    syncAccidentCompletionsFromStorage();
   }catch(e){}
 }
 
@@ -9995,13 +10096,20 @@ async function confirmAddVehicle(){
 // ============================================================
 // 사용자 제출 기록 수정
 // ============================================================
-function loadUserEditable(){
+async function loadUserEditable(){
   const name=(document.getElementById('searchSubmitterInput').value||'').trim();
   const err=document.getElementById('userEditErr');
   const body=document.getElementById('userEditBody');
   const summary=document.getElementById('userEditSummary');
   if(!name){err.textContent='이름을 입력해 주세요.';err.style.display='block';if(summary)summary.textContent='';return;}
   err.style.display='none';
+  // QR 빠른 로드(차량 1대만 로드) 상태면 다른 차량 기록까지 조회하기 위해 전체 데이터를 먼저 불러온다
+  if(_partialData){
+    if(summary) summary.textContent='전체 기록을 불러오는 중…';
+    await ensureFullDataLoaded();
+    if(summary) summary.textContent='';
+    if(_partialData || _staleData){ err.textContent='⚠ 기록을 불러오지 못했습니다. 인터넷 연결을 확인한 후 다시 조회해 주세요.'; err.style.display='block'; return; }
+  }
 
   // 이름 기준으로 내 제출 기록 검색 (조회기준: 운행자명만 지원)
   const field = 'user';

@@ -6,6 +6,16 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 ## 2026-11-01
 
+- 2차 점검 보완
+  - 사용자 차량 선택(사업장·차량 드롭다운)을 DB 등록 차량 기준으로 변경 — 관리자 "차량 추가"·계약정보 업로드(차량 교체)로 등록한 차량도 운행기록 입력 가능(`userSelectableVehicles()`)
+  - QR 차량이 미등록·운용중지면 사유(교체 차량 포함) 안내 후 잠그지 않고 직접 선택 가능
+  - 사고보고서 접수 완료를 같은 기기 저장소(`ksaAccidentDone_{reqId}`)에도 기록 → 원래 입력 탭이 정리·새로고침돼도 화면 복귀·임시저장 복원 시 자동 완료 처리(제출 잠김 해소). 7일 지난 기록 자동 정리
+  - QR 진입 시 해당 차량 노드만 로드(약 1.3MB → 차량 1대분), "내 제출 기록 수정" 조회 때 전체 로드(`loadVehicleForQr()`, `ensureFullDataLoaded()`)
+  - QR 제출 후 같은 차량 자동 재선택(새 행·이전 종료거리 즉시 준비)
+  - 계약정보 엑셀 반영·전체운행기록 엑셀 업로드·수기기록 업로드를 차량 단위 저장으로 전환(정보는 PATCH, 운행기록은 ETag 조건부 저장·충돌 시 재시도) — DB 전체 덮어쓰기 `saveData()` 제거
+  - 시작거리가 이전 종료거리보다 작으면 제출 전 확인(오타·구간 겹침)
+  - 변경: `buildBranchDropdown()`, `onBranchSelect()`, `proceedEnterUserMode()`, `loadUserEditable()`(async), `doSubmit()`, `doRestoreDraft()`, `submitDirectInput()`, `applyContractImport()`, `applyTripRecordImport()`, `handleManualMonthlyUpload()`, `openAccidentPopup()`, accident-report.html `submitAccidentReport()`
+
 - 입력·관리 기능 보완 (시스템 검토 후속)
   - 제출 날짜 검증: 형식(YYYY-MM-DD)·실재 날짜(2/31 등 자동 이월 차단)·미래 날짜 차단 — 신규 제출·내 제출기록 수정·관리자 수정 공통(`tripDateError()`), 달력 선택 최대값 오늘
   - 동시 제출 유실 방지: 사진 업로드를 서버 재조회 전으로 이동 + 운행기록 경로 ETag 조건부 저장(if-match). 그 사이 다른 저장이 있으면(412) 다시 읽어 최대 3회 재시도, 관리자/내 기록 수정은 재저장 안내

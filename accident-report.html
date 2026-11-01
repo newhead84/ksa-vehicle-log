@@ -681,6 +681,12 @@ async function submitAccidentReport(){
 
     await fbSet(`fleet-data/accidents/${accidentId}`, record);
 
+    // 원래 운행정보 입력 탭이 정리·새로고침되어 아래 postMessage를 받지 못하는 경우를 대비해, 같은 기기
+    // 저장소에도 접수 완료를 남긴다(index.html syncAccidentCompletionsFromStorage()가 확인해 카드 완료 처리).
+    if(ctx.reqId){
+      try{ localStorage.setItem('ksaAccidentDone_'+ctx.reqId, JSON.stringify({accidentId, at:Date.now()})); }catch(e){}
+    }
+
     // ※ 관리자 알림 이메일은 여기(사고보고서 접수 완료 시점)에서 보내지 않는다.
     // 사고접수가 첨부된 운행정보가 index.html에서 "제출하기"로 최종 제출되는 시점에
     // notifyAccidentSubmitted()(index.html)가 발송한다 — doSubmit() 참조.
