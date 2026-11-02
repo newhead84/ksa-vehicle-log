@@ -5631,7 +5631,8 @@ async function openPeriodReportModal(){
       <select id="prIdx" class="pr-sel"></select>
       <button type="button" class="btn btn-primary" style="font-size:13px;padding:7px 16px;" onclick="renderPeriodReport()">보기</button>
     </div>
-    <style>.pr-sel{font-family:'Paperlogy';font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;}</style>
+    <style>.pr-sel{font-family:'Paperlogy';font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;}
+      .pr-table th,.pr-table td{padding:8px 7px;}</style>
     <div id="periodReportBody" style="margin-top:14px;"></div>`;
   document.getElementById('modalOverlay').classList.add('show');
   lockBodyScroll();
@@ -5657,7 +5658,7 @@ async function renderPeriodReport(){
   const tr = (row, bold)=>`<tr${bold?' style="font-weight:700;background:#F3F6F4;"':''}>${PERIOD_REPORT_COLS.map(([k])=>`<td style="${k==='branch'?'text-align:left;':'text-align:right;'}white-space:nowrap;">${escapeHtml(periodReportCell(k,row))}</td>`).join('')}</tr>`;
   document.getElementById('periodReportBody').innerHTML = `
     <div style="font-weight:700;color:var(--navy);margin-bottom:6px;">${escapeHtml(r.label)} <span class="muted" style="font-weight:400;font-size:12px;">(${r.start} ~ ${r.end})</span></div>
-    <div class="table-scroll"><table class="data-table" style="width:100%;font-size:12.5px;"><thead><tr>${head}</tr></thead>
+    <div class="table-scroll"><table class="data-table pr-table" style="width:100%;font-size:12px;"><thead><tr>${head}</tr></thead>
       <tbody>${r.rows.map(x=>tr(x,false)).join('')}${tr(r.total,true)}</tbody></table></div>
     <div class="muted" style="font-size:11.5px;line-height:1.6;margin-top:8px;word-break:keep-all;overflow-wrap:break-word;">· 평균 가동율: 업무일 기준 월 가동율의 차량별 평균(개인·출퇴근·대차인수/반납 제외, 개시 전·미입력 달 제외) · 업무 주행: 월별 집계(수기기록 포함) · 건수·주유비: 운행 시작일 기준 · 대여료: 월 대여료 × 운용 개월 · 사업장: 현재 소속 기준</div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
