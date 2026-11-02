@@ -35,6 +35,14 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-02] 총무·관리 기능 고도화 — ① [데이터 관리▾ > 과태료 운전자 조회]: 차량번호(대차 차량 포함)+위반일자로 당시
+  운행기록·운행자 조회, 같은 날 여럿이면 모두 표시, 기록 없으면 직전·직후 기록, 결과 복사 ② 처리 대기에 "계약 만료 임박
+  (4개월)"(만료 경과 운용 차량 포함)·"운행자 중복(30일)"(같은 운행자가 같은 기간 다른 차량, 확인완료 처리 가능) 추가
+  ③ [데이터 관리▾ > 기간 보고서]: 월·분기·반기·연간 사업장별 요약(가동율·업무 주행·건수·주유비·개인·출퇴근·사고·대여료),
+  인쇄/PDF·엑셀 ④ 상단 통계 기간 전환(누적·올해·이번 달·지난달) ⑤ 맨 위로 버튼은 위로 스크롤 시에만 잠깐 표시
+  ⑥ 종료거리 안내문구 "계기판 숫자" | 변경: openFineLookupModal(), runFineLookup(), pendingSummaryDetails(),
+  dupDriverTrips(), ackDupDriver(), buildPeriodReport(), openPeriodReportModal(), printPeriodReport(),
+  exportPeriodReportExcel(), renderStats(), initScrollTopBtnVisibility(), .tr-end
   [2026-11-02] 운행자 이름 일괄 정리 + 화면 지연 개선 — ① 관리자 [데이터 관리▾ > 운행자 이름 정리]: 기록이 3배 이상 많은
   이름과 한 글자 차이인 이름을 후보로 표시(기본 미선택, 사례 일자 표시), 관리자가 확인·수정·직접 추가 후 선택 항목만 차량
   단위 최신화→조건부 저장으로 user 필드 변경(submitter 유지, 변경 이력 기록) ② 지연 개선: 관리자 전용 라이브러리(엑셀·QR·
@@ -557,6 +565,7 @@
   .user-name-pill label{color:#fff;font-size:12px;font-weight:700;white-space:nowrap;}
   .user-name-pill input{border:2px solid #fff;background:#fff;color:var(--navy);border-radius:7px;padding:7px 12px;font-family:"Paperlogy";font-size:14px;font-weight:600;width:140px;}
   .user-name-pill input::placeholder{color:#9aa;}
+  .tr-end::placeholder{color:#B4BCC8;font-weight:400;}
   .user-name-pill input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(194,121,15,.35);}
   .btn-exit{background:none;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:'Paperlogy';}
   .btn-exit:hover{border-color:rgba(255,255,255,.5);color:#fff;}
@@ -1393,6 +1402,9 @@
       <div class="tb-menu" id="tbDataMenu">
         <button type="button" class="reset-btn tb-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleTbMenu(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>데이터 관리<svg class="tb-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="tb-menu-list" role="menu">
+          <button type="button" class="tb-menu-item" role="menuitem" id="periodReportBtn" onclick="openPeriodReportModal()" title="월·분기·반기·연간 사업장별 운행 현황 요약(인쇄·PDF·엑셀)">기간 보고서</button>
+          <button type="button" class="tb-menu-item" role="menuitem" id="fineLookupBtn" onclick="openFineLookupModal()" title="고지서의 차량번호·위반일자로 당시 운행자를 조회합니다(대차 차량 포함)">과태료 운전자 조회</button>
+          <div class="tb-menu-sep"></div>
           <button type="button" class="tb-menu-item" role="menuitem" id="contractMgmtBtn" onclick="openContractImportModal()" title="계약 연장(단가·기간 변경) 또는 차량 교체(반납 후 신차 투입)로 계약정보가 바뀌면, 지정 엑셀 양식으로 일괄 반영합니다">차량계약정보 관리</button>
           <button type="button" class="tb-menu-item" role="menuitem" id="manualUploadBtn" onclick="triggerManualMonthlyUpload()" title="1~7월 수기기록(가동율·거리)만 반영하는 별도 기능입니다. 실제 운행기록 복원/병합은 '전체기록 업로드'를 사용하세요.">엑셀 업로드(수기기록)</button>
           <button type="button" class="tb-menu-item" role="menuitem" id="tripRecordUploadBtn" onclick="openTripRecordImportModal()" title="'엑셀 내보내기'로 받은 파일의 '전체운행기록' 시트를 업로드하여, 아직 없는 일자의 운행기록만 채워 넣습니다">전체기록 업로드</button>
@@ -4545,8 +4557,21 @@ function digits(num){
   return String(Math.round(num)).split('').map(c=>`<div class="odo-digit">${c}</div>`).join('');
 }
 
+// 대시보드 상단 통계 기간: all(누적)·year(올해)·month(이번 달)·prev(지난달) — 운행 시작일(isoDate) 기준
+let statPeriod='all';
+const STAT_PERIOD_LABEL={all:'누적',year:'올해',month:'이번 달',prev:'지난달'};
+function statPeriodRange(k){
+  const t=todayLocalISO(), y=Number(t.slice(0,4)), m=Number(t.slice(5,7));
+  if(k==='year') return [`${y}-01-01`, `${y}-12-31`];
+  if(k==='month'){ const r=monthRangeIso(y,m); return [r.startIso, r.endIso]; }
+  if(k==='prev'){ const r=monthRangeIso(m===1?y-1:y, m===1?12:m-1); return [r.startIso, r.endIso]; }
+  return null;
+}
 function renderStats(){
   const plates=Object.keys(data.vehicles);
+  const range=statPeriodRange(statPeriod);
+  const inPeriod=t=>!range || ((t.isoDate||'')>=range[0] && (t.isoDate||'')<=range[1]);
+  const pl=STAT_PERIOD_LABEL[statPeriod]||'누적';
   let totalDist=0,totalTrips=0,totalFuel=0;
   let personalDist=0,personalFuel=0,personalTrips=0;
   // 총 누적 운행거리·누적 주유비: 대시보드 취지(업무용 차량관리)에 맞춰 개인사용(isPersonal)·출퇴근사용(isCommute)
@@ -4554,6 +4579,7 @@ function renderStats(){
   // 개인사용(isPersonal) 건은 별도로 personalDist/personalFuel/personalTrips에 집계해 각 카드 우측에
   // 작게 병기(출퇴근사용은 개인사용과 별개 항목이라 여기 집계에서 제외 — 필요 시 driverSummary에서 확인 가능).
   plates.forEach(p=>(data.vehicles[p].trips||[]).forEach(t=>{
+    if(!t || !inPeriod(t)) return;
     if(!t.isPersonal&&!t.isCommute){totalDist+=Number(t.distance)||0;totalFuel+=Number(t.fuel)||0;}
     if(t.isPersonal){personalDist+=Number(t.distance)||0;personalFuel+=Number(t.fuel)||0;personalTrips++;}
     totalTrips++;
@@ -4563,10 +4589,10 @@ function renderStats(){
   // 이미 제한해두므로, 여기서 별도 지역 필터링 없이 plates만 순회해도 자동으로 해당 사업장 기준 합계가 됨.
   const totalFee=plates.reduce((s,p)=>s+(Number(data.vehicles[p].fee)||0),0);
   document.getElementById('statStrip').innerHTML=`
-    <div class="stat-card stat-wide"><div class="label">총 누적 운행거리</div><div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;"><div class="odometer">${digits(totalDist)}<span class="odo-unit">km</span></div><div class="delta" style="margin-top:0;white-space:nowrap;">개인 ${personalDist.toLocaleString()}km</div></div></div>
+    <div class="stat-card stat-wide"><div class="label" style="display:flex;align-items:center;gap:6px;"><select id="statPeriodSel" aria-label="통계 기간" onchange="statPeriod=this.value;renderStats()" style="font-family:'Paperlogy';font-size:12px;font-weight:700;color:var(--navy);border:1px solid var(--line);border-radius:6px;padding:2px 4px;background:#fff;">${Object.keys(STAT_PERIOD_LABEL).map(k=>`<option value="${k}"${k===statPeriod?' selected':''}>${STAT_PERIOD_LABEL[k]}</option>`).join('')}</select>운행거리</div><div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;"><div class="odometer">${digits(totalDist)}<span class="odo-unit">km</span></div><div class="delta" style="margin-top:0;white-space:nowrap;">개인 ${personalDist.toLocaleString()}km</div></div></div>
     <div class="stat-card"><div class="label">관리 차량</div><div class="stat-plain">${plates.length}<span style="font-size:13px;color:var(--muted);"> 대</span></div></div>
-    <div class="stat-card"><div class="label">누적 운행 건수</div><div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;"><div class="stat-plain">${totalTrips}<span style="font-size:13px;color:var(--muted);"> 건</span></div><div class="delta" style="margin-top:0;white-space:nowrap;">개인 ${personalTrips}건</div></div></div>
-    <div class="stat-card stat-wide"><div class="label">누적 주유비</div><div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;"><div class="stat-plain">${totalFuel.toLocaleString()}<span style="font-size:13px;color:var(--muted);"> 원</span></div><div class="delta" style="margin-top:0;white-space:nowrap;">개인 ${personalFuel.toLocaleString()}원</div></div></div>
+    <div class="stat-card"><div class="label">${pl} 운행 건수</div><div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;"><div class="stat-plain">${totalTrips}<span style="font-size:13px;color:var(--muted);"> 건</span></div><div class="delta" style="margin-top:0;white-space:nowrap;">개인 ${personalTrips}건</div></div></div>
+    <div class="stat-card stat-wide"><div class="label">${pl} 주유비</div><div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;"><div class="stat-plain">${totalFuel.toLocaleString()}<span style="font-size:13px;color:var(--muted);"> 원</span></div><div class="delta" style="margin-top:0;white-space:nowrap;">개인 ${personalFuel.toLocaleString()}원</div></div></div>
     <div class="stat-card stat-wide"><div class="label">총대여료 합계</div><div class="stat-plain">${totalFee.toLocaleString()}<span style="font-size:13px;color:var(--muted);"> 원</span></div></div>
   `;
   document.getElementById('vehicleCount').textContent=plates.length;
@@ -5452,6 +5478,232 @@ async function ackOdoGap(btn){
   renderAll(); openVehicle(plate);
 }
 
+// ── 과태료·범칙금 운전자 조회(관리자) ───────────────────────────────────
+// 고지서의 차량번호·위반일자로 당시 운행기록을 찾는다. 대상 차량번호가 대차(렌터카) 차량이면
+// 대차 사용기간(daeChaUsagePeriods)에서 해당 일자를 포함하는 기간의 원차량 운행기록으로 찾는다.
+// 운행기록에는 시각 정보가 없으므로 같은 날 운행자가 여럿이면 모두 표시하고, 기록이 없으면 직전·직후 기록을 보여준다.
+function openFineLookupModal(){
+  if(viewerMode || currentRole!=='admin') return;
+  const plates = new Set(Object.keys(data.vehicles||{}));
+  daeChaUsagePeriods().forEach(pd=>pd.rentalPlates.forEach(x=>plates.add(x)));
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-head">
+      <div class="modal-head-info"><div class="plate-big" style="font-size:20px;">과태료·범칙금 운전자 조회</div><div class="muted" style="font-size:12px;word-break:keep-all;overflow-wrap:break-word;">고지서의 차량번호와 위반일자로 당시 운행자를 찾습니다 (대차 차량 포함)</div></div>
+      <div class="modal-head-actions"><button class="close-x" onclick="closeModal()">✕</button></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+      <div><div class="muted" style="font-size:12px;margin-bottom:4px;">차량번호</div>
+        <input type="text" id="fineLookupPlate" list="fineLookupPlateList" placeholder="예: 181호6088" autocomplete="off" style="width:150px;text-align:left;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:'Paperlogy';font-size:14px;">
+        <datalist id="fineLookupPlateList">${Array.from(plates).sort().map(x=>`<option value="${escapeHtml(x)}"></option>`).join('')}</datalist></div>
+      <div><div class="muted" style="font-size:12px;margin-bottom:4px;">위반일자</div>
+        <input type="date" id="fineLookupDate" max="${todayLocalISO()}" style="padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:'Paperlogy';font-size:14px;"></div>
+      <button type="button" class="btn btn-primary" style="font-size:13px;padding:9px 18px;" onclick="runFineLookup()">조회</button>
+    </div>
+    <div id="fineLookupResult" style="margin-top:16px;font-size:13px;word-break:keep-all;overflow-wrap:break-word;"></div>`;
+  document.getElementById('modalOverlay').classList.add('show');
+  lockBodyScroll();
+}
+function tripCovers(t, d){ const to=(t.dateTo && t.dateTo>t.isoDate)?t.dateTo:t.isoDate; return t.isoDate && t.isoDate<=d && d<=to; }
+function fineTripLine(plate, t, note){
+  const range = (t.dateTo && t.dateTo!==t.isoDate) ? `${t.isoDate}~${t.dateTo}` : (t.isoDate||'');
+  const kind = [t.isPersonal?'개인사용':'', t.isCommute?'출퇴근':'', t.isDaeCha?'대차':''].filter(Boolean).join('·');
+  return {plate, range, user:t.user||'', dest:t.dest||'', odo:`${t.startOdo!=null?Number(t.startOdo).toLocaleString():'?'}→${t.endOdo!=null?Number(t.endOdo).toLocaleString():'?'}km`, kind, note:note||''};
+}
+async function runFineLookup(){
+  const q = String(document.getElementById('fineLookupPlate').value||'').trim();
+  const d = document.getElementById('fineLookupDate').value;
+  const el = document.getElementById('fineLookupResult');
+  if(!q || !d){ el.innerHTML = '<span style="color:var(--bad);">차량번호와 위반일자를 모두 입력해 주세요.</span>'; return; }
+  if(Number(d.slice(0,4))>LEGACY_DATA_MAX_YEAR) await ensureYearLoaded(Number(d.slice(0,4)));
+  const nq = normDaeChaPlate(q);
+  const hits = [], near = [];
+  // ① 공용차량 번호로 조회
+  const own = Object.keys(data.vehicles||{}).find(p=>normDaeChaPlate(p)===nq);
+  if(own){
+    const sorted = (data.vehicles[own].trips||[]).filter(Boolean).slice().sort(tripChronoCompare);
+    sorted.filter(t=>tripCovers(t,d)).forEach(t=>hits.push(fineTripLine(own, t, t.isDaeCha?'대차 운행 기록(원차량은 렌터카사 입고 중일 수 있음)':'')));
+    if(!hits.length){
+      const before = sorted.filter(t=>(t.isoDate||'')<d).pop();
+      const after = sorted.find(t=>(t.isoDate||'')>d);
+      if(before) near.push(fineTripLine(own, before, '직전 기록'));
+      if(after) near.push(fineTripLine(own, after, '직후 기록'));
+    }
+  }
+  // ② 대차(렌터카) 차량번호로 조회 — 인수~반납(미반납은 오늘까지) 기간에 위반일이 포함되는 대차 사용기간
+  daeChaUsagePeriods().forEach(pd=>{
+    if(!Array.from(pd.rentalPlates).some(x=>normDaeChaPlate(x)===nq)) return;
+    const from = pd.pickupTrip?.isoDate || pd.trips[0]?.isoDate || '';
+    const to = pd.returnTrip ? (pd.returnTrip.dateTo||pd.returnTrip.isoDate) : todayLocalISO();
+    if(!from || d<from || d>to) return;
+    const dayTrips = pd.trips.filter(t=>tripCovers(t,d));
+    if(dayTrips.length) dayTrips.forEach(t=>hits.push(fineTripLine(pd.origPlate, t, `대차 사용기간 ${from}~${pd.returnTrip?to:'사용중'}`)));
+    else near.push(...pd.trips.slice(-2).map(t=>fineTripLine(pd.origPlate, t, `대차 사용기간 ${from}~${pd.returnTrip?to:'사용중'} 중 기록(해당 일자 기록 없음)`)));
+  });
+  if(!own && !hits.length && !near.length){
+    el.innerHTML = `<span style="color:var(--bad);">"${escapeHtml(q)}" 차량을 공용차량·대차 이력에서 찾지 못했습니다. 차량번호를 다시 확인해 주세요.</span>`;
+    return;
+  }
+  const rowHtml = r=>`<tr><td>${escapeHtml(r.plate)}</td><td>${escapeHtml(r.range)}</td><td><b>${escapeHtml(r.user)}</b></td><td>${escapeHtml(r.dest)}</td><td style="white-space:nowrap;">${escapeHtml(r.odo)}</td><td>${escapeHtml([r.kind,r.note].filter(Boolean).join(' · '))}</td></tr>`;
+  const table = list=>`<div class="table-scroll"><table class="data-table" style="width:100%;font-size:12.5px;"><thead><tr><th>차량</th><th>운행기간</th><th>운행자</th><th>행선지</th><th>거리</th><th>비고</th></tr></thead><tbody>${list.map(rowHtml).join('')}</tbody></table></div>`;
+  const users = Array.from(new Set(hits.map(h=>h.user).filter(Boolean)));
+  window._fineLookupText = hits.length
+    ? `[과태료 운전자 조회] 차량 ${q} / 위반일 ${d}\n` + hits.map(h=>`- 운행자 ${h.user} (${h.plate}, ${h.range}, 행선지 ${h.dest})`).join('\n')
+    : '';
+  el.innerHTML = hits.length
+    ? `<div style="margin-bottom:8px;"><b style="color:var(--navy);">${escapeHtml(d)} 운행자: ${users.map(escapeHtml).join(', ')||'(이름 없음)'}</b>${users.length>1?' <span style="color:var(--bad);">— 같은 날 운행자가 여럿입니다. 운행기록에 시각 정보가 없으니 본인 확인이 필요합니다.</span>':''}</div>
+       ${table(hits)}
+       <button type="button" class="btn btn-ghost" style="margin-top:10px;font-size:12px;padding:6px 12px;" onclick="navigator.clipboard?.writeText(window._fineLookupText||'').then(()=>showAdminToast('조회 결과를 복사했습니다.','good')).catch(()=>showAdminToast('복사하지 못했습니다.','bad'))">결과 복사</button>`
+    : `<div style="margin-bottom:8px;color:var(--bad);font-weight:700;">${escapeHtml(d)}에 해당하는 운행기록이 없습니다.</div>
+       ${near.length?`<div class="muted" style="margin-bottom:6px;">참고: 가까운 운행기록 — 미입력 운행일 가능성이 있으니 당시 사용자에게 확인하세요.</div>${table(near)}`:''}`;
+}
+
+// ── 기간 보고서(관리자): 월·분기·반기·연간 사업장별 운행 현황 요약 ─────────────────
+// 가동율은 월별표(monthlyUtilForPlate)와 같은 기준(업무일 기준 월 가동율의 평균, 개시 전·미래·미입력 달 제외),
+// 운행거리는 월별 집계(수기기록 포함, 개인·출퇴근 제외), 건수·주유비는 운행 시작일 기준으로 집계한다.
+function periodMonths(type, idx){
+  if(type==='month') return [idx];
+  if(type==='quarter') return [1,2,3].map(i=>(idx-1)*3+i);
+  if(type==='half') return [1,2,3,4,5,6].map(i=>(idx-1)*6+i);
+  return [1,2,3,4,5,6,7,8,9,10,11,12];
+}
+function periodLabel(year, type, idx){
+  return `${year}년 ` + (type==='month'?`${idx}월`:type==='quarter'?`${idx}분기`:type==='half'?(idx===1?'상반기':'하반기'):'연간');
+}
+function buildPeriodReport(year, type, idx){
+  const months = periodMonths(type, idx);
+  const start = `${year}-${String(months[0]).padStart(2,'0')}-01`;
+  const end = monthRangeIso(year, months[months.length-1]).endIso;
+  const branches = {};
+  Object.keys(data.vehicles||{}).forEach(p=>{
+    const v = data.vehicles[p];
+    const mu = monthlyUtilForPlate(p, year).filter(m=>months.includes(m.month));
+    const trips = (v.trips||[]).filter(t=>t && (t.isoDate||'')>=start && (t.isoDate||'')<=end);
+    const hasManual = mu.some(m=>m.manual);
+    if(v.active===false && !trips.length && !hasManual) return; // 기간 중 기록 없는 운용중지 차량 제외
+    const b = v.branch || '미배정';
+    const r = branches[b] = branches[b] || {branch:b, vehicles:0, utilSum:0, utilN:0, distance:0, bizTrips:0, bizFuel:0, personalTrips:0, personalFuel:0, commuteTrips:0, accidents:0, fee:0};
+    r.vehicles++;
+    const valid = mu.filter(m=>!m.beforeService && !m.futureMonth && !m.noData);
+    if(valid.length){ r.utilSum += valid.reduce((s,m)=>s+m.rate,0)/valid.length; r.utilN++; }
+    r.distance += mu.reduce((s,m)=>s+(Number(m.distance)||0),0);
+    r.fee += (Number(v.fee)||0) * mu.filter(m=>!m.beforeService && !m.futureMonth).length;
+    trips.forEach(t=>{
+      if(t.isPersonal){ r.personalTrips++; r.personalFuel += Number(t.fuel)||0; }
+      else if(t.isCommute) r.commuteTrips++;
+      else { r.bizTrips++; r.bizFuel += Number(t.fuel)||0; }
+    });
+  });
+  Object.values(data.accidents||{}).forEach(a=>{
+    const d = String(a?.occurredAt||'').slice(0,10);
+    if(!d || d<start || d>end) return;
+    const b = data.vehicles[a.ourVehicle?.plate]?.branch || '미확인';
+    const r = branches[b] = branches[b] || {branch:b, vehicles:0, utilSum:0, utilN:0, distance:0, bizTrips:0, bizFuel:0, personalTrips:0, personalFuel:0, commuteTrips:0, accidents:0, fee:0};
+    r.accidents++;
+  });
+  const rows = Object.values(branches).sort((x,y)=>compareByOrg(x.branch,y.branch)).map(r=>({...r, util: r.utilN ? r.utilSum/r.utilN : null}));
+  const total = rows.reduce((t,r)=>{ ['vehicles','distance','bizTrips','bizFuel','personalTrips','personalFuel','commuteTrips','accidents','fee'].forEach(k=>t[k]+=r[k]); t.utilSum+=r.utilSum; t.utilN+=r.utilN; return t; },
+    {branch:'합계', vehicles:0, utilSum:0, utilN:0, distance:0, bizTrips:0, bizFuel:0, personalTrips:0, personalFuel:0, commuteTrips:0, accidents:0, fee:0});
+  total.util = total.utilN ? total.utilSum/total.utilN : null; // 차량 평균
+  return {label:periodLabel(year,type,idx), start, end, rows, total};
+}
+const PERIOD_REPORT_COLS = [
+  ['branch','사업장'],['vehicles','차량(대)'],['util','평균 가동율'],['distance','업무 주행(km)'],['bizTrips','업무 운행(건)'],
+  ['bizFuel','업무 주유비(원)'],['personalTrips','개인사용(건)'],['personalFuel','개인 주유비(원)'],['commuteTrips','출퇴근(건)'],['accidents','사고(건)'],['fee','대여료(원)']
+];
+function periodReportCell(k, r){
+  if(k==='branch') return r.branch;
+  if(k==='util') return r.util==null ? '-' : `${r.util.toFixed(1)}%`;
+  return Number(r[k]||0).toLocaleString();
+}
+let _periodReport = null;
+async function openPeriodReportModal(){
+  if(viewerMode || currentRole!=='admin') return;
+  const t = todayLocalISO(), y = Number(t.slice(0,4)), m = Number(t.slice(5,7));
+  const years = availableYears();
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-head">
+      <div class="modal-head-info"><div class="plate-big" style="font-size:20px;">기간 보고서</div><div class="muted" style="font-size:12px;word-break:keep-all;overflow-wrap:break-word;">사업장별 운행 현황 요약 — 인쇄(PDF 저장)·엑셀로 받을 수 있습니다</div></div>
+      <div class="modal-head-actions"><button class="close-x" onclick="closeModal()">✕</button></div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px;">
+      <select id="prYear" class="pr-sel">${years.map(x=>`<option value="${x}"${Number(x)===y?' selected':''}>${x}년</option>`).join('')}</select>
+      <select id="prType" class="pr-sel" onchange="fillPeriodIdx()"><option value="month">월</option><option value="quarter" selected>분기</option><option value="half">반기</option><option value="year">연간</option></select>
+      <select id="prIdx" class="pr-sel"></select>
+      <button type="button" class="btn btn-primary" style="font-size:13px;padding:7px 16px;" onclick="renderPeriodReport()">보기</button>
+    </div>
+    <style>.pr-sel{font-family:'Paperlogy';font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;}</style>
+    <div id="periodReportBody" style="margin-top:14px;"></div>`;
+  document.getElementById('modalOverlay').classList.add('show');
+  lockBodyScroll();
+  fillPeriodIdx(Math.ceil(m/3));
+  renderPeriodReport();
+}
+function fillPeriodIdx(sel){
+  const type = document.getElementById('prType').value;
+  const m = Number(todayLocalISO().slice(5,7));
+  const opts = type==='month' ? Array.from({length:12},(_,i)=>[i+1,`${i+1}월`])
+    : type==='quarter' ? [1,2,3,4].map(i=>[i,`${i}분기`])
+    : type==='half' ? [[1,'상반기'],[2,'하반기']] : [[1,'연간']];
+  const def = sel || (type==='month'?m:type==='quarter'?Math.ceil(m/3):type==='half'?(m<=6?1:2):1);
+  document.getElementById('prIdx').innerHTML = opts.map(([v,l])=>`<option value="${v}"${v===def?' selected':''}>${l}</option>`).join('');
+}
+async function renderPeriodReport(){
+  const year = Number(document.getElementById('prYear').value);
+  const type = document.getElementById('prType').value;
+  const idx = Number(document.getElementById('prIdx').value);
+  if(year>LEGACY_DATA_MAX_YEAR) await ensureYearLoaded(year);
+  const r = _periodReport = buildPeriodReport(year, type, idx);
+  const head = PERIOD_REPORT_COLS.map(([,l])=>`<th style="white-space:nowrap;">${l}</th>`).join('');
+  const tr = (row, bold)=>`<tr${bold?' style="font-weight:700;background:#F3F6F4;"':''}>${PERIOD_REPORT_COLS.map(([k])=>`<td style="${k==='branch'?'text-align:left;':'text-align:right;'}white-space:nowrap;">${escapeHtml(periodReportCell(k,row))}</td>`).join('')}</tr>`;
+  document.getElementById('periodReportBody').innerHTML = `
+    <div style="font-weight:700;color:var(--navy);margin-bottom:6px;">${escapeHtml(r.label)} <span class="muted" style="font-weight:400;font-size:12px;">(${r.start} ~ ${r.end})</span></div>
+    <div class="table-scroll"><table class="data-table" style="width:100%;font-size:12.5px;"><thead><tr>${head}</tr></thead>
+      <tbody>${r.rows.map(x=>tr(x,false)).join('')}${tr(r.total,true)}</tbody></table></div>
+    <div class="muted" style="font-size:11.5px;line-height:1.6;margin-top:8px;word-break:keep-all;overflow-wrap:break-word;">· 평균 가동율: 업무일 기준 월 가동율의 차량별 평균(개인·출퇴근·대차인수/반납 제외, 개시 전·미입력 달 제외) · 업무 주행: 월별 집계(수기기록 포함) · 건수·주유비: 운행 시작일 기준 · 대여료: 월 대여료 × 운용 개월 · 사업장: 현재 소속 기준</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button type="button" class="btn btn-ghost" style="font-size:13px;padding:7px 14px;" onclick="exportPeriodReportExcel()">엑셀 저장</button>
+      <button type="button" class="btn btn-primary" style="font-size:13px;padding:7px 14px;" onclick="printPeriodReport()">인쇄 / PDF 저장</button>
+    </div>`;
+}
+function exportPeriodReportExcel(){
+  const r = _periodReport; if(!r) return;
+  if(!window.XLSX){ showAdminToast('엑셀 라이브러리를 불러오는 중입니다. 잠시 후 다시 눌러 주세요.','bad'); return; }
+  const rows = [...r.rows, r.total].map(x=>{
+    const o = {};
+    PERIOD_REPORT_COLS.forEach(([k,l])=>{ o[l] = k==='branch' ? x.branch : k==='util' ? (x.util==null?'':Math.round(x.util*10)/10) : Number(x[k]||0); });
+    return o;
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '기간보고');
+  XLSX.writeFile(wb, `KSA차량운행보고_${r.label.replace(/\s/g,'_')}.xlsx`);
+}
+function printPeriodReport(){
+  const r = _periodReport; if(!r) return;
+  const w = window.open('', '_blank');
+  if(!w){ showAdminToast('팝업이 차단되었습니다. 브라우저에서 팝업을 허용해 주세요.','bad'); return; }
+  const head = PERIOD_REPORT_COLS.map(([,l])=>`<th>${l}</th>`).join('');
+  const tr = (row, cls)=>`<tr class="${cls||''}">${PERIOD_REPORT_COLS.map(([k])=>`<td class="${k==='branch'?'l':''}">${escapeHtml(periodReportCell(k,row))}</td>`).join('')}</tr>`;
+  w.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${escapeHtml(r.label)} 업무용 차량 운행 현황</title>
+    <style>
+      @font-face{font-family:'Paperlogy';font-weight:400;src:url('${APP_URL}fonts/Paperlogy-4Regular.woff2') format('woff2');}
+      @font-face{font-family:'Paperlogy';font-weight:700;src:url('${APP_URL}fonts/Paperlogy-7Bold.woff2') format('woff2');}
+      @page{size:A4 landscape;margin:14mm;}
+      body{font-family:'Paperlogy',sans-serif;color:#1f2937;margin:0;padding:20px;}
+      h1{font-size:20px;margin:0 0 4px;color:#14532d;} .sub{font-size:12px;color:#6b7280;margin-bottom:14px;}
+      table{width:100%;border-collapse:collapse;font-size:11.5px;} th,td{border:1px solid #d1d5db;padding:6px 7px;text-align:right;white-space:nowrap;}
+      th{background:#14532d;color:#fff;text-align:center;} td.l{text-align:left;} tr.total td{font-weight:700;background:#eef4ef;}
+      .note{font-size:10.5px;color:#6b7280;margin-top:10px;line-height:1.6;}
+    </style></head><body>
+    <h1>업무용 차량 운행 현황 보고 — ${escapeHtml(r.label)}</h1>
+    <div class="sub">기간 ${r.start} ~ ${r.end} · 작성일 ${todayLocalISO()} · 회원홍보자산실</div>
+    <table><thead><tr>${head}</tr></thead><tbody>${r.rows.map(x=>tr(x)).join('')}${tr(r.total,'total')}</tbody></table>
+    <div class="note">· 평균 가동율: 업무일 기준 월 가동율의 차량별 평균(개인사용·출퇴근·대차인수/반납 제외, 개시 전·미입력 달 제외)<br>· 업무 주행: 월별 집계(수기기록 포함, 개인·출퇴근 제외) · 건수·주유비: 운행 시작일 기준 · 대여료: 월 대여료 × 운용 개월 · 사업장: 현재 소속 기준</div>
+    <script>document.fonts.ready.then(()=>setTimeout(()=>window.print(),200));<\/script>
+    </body></html>`);
+  w.document.close();
+}
+
 // ── 운행자 이름 일괄 정리(관리자) ─────────────────────────────────────
 // 오타로 갈라진 이름(예: 양산식/양선식, 경규/윤경규)을 후보로 보여주고, 관리자가 확인·선택한 항목만
 // 차량 단위로 최신화(refreshVehicleFromStorage) → user 필드만 변경 → 조건부 저장(saveVehicleToStorage)한다.
@@ -5629,7 +5881,64 @@ function pendingSummaryDetails(){
   const accident = accidentListSorted().filter(a=>(a.status||'접수')!=='완료').map(a=>({
     plate:a.ourVehicle?.plate||'미확인', date:formatAccidentDateTime(a.occurredAt), text:`${a.status||'접수'} · ${a.reportedBy?.name||''}`
   }));
-  return {maint, accident, receipt, gaps, late};
+  // 렌트 계약 만료 임박(만료 4개월 전부터 — 입찰·신차 납품 기간 고려) 및 만료 경과 운용 차량
+  const contract = [];
+  const todayIso = todayLocalISO();
+  Object.keys(data.vehicles||{}).forEach(p=>{
+    const v = data.vehicles[p];
+    const end = v && v.active!==false ? String(v.contractEndDate||'') : '';
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(end)) return;
+    const [ey,em,ed] = end.split('-').map(Number);
+    const noticeFrom = localDateKey(new Date(ey, em-1-CONTRACT_NOTICE_MONTHS, ed));
+    if(todayIso < noticeFrom) return;
+    const days = Math.round((new Date(end+'T00:00:00') - new Date(todayIso+'T00:00:00'))/86400000);
+    contract.push({plate:p, date:end, text: days>=0 ? `계약종료 D-${days} · ${v.model||''}` : `계약 만료 ${-days}일 경과 · ${v.model||''}`});
+  });
+  contract.sort((a,b)=>a.date.localeCompare(b.date));
+  return {maint, accident, receipt, gaps, late, contract, dup: dupDriverTrips()};
+}
+const CONTRACT_NOTICE_MONTHS = 4;
+// 최근 30일 내 같은 운행자가 같은 기간(운행기간 겹침)에 서로 다른 차량을 운행한 것으로 기록된 건(입력 실수 의심).
+// 쌍마다 나중에 제출된 기록 1건으로 표시하고, 관리자가 확인완료(dupDriverCheckedAt)하면 제외한다.
+function dupDriverTrips(){
+  const since = localDateKey(new Date(Date.now() - 30*86400000));
+  const byUser = {};
+  Object.keys(data.vehicles||{}).forEach(p=>{
+    (data.vehicles[p]?.trips||[]).forEach(t=>{
+      if(!t || !t.isoDate || t.isoDate < since) return;
+      const u = sanitizeNameInput(t.user);
+      if(!u || DRIVER_NAME_EXCLUDE.has(u)) return;
+      (byUser[u] = byUser[u] || []).push({plate:p, from:t.isoDate, to:(t.dateTo && t.dateTo>t.isoDate) ? t.dateTo : t.isoDate, t});
+    });
+  });
+  const out = [];
+  Object.keys(byUser).forEach(u=>{
+    const list = byUser[u];
+    for(let i=0;i<list.length;i++) for(let j=i+1;j<list.length;j++){
+      const a = list[i], b = list[j];
+      if(a.plate===b.plate || a.from>b.to || b.from>a.to) continue;
+      if(a.t.dupDriverCheckedAt || b.t.dupDriverCheckedAt) continue;
+      const [later, other] = (a.t.submittedAt||'') >= (b.t.submittedAt||'') ? [a,b] : [b,a];
+      out.push({plate:later.plate, date:later.from, key:tripKeyOf(later.t),
+        text:`${u} · ${other.plate}(${other.from}${other.to!==other.from?'~'+other.to:''})와 운행기간 겹침`});
+    }
+  });
+  return out.sort((x,y)=>y.date.localeCompare(x.date));
+}
+async function ackDupDriver(idx){
+  if(viewerMode) return;
+  const r = _pendingDetails?.dup?.[idx];
+  if(!r) return;
+  if(!await appConfirm(`${r.plate} ${r.date}\n${r.text}\n\n실제로 두 차량을 운행했거나 이미 바로잡은 경우 확인완료 처리합니다.\n이후 처리 대기에서 제외됩니다.`, {title:'운행자 중복 확인완료'})) return;
+  const vr = await refreshVehicleOrWarn(r.plate);
+  if(!vr || !data.vehicles[r.plate]) return;
+  const t = (data.vehicles[r.plate].trips||[]).find(x=>x && tripKeyOf(x)===r.key);
+  if(!t){ showAdminToast('해당 기록을 찾지 못했습니다(그 사이 수정·삭제됨). 화면을 새로고침해 주세요.','bad'); return; }
+  t.dupDriverCheckedAt = new Date().toISOString();
+  const saved = await saveVehicleToStorage(r.plate, !vr.exists, true);
+  if(!saved){ showAdminToast(_lastSaveConflict ? '⚠ 그 사이 다른 저장이 있어 반영하지 않았습니다. 다시 눌러 주세요.' : '⚠ 저장 실패: 서버에 반영되지 않았습니다.','bad'); return; }
+  showAdminToast('확인완료 처리되었습니다.','good');
+  renderAll();
 }
 let pendingOpenKey = null; // 처리 대기 요약에서 펼쳐 둔 항목(재렌더링 후에도 유지)
 let _pendingDetails = null;
@@ -5642,17 +5951,24 @@ function renderPendingSummary(){
     {k:'accident', label:'사고 미완료',     target:'accidentHistoryWrap'},
     {k:'receipt',  label:'개인사용 증빙·주유비 확인', target:'personalUseWrap'},
     {k:'gaps',     label:'주행거리 공백',   target:'vehicleAreaWrap'},
-    {k:'late',     label:'늦은입력 겹침(30일)', target:'vehicleAreaWrap'}
+    {k:'late',     label:'늦은입력 겹침(30일)', target:'vehicleAreaWrap'},
+    {k:'dup',      label:'운행자 중복(30일)', target:'vehicleAreaWrap'},
+    {k:'contract', label:`계약 만료 임박(${CONTRACT_NOTICE_MONTHS}개월)`, target:'vehicleAreaWrap'}
   ].map(i=>({...i, n:d[i.k].length}));
   if(pendingOpenKey && !d[pendingOpenKey]?.length) pendingOpenKey = null;
   const total = items.reduce((s,i)=>s+i.n,0);
   const open = items.find(i=>i.k===pendingOpenKey);
   const detailHtml = open ? `<div class="pending-detail">
       <div class="pending-detail-head"><b>${open.label}</b> ${open.n}건 <button type="button" class="btn-ghost pending-detail-go" onclick="scrollToPendingTarget('${open.target}')">해당 섹션으로 이동 ↓</button></div>
-      ${d[open.k].map((r,idx)=>`<button type="button" class="pending-row" onclick="openPendingRow('${open.k}',${idx})">
+      ${d[open.k].map((r,idx)=>{
+        const row = `<button type="button" class="pending-row" onclick="openPendingRow('${open.k}',${idx})">
         <span class="pending-row-plate">${escapeHtml(r.plate)}</span>
         <span class="pending-row-date">${escapeHtml(r.date)}</span>
-        <span class="pending-row-text">${escapeHtml(r.text)}</span></button>`).join('')}
+        <span class="pending-row-text">${escapeHtml(r.text)}</span></button>`;
+        return (open.k==='dup' && !viewerMode)
+          ? `<div style="display:flex;align-items:center;gap:6px;">${row}<button type="button" class="btn-ghost" style="flex-shrink:0;font-size:11px;padding:3px 8px;white-space:nowrap;" onclick="ackDupDriver(${idx})">확인완료</button></div>`
+          : row;
+      }).join('')}
     </div>` : '';
   el.innerHTML = `<div class="pending-head">처리 대기 <b style="color:${total?'var(--bad)':'var(--good)'};">${total}건</b>${total?' <span class="muted" style="font-weight:400;font-size:12px;">— 항목을 누르면 대상 차량 목록이 펼쳐집니다</span>':' — 모두 처리됨'}</div>
     <div class="pending-grid">${items.map(i=>`<button type="button" class="pending-item${i.n?' has':''}${i.k===pendingOpenKey?' open':''}" onclick="togglePendingDetail('${i.k}')" ${i.n?'':'disabled'}>
@@ -8191,7 +8507,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
         </div>
         <div class="form-field">
           <label>종료거리 (km)</label>
-          <input type="text" inputmode="numeric" class="tr-end" placeholder="0" oninput="formatFuelInput(this);const dn=document.getElementById('daechaNotice-${id}');if(dn)dn.style.display='none';calcRowDist('${id}');autoFillNextRow('${id}');checkFuelVsDistance('${id}');scheduleDraft()">
+          <input type="text" inputmode="numeric" class="tr-end" placeholder="계기판 숫자" oninput="formatFuelInput(this);const dn=document.getElementById('daechaNotice-${id}');if(dn)dn.style.display='none';calcRowDist('${id}');autoFillNextRow('${id}');checkFuelVsDistance('${id}');scheduleDraft()">
         </div>
       </div>
       <div id="startHint-${id}" style="display:${prefillStart!==null && !prefillWasDaeCha?'block':'none'};font-size:11px;color:var(--muted);margin-top:-8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🔒 이전 운행 종료거리 자동반영 · 필요 시 수정 가능</div>
@@ -11087,6 +11403,25 @@ function closeUserEdit(){
 function scrollToTop(){
   window.scrollTo({top:0, behavior:'smooth'});
 }
+// 맨 위로 버튼: 항상 떠 있으면 입력칸·표 오른쪽(주행거리 km 등)을 가리므로, 400px 이상 내려간 상태에서
+// 위로 스크롤할 때만 잠깐(2.5초) 표시하고, 입력칸에 포커스가 있으면 숨긴다.
+(function initScrollTopBtnVisibility(){
+  const btn=document.getElementById('scrollTopBtn');
+  if(!btn) return;
+  btn.style.transition='opacity .2s';
+  let lastY=window.scrollY, timer=null;
+  const typing=()=>{ const a=document.activeElement; return a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName); };
+  const setShown=v=>{ btn.style.opacity=v?'0.9':'0'; btn.style.pointerEvents=v?'auto':'none'; };
+  setShown(false);
+  window.addEventListener('scroll',()=>{
+    const y=window.scrollY, up=y<lastY; lastY=y;
+    if(y>400 && up && !typing()){
+      setShown(true);
+      clearTimeout(timer); timer=setTimeout(()=>setShown(false),2500);
+    } else if(y<=400 || !up){ clearTimeout(timer); setShown(false); }
+  },{passive:true});
+  document.addEventListener('focusin',e=>{ if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) setShown(false); });
+})();
 // 하단 제출바(submitBar)가 노출된 화면에서는 버튼이 겹치지 않도록 위치를 자동 조정
 (function initScrollTopBtnPosition(){
   const btn=document.getElementById('scrollTopBtn');
