@@ -35,6 +35,11 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-02] 운행자 이름 오타 방지 — ① 운행자 입력칸에 기존 운행자 이름(2회 이상 기록) 자동완성 추천 ② 제출 시 명단에
+  없는 이름이 기존 이름과 한 글자 차이·성 누락 등으로 비슷하면 "혹시 ○○○님인가요?" 선택창(변경/그대로 입력). QR 단건
+  로드 시에는 전체 기록 기준 이름 색인을 백그라운드로 1회 받아 기기에 7일 캐시 | 변경: refreshDriverNameIndex(),
+  countDriverNames(), renderDriverNameDatalist(), findSimilarDriverNames(), nameEditDistanceLE1(), appChoice(),
+  confirmSimilarDriverNames(), submitDirectInput(), proceedEnterUserMode(), addTripRow()(.tr-user list 속성)
   [2026-11-02] 처리 대기 요약 상세 목록 + 관리자 2차인증 원인 표시 — ① 처리대기 항목을 누르면 대상 건(차량번호·일자·사유)
   목록이 펼쳐지고, 건을 누르면 차량 상세 창 열기(사고·개인사용은 해당 섹션을 차량번호/운행자로 검색해 이동) ② 인증코드를
   다시 요구할 때 OTP 화면에 사유 표시(기기 기억 정보 없음/만료/서버 기록 없음/확인 오류), 확인 오류 시 1회 재시도, 기기 기억
@@ -3079,6 +3084,7 @@ function proceedEnterUserMode(){
   // QR 진입(?plate=)이면 DB 전체 대신 해당 차량 노드만 먼저 불러와 표시 속도를 높인다(loadVehicleForQr).
   const _qrParam = new URLSearchParams(window.location.search).get('plate');
   (_qrParam ? loadVehicleForQr(decodeURIComponent(_qrParam)) : loadData()).then(()=>{
+    refreshDriverNameIndex();
     // 사용자가 그 사이 이미 사업장을 선택(및 운행기록 입력을 시작)했다면 재구성으로 선택값·
     // 입력중인 내용을 초기화하지 않도록, 아직 선택 전인 경우에만 최신 active/branch 데이터로
     // 재구성한다(드물게 그 사이 관리자가 차량을 비활성화/재배치한 경우 반영).
@@ -8049,7 +8055,7 @@ function addTripRow(prefillStart = null, prefillWasDaeCha = false){
           <span>운행자</span>
           <span style="font-size:11px;color:var(--muted);font-weight:400;">실제 운행한 사람의 이름을 입력하세요</span>
         </label>
-        <input type="text" class="tr-user" placeholder="운행자 이름" oninput="this.value=sanitizeNameInput(this.value);this.dataset.autoFilled='false';scheduleDraft()">
+        <input type="text" class="tr-user" placeholder="운행자 이름" list="driverNameList" autocomplete="off" oninput="this.value=sanitizeNameInput(this.value);this.dataset.autoFilled='false';scheduleDraft()">
       </div>
       <div class="form-field">
         <label>차량 상태</label>
@@ -9163,6 +9169,144 @@ function rememberDriverName(rows){
   try{ localStorage.setItem(LAST_DRIVER_NAME_KEY, r.user); }catch(e){}
 }
 
+// 운행자 이름 오타 방지 — 기존 운행기록의 운행자 이름(2회 이상 기록된 이름만)을 명단으로 사용해
+// ① 입력 중 자동완성(datalist) 추천 ② 제출 시 명단에 없는 이름이면 유사 이름(한 글자 차이·성 누락) 확인.
+// QR 진입은 해당 차량만 로드하므로, 전체 기록 기준 이름 색인을 기기에 7일간 캐시(서버 저장 없음)한다.
+const DRIVER_NAME_INDEX_KEY = 'ksaDriverNameIndex';
+const DRIVER_NAME_INDEX_TTL_MS = 7*86400000;
+const DRIVER_NAME_MIN_COUNT = 2;
+const DRIVER_NAME_EXCLUDE = new Set(['롯데렌탈']);
+let _driverNameCounts = {}; // {이름: 기록 건수}
+let _driverNameIndexLoading = false;
+function countDriverNames(vehicles){
+  const counts = {};
+  Object.values(vehicles||{}).forEach(v=>{
+    (v?.trips||[]).forEach(t=>{
+      if(!t) return;
+      const n = sanitizeNameInput(t.user);
+      if(!n || DRIVER_NAME_EXCLUDE.has(n)) return;
+      counts[n] = (counts[n]||0) + 1;
+    });
+  });
+  return counts;
+}
+function readDriverNameCache(){
+  try{
+    const c = JSON.parse(localStorage.getItem(DRIVER_NAME_INDEX_KEY)||'null');
+    if(c && c.names && typeof c.names==='object') return c;
+  }catch(e){}
+  return null;
+}
+function writeDriverNameCache(counts){
+  try{ localStorage.setItem(DRIVER_NAME_INDEX_KEY, JSON.stringify({at:Date.now(), names:counts})); }catch(e){}
+}
+function renderDriverNameDatalist(){
+  let dl = document.getElementById('driverNameList');
+  if(!dl){ dl = document.createElement('datalist'); dl.id = 'driverNameList'; document.body.appendChild(dl); }
+  const names = Object.keys(_driverNameCounts)
+    .filter(n=>_driverNameCounts[n]>=DRIVER_NAME_MIN_COUNT)
+    .sort((a,b)=>_driverNameCounts[b]-_driverNameCounts[a] || a.localeCompare(b,'ko'));
+  dl.innerHTML = names.map(n=>`<option value="${escapeHtml(n)}"></option>`).join('');
+}
+// 현재 메모리 데이터(전체 로드 시) 또는 기기 캐시로 이름 색인 구성. QR 단건 로드 상태에서 캐시가 없거나
+// 오래됐으면 전체 기록을 백그라운드로 한 번 받아 색인만 만들고 버린다(화면 데이터·저장 대상에 영향 없음).
+function refreshDriverNameIndex(){
+  if(!_partialData && !_staleData && Object.keys(data?.vehicles||{}).length){
+    _driverNameCounts = countDriverNames(data.vehicles);
+    writeDriverNameCache(_driverNameCounts);
+    renderDriverNameDatalist();
+    return;
+  }
+  const cache = readDriverNameCache();
+  const local = countDriverNames(data?.vehicles);
+  const merged = Object.assign({}, cache?.names||{});
+  Object.keys(local).forEach(n=>{ merged[n] = Math.max(merged[n]||0, local[n]); });
+  _driverNameCounts = merged;
+  renderDriverNameDatalist();
+  const fresh = cache && (Date.now()-(Number(cache.at)||0) < DRIVER_NAME_INDEX_TTL_MS);
+  if(fresh || _driverNameIndexLoading || FIREBASE_URL.includes('YOUR-PROJECT')) return;
+  _driverNameIndexLoading = true;
+  const savedYearNodes = _loadedYearNodes; // fetchMergedFleetData가 덮어쓰는 로드 연도 정보 보존
+  fetchMergedFleetData().then(full=>{
+    _loadedYearNodes = savedYearNodes;
+    _driverNameCounts = countDriverNames(full?.vehicles);
+    writeDriverNameCache(_driverNameCounts);
+    renderDriverNameDatalist();
+  }).catch(e=>{
+    _loadedYearNodes = savedYearNodes;
+    console.warn('[KSA 차량관리] 운행자 이름 색인 로드 실패:', e.message);
+  }).finally(()=>{ _driverNameIndexLoading = false; });
+}
+// 음절 단위 편집거리(최대 1까지만 판정)
+function nameEditDistanceLE1(a, b){
+  if(a===b) return true;
+  const la=a.length, lb=b.length;
+  if(Math.abs(la-lb)>1) return false;
+  let i=0, j=0, diff=0;
+  while(i<la && j<lb){
+    if(a[i]===b[j]){ i++; j++; continue; }
+    if(++diff>1) return false;
+    if(la>lb) i++; else if(lb>la) j++; else { i++; j++; }
+  }
+  return diff + (la-i) + (lb-j) <= 1;
+}
+// 명단(2회 이상)에 없는 이름이면 유사 후보(기록 많은 순, 최대 3개) 반환
+function findSimilarDriverNames(name){
+  const n = sanitizeNameInput(name);
+  if(!n || n.length<2 || DRIVER_NAME_EXCLUDE.has(n)) return [];
+  if((_driverNameCounts[n]||0) >= DRIVER_NAME_MIN_COUNT) return [];
+  return Object.keys(_driverNameCounts)
+    .filter(c=>c!==n && _driverNameCounts[c]>=DRIVER_NAME_MIN_COUNT && nameEditDistanceLE1(n, c))
+    .sort((a,b)=>_driverNameCounts[b]-_driverNameCounts[a])
+    .slice(0,3);
+}
+// 선택형 확인창 — choices 중 선택한 인덱스, keepText 선택 시 -1 반환
+function appChoice(message, choices, opts={}){
+  return new Promise(resolve=>{
+    document.getElementById('appChoiceOverlay')?.remove();
+    const div=document.createElement('div');
+    div.id='appChoiceOverlay';
+    div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;';
+    const btnBase="width:100%;padding:12px;border-radius:10px;font-size:13px;cursor:pointer;font-family:'Paperlogy',sans-serif;margin-top:8px;";
+    div.innerHTML=`
+      <div style="background:#fff;border-radius:16px;max-width:380px;width:100%;padding:22px 22px 18px;font-family:'Paperlogy',sans-serif;">
+        <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:10px;word-break:keep-all;">${_appModalEsc(opts.title||'확인')}</div>
+        <div style="font-size:13.5px;color:var(--ink);line-height:1.55;margin-bottom:10px;white-space:pre-line;word-break:keep-all;overflow-wrap:break-word;">${_appModalEsc(message)}</div>
+        ${choices.map((c,i)=>`<button type="button" data-choice="${i}" style="${btnBase}border:none;background:var(--navy);color:#fff;font-weight:700;">${_appModalEsc(c)}</button>`).join('')}
+        <button type="button" data-choice="-1" style="${btnBase}border:1.5px solid var(--line);background:#fff;color:var(--muted);font-weight:600;">${_appModalEsc(opts.keepText||'그대로 진행')}</button>
+      </div>`;
+    document.body.appendChild(div);
+    div.querySelectorAll('button[data-choice]').forEach(b=>{
+      b.onclick=()=>{ div.remove(); resolve(Number(b.dataset.choice)); };
+    });
+  });
+}
+// 제출 전 운행자 이름 유사도 확인 — 선택한 이름으로 입력칸·rows를 함께 교체
+async function confirmSimilarDriverNames(rows){
+  const checked = new Set();
+  for(const r of rows){
+    if(!r.user || checked.has(r.user)) continue;
+    const typed = r.user;
+    checked.add(typed);
+    const cands = findSimilarDriverNames(typed);
+    if(!cands.length) continue;
+    const idx = await appChoice(
+      `입력한 운행자 이름 "${typed}"은(는) 기존 운행기록에 거의 없는 이름입니다.\n비슷한 이름이 있습니다. 혹시 아래 이름이 맞으신가요?`,
+      cands.map(c=>`${c} (으)로 변경`),
+      {title:'운행자 이름 확인', keepText:`"${typed}" 그대로 입력`}
+    );
+    if(idx<0) continue;
+    const pick = cands[idx];
+    rows.forEach(x=>{
+      if(x.user!==typed) return;
+      x.user = pick;
+      const inp = document.getElementById(x.id)?.querySelector('.tr-user');
+      if(inp) inp.value = pick;
+    });
+  }
+  scheduleDraft();
+}
+
 function collectRows(){
   const cards = document.querySelectorAll('.trip-card');
   return Array.from(cards).map(card=>{
@@ -9426,6 +9570,9 @@ async function submitDirectInput(){
     if(r.distance >= MAX_TRIP_DISTANCE_KM){ showUserFormErr(`${i+1}번 운행기록: 주행거리가 ${r.distance.toLocaleString()}km로 ${MAX_TRIP_DISTANCE_KM.toLocaleString()}km 이상입니다. 시작/종료거리 오타 여부를 확인해 주세요.`, fld('.tr-end')); return; }
     if(r.fuel >= MAX_FUEL_AMOUNT){ showUserFormErr(`${i+1}번 운행기록: 주유비가 ${Number(r.fuel).toLocaleString()}원으로 ${MAX_FUEL_AMOUNT.toLocaleString()}원 이상입니다. 입력값을 확인해 주세요.`, fld('.tr-fuel', '.tr-fuel-chk')); return; }
   }
+
+  // 운행자 이름 오타 확인(기존 명단에 없고 한 글자 차이·성 누락 등 유사 이름이 있으면 선택)
+  await confirmSimilarDriverNames(rows);
 
   // 시작거리 공백 확인 — 시작거리가 직전 운행(저장된 마지막 기록 또는 바로 앞 입력 행)의 종료거리보다 크면
   // 중간 운행이 입력되지 않았을 가능성이 있으므로 한 번 확인한다(제출 차단은 아님).

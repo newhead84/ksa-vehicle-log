@@ -6,6 +6,11 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 ## 2026-11-02
 
+- 운행자 이름 오타(예: 양선식→양산식, 윤경규→경규, 홍진호→홍짐호)로 운행자별 집계가 갈라지는 문제 방지
+  - 운행자 입력칸에 기존 운행자 이름 자동완성 추천(2회 이상 기록된 이름만, 기록 많은 순)
+  - 제출 시 입력 이름이 명단에 없고 한 글자 차이·한 글자 누락(성 누락 포함)인 기존 이름이 있으면 선택창 표시: 후보 이름으로 변경 / 입력한 이름 그대로
+  - QR 진입(해당 차량만 로드)은 전체 기록 기준 이름 색인을 백그라운드로 1회 받아 기기에 7일 캐시(서버 저장 없음, 화면 데이터·저장 대상 영향 없음)
+  | 변경: refreshDriverNameIndex(), countDriverNames(), renderDriverNameDatalist(), findSimilarDriverNames(), nameEditDistanceLE1(), appChoice(), confirmSimilarDriverNames(), submitDirectInput(), proceedEnterUserMode(), addTripRow()(.tr-user list 속성)
 - 대시보드 처리 대기 뱃지가 섹션 이동만 해서 어떤 차량 건인지 알 수 없던 문제 개선
   - 항목을 누르면 대상 건(차량번호·일자·사유) 목록이 펼쳐짐(다시 누르면 접힘), "해당 섹션으로 이동" 버튼 유지
   - 점검요청·주행거리 공백·늦은입력 겹침 건은 누르면 해당 차량 상세 창, 사고 미완료는 사고 이력을 차량번호로, 개인사용 증빙·주유비는 개인사용 목록을 운행자 이름으로 검색해 이동
