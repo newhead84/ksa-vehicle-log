@@ -35,6 +35,12 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-02] 운행자 이름 일괄 정리 + 화면 지연 개선 — ① 관리자 [데이터 관리▾ > 운행자 이름 정리]: 기록이 3배 이상 많은
+  이름과 한 글자 차이인 이름을 후보로 표시(기본 미선택, 사례 일자 표시), 관리자가 확인·수정·직접 추가 후 선택 항목만 차량
+  단위 최신화→조건부 저장으로 user 필드 변경(submitter 유지, 변경 이력 기록) ② 지연 개선: 관리자 전용 라이브러리(엑셀·QR·
+  PDF) defer 로드, 폰트 WOFF2(약 36% 축소)+font-display:swap, 첫 화면 배경 이미지 축소(244→122KB), 이름 색인 다운로드
+  2초 지연 시작 | 변경: openDriverRenameModal(), renderDriverRenameModal(), applyDriverRename(), addDriverRenameManual(),
+  buildDriverRenameCandidates(), driverNameStats(), #driverRenameBtn, @font-face, script defer, proceedEnterUserMode()
   [2026-11-02] 운행자 이름 확인창 미표시 수정 — QR 진입 직후 제출하면 전체 이름 색인(백그라운드 로드)이 아직 없어 QR 차량
   기록만으로 비교되어 확인창이 뜨지 않던 문제. 제출 시 색인 로드를 시작/완료 대기(최대 10초) 후 비교 | 변경:
   confirmSimilarDriverNames(), refreshDriverNameIndex(), _driverNameIndexReady/_driverNameIndexPromise
@@ -371,11 +377,11 @@
 <meta name="theme-color" content="#16233F">
 <title>KSA 업무용 차량 운행정보 관리</title>
 <style>
-@font-face {font-family:'Paperlogy';font-weight:300;src:url('fonts/Paperlogy-3Light.ttf') format('truetype');}
-@font-face {font-family:'Paperlogy';font-weight:400;src:url('fonts/Paperlogy-4Regular.ttf') format('truetype');}
-@font-face {font-family:'Paperlogy';font-weight:500;src:url('fonts/Paperlogy-5Medium.ttf') format('truetype');}
-@font-face {font-family:'Paperlogy';font-weight:600;src:url('fonts/Paperlogy-6SemiBold.ttf') format('truetype');}
-@font-face {font-family:'Paperlogy';font-weight:700;src:url('fonts/Paperlogy-7Bold.ttf') format('truetype');}
+@font-face {font-family:'Paperlogy';font-weight:300;font-display:swap;src:url('fonts/Paperlogy-3Light.woff2') format('woff2'),url('fonts/Paperlogy-3Light.ttf') format('truetype');}
+@font-face {font-family:'Paperlogy';font-weight:400;font-display:swap;src:url('fonts/Paperlogy-4Regular.woff2') format('woff2'),url('fonts/Paperlogy-4Regular.ttf') format('truetype');}
+@font-face {font-family:'Paperlogy';font-weight:500;font-display:swap;src:url('fonts/Paperlogy-5Medium.woff2') format('woff2'),url('fonts/Paperlogy-5Medium.ttf') format('truetype');}
+@font-face {font-family:'Paperlogy';font-weight:600;font-display:swap;src:url('fonts/Paperlogy-6SemiBold.woff2') format('woff2'),url('fonts/Paperlogy-6SemiBold.ttf') format('truetype');}
+@font-face {font-family:'Paperlogy';font-weight:700;font-display:swap;src:url('fonts/Paperlogy-7Bold.woff2') format('woff2'),url('fonts/Paperlogy-7Bold.ttf') format('truetype');}
 </style>
 <style>
   :root{
@@ -1285,9 +1291,9 @@
 </style>
 </head>
 <body>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
@@ -1390,6 +1396,7 @@
           <button type="button" class="tb-menu-item" role="menuitem" id="contractMgmtBtn" onclick="openContractImportModal()" title="계약 연장(단가·기간 변경) 또는 차량 교체(반납 후 신차 투입)로 계약정보가 바뀌면, 지정 엑셀 양식으로 일괄 반영합니다">차량계약정보 관리</button>
           <button type="button" class="tb-menu-item" role="menuitem" id="manualUploadBtn" onclick="triggerManualMonthlyUpload()" title="1~7월 수기기록(가동율·거리)만 반영하는 별도 기능입니다. 실제 운행기록 복원/병합은 '전체기록 업로드'를 사용하세요.">엑셀 업로드(수기기록)</button>
           <button type="button" class="tb-menu-item" role="menuitem" id="tripRecordUploadBtn" onclick="openTripRecordImportModal()" title="'엑셀 내보내기'로 받은 파일의 '전체운행기록' 시트를 업로드하여, 아직 없는 일자의 운행기록만 채워 넣습니다">전체기록 업로드</button>
+          <button type="button" class="tb-menu-item" role="menuitem" id="driverRenameBtn" onclick="openDriverRenameModal()" title="오타로 갈라진 운행자 이름을 확인 후 한꺼번에 바꿉니다">운행자 이름 정리</button>
           <div class="tb-menu-sep"></div>
           <button type="button" class="tb-menu-item" role="menuitem" id="backupDataBtn" onclick="backupData()">데이터 백업</button>
           <button type="button" class="tb-menu-item" role="menuitem" id="restoreDataBtn" onclick="document.getElementById('restoreInput').click()">데이터 복원</button>
@@ -3082,7 +3089,9 @@ function proceedEnterUserMode(){
   // QR 진입(?plate=)이면 DB 전체 대신 해당 차량 노드만 먼저 불러와 표시 속도를 높인다(loadVehicleForQr).
   const _qrParam = new URLSearchParams(window.location.search).get('plate');
   (_qrParam ? loadVehicleForQr(decodeURIComponent(_qrParam)) : loadData()).then(()=>{
-    refreshDriverNameIndex();
+    // 이름 색인(QR 진입 시 전체 기록 1회 다운로드)은 첫 화면 표시와 통신이 겹치지 않도록 잠시 뒤에 시작
+    // (그 전에 제출하면 confirmSimilarDriverNames()가 즉시 시작·대기)
+    setTimeout(refreshDriverNameIndex, 2000);
     // 사용자가 그 사이 이미 사업장을 선택(및 운행기록 입력을 시작)했다면 재구성으로 선택값·
     // 입력중인 내용을 초기화하지 않도록, 아직 선택 전인 경우에만 최신 active/branch 데이터로
     // 재구성한다(드물게 그 사이 관리자가 차량을 비활성화/재배치한 경우 반영).
@@ -5441,6 +5450,159 @@ async function ackOdoGap(btn){
   if(!saved){ showAdminToast(_lastSaveConflict ? '⚠ 그 사이 다른 저장이 있어 반영하지 않았습니다. 다시 눌러 주세요.' : '⚠ 저장 실패: 서버에 반영되지 않았습니다.','bad'); btn.disabled=false; return; }
   showAdminToast('확인완료 처리되었습니다.','good');
   renderAll(); openVehicle(plate);
+}
+
+// ── 운행자 이름 일괄 정리(관리자) ─────────────────────────────────────
+// 오타로 갈라진 이름(예: 양산식/양선식, 경규/윤경규)을 후보로 보여주고, 관리자가 확인·선택한 항목만
+// 차량 단위로 최신화(refreshVehicleFromStorage) → user 필드만 변경 → 조건부 저장(saveVehicleToStorage)한다.
+// submitter(제출 당시 입력값, 기록 식별키에 포함)는 그대로 두고, 변경 내역은 기록별 변경 이력(editLog)에 남긴다.
+let _driverRenameRows = []; // [{from, to, fromCnt, toCnt, samples, checked}]
+function driverNameStats(){
+  const stats = {}; // 이름 → {cnt, samples:[]}
+  Object.keys(data.vehicles||{}).forEach(plate=>{
+    (data.vehicles[plate]?.trips||[]).forEach(t=>{
+      if(!t) return;
+      const n = sanitizeNameInput(t.user);
+      if(!n || DRIVER_NAME_EXCLUDE.has(n)) return;
+      if(!stats[n]) stats[n] = {cnt:0, samples:[]};
+      stats[n].cnt++;
+      if(stats[n].samples.length<3) stats[n].samples.push(`${plate} ${t.isoDate||''}`);
+    });
+  });
+  return stats;
+}
+// 후보: 한 글자 차이·한 글자 누락 관계이고, 대상 이름이 2건 이상이며 기록이 3배 이상 많은 경우
+function buildDriverRenameCandidates(stats){
+  const names = Object.keys(stats);
+  const rows = [];
+  names.forEach(a=>{
+    let best = null;
+    names.forEach(b=>{
+      if(a===b) return;
+      const ca = stats[a].cnt, cb = stats[b].cnt;
+      if(cb < 2 || cb < ca*3 || !nameEditDistanceLE1(a, b)) return;
+      if(!best || cb > stats[best].cnt) best = b;
+    });
+    if(best) rows.push({from:a, to:best, fromCnt:stats[a].cnt, toCnt:stats[best].cnt, samples:stats[a].samples, checked:false});
+  });
+  return rows.sort((x,y)=>x.fromCnt-y.fromCnt || x.from.localeCompare(y.from,'ko'));
+}
+async function openDriverRenameModal(){
+  if(viewerMode || currentRole!=='admin') return;
+  await ensureFullDataLoaded();
+  _driverRenameRows = buildDriverRenameCandidates(driverNameStats());
+  renderDriverRenameModal('');
+  document.getElementById('modalOverlay').classList.add('show');
+  lockBodyScroll();
+}
+function renderDriverRenameModal(resultHtml){
+  const stats = driverNameStats();
+  const rowsHtml = _driverRenameRows.map((r,i)=>{
+    const toCnt = stats[sanitizeNameInput(r.to)]?.cnt || 0;
+    return `<tr>
+      <td style="text-align:center;"><input type="checkbox" ${r.checked?'checked':''} style="width:18px;height:18px;padding:0;-webkit-appearance:checkbox;appearance:auto;accent-color:var(--navy);cursor:pointer;" onchange="_driverRenameRows[${i}].checked=this.checked;updateDriverRenameCount()"></td>
+      <td><b>${escapeHtml(r.from)}</b> <span class="muted">(${r.fromCnt}건)</span><div class="muted" style="font-size:11px;word-break:keep-all;">${r.samples.map(escapeHtml).join(' · ')}</div></td>
+      <td style="text-align:center;color:var(--muted);padding:0 2px;">→</td>
+      <td style="white-space:nowrap;"><input type="text" value="${escapeHtml(r.to)}" style="width:92px;text-align:left;border:1px solid var(--line);background:#fff;padding:5px 7px;" oninput="this.value=sanitizeNameInput(this.value);_driverRenameRows[${i}].to=this.value;document.getElementById('drCnt-${i}').textContent=(driverNameStats()[this.value]?.cnt||0)+'건'"><div class="muted" style="font-size:11px;" id="drCnt-${i}">${toCnt}건</div></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-head">
+      <div class="modal-head-info"><div class="plate-big" style="font-size:20px;">운행자 이름 정리</div><div class="muted" style="font-size:12px;word-break:keep-all;overflow-wrap:break-word;">오타로 갈라진 운행자 이름을 확인한 뒤 선택한 항목만 한꺼번에 바꿉니다</div></div>
+      <div class="modal-head-actions"><button class="close-x" onclick="closeModal()">✕</button></div>
+    </div>
+    <div style="font-size:12.5px;line-height:1.7;color:var(--muted);word-break:keep-all;overflow-wrap:break-word;margin-bottom:12px;">
+      · 아래는 기록이 훨씬 많은 이름과 한 글자만 다른 이름입니다. <b style="color:var(--navy);">실제로 다른 사람일 수 있으니</b> 같은 사람으로 확인된 항목만 체크하세요.<br>
+      · 바꿀 이름은 직접 수정할 수 있습니다. 목록에 없는 경우 아래 "직접 추가"를 사용하세요.<br>
+      · 변경 전 <b>데이터 백업</b>을 권장합니다. 변경 내역은 각 운행기록의 변경 이력에 남습니다.
+    </div>
+    ${_driverRenameRows.length ? `<div class="table-scroll"><table class="data-table" style="width:100%;">
+      <thead><tr><th style="width:36px;">선택</th><th>변경 전</th><th style="width:24px;"></th><th>변경 후</th></tr></thead>
+      <tbody>${rowsHtml}</tbody></table></div>` : `<div class="empty-state" style="padding:18px;">오타로 보이는 이름 후보가 없습니다.</div>`}
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:14px;font-size:12.5px;">
+      <b style="color:var(--navy);">직접 추가</b>
+      <input type="text" id="drManualFrom" placeholder="변경 전 이름" style="width:110px;text-align:left;" oninput="this.value=sanitizeNameInput(this.value)">
+      <span class="muted">→</span>
+      <input type="text" id="drManualTo" placeholder="변경 후 이름" style="width:110px;text-align:left;" oninput="this.value=sanitizeNameInput(this.value)">
+      <button type="button" class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" onclick="addDriverRenameManual()">목록에 추가</button>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+      <button type="button" class="btn btn-ghost" style="font-size:13px;padding:8px 14px;" onclick="backupData()">데이터 백업</button>
+      <button type="button" class="btn btn-primary" id="driverRenameApplyBtn" style="font-size:13px;padding:8px 16px;" onclick="applyDriverRename()">선택 항목 변경 (<span id="drCheckedCnt">0</span>)</button>
+    </div>
+    <div id="driverRenameResult" style="margin-top:12px;font-size:12.5px;word-break:keep-all;overflow-wrap:break-word;">${resultHtml||''}</div>`;
+  updateDriverRenameCount();
+}
+function updateDriverRenameCount(){
+  const el = document.getElementById('drCheckedCnt');
+  if(el) el.textContent = _driverRenameRows.filter(r=>r.checked).length;
+}
+function addDriverRenameManual(){
+  const from = sanitizeNameInput(document.getElementById('drManualFrom').value);
+  const to = sanitizeNameInput(document.getElementById('drManualTo').value);
+  const stats = driverNameStats();
+  if(!from || !to){ appAlert('변경 전·후 이름을 모두 입력해 주세요.'); return; }
+  if(from===to){ appAlert('변경 전·후 이름이 같습니다.'); return; }
+  if(!stats[from]){ appAlert(`"${from}" 이름으로 된 운행기록이 없습니다.`); return; }
+  const exist = _driverRenameRows.find(r=>r.from===from);
+  if(exist){ exist.to = to; exist.checked = true; }
+  else _driverRenameRows.unshift({from, to, fromCnt:stats[from].cnt, toCnt:stats[to]?.cnt||0, samples:stats[from].samples, checked:true});
+  renderDriverRenameModal('');
+}
+async function applyDriverRename(){
+  if(viewerMode || currentRole!=='admin') return;
+  const sel = _driverRenameRows.filter(r=>r.checked).map(r=>({from:r.from, to:sanitizeNameInput(r.to)}));
+  if(!sel.length){ appAlert('변경할 항목을 선택해 주세요.'); return; }
+  if(sel.some(r=>!r.to)){ appAlert('변경 후 이름이 비어 있는 항목이 있습니다.'); return; }
+  if(sel.some(r=>r.to===r.from)){ appAlert('변경 전·후 이름이 같은 항목이 있습니다.'); return; }
+  const froms = new Set(sel.map(r=>r.from));
+  const chain = sel.find(r=>froms.has(r.to));
+  if(chain){ appAlert(`"${chain.to}"은(는) 다른 항목의 변경 전 이름이기도 합니다. 연쇄 변경은 한 번에 처리할 수 없으니 나눠서 진행해 주세요.`); return; }
+  const map = {}; sel.forEach(r=>{ map[r.from] = r.to; });
+  const stats = driverNameStats();
+  const total = sel.reduce((s,r)=>s+(stats[r.from]?.cnt||0),0);
+  const msg = sel.map(r=>`${r.from} → ${r.to} (${stats[r.from]?.cnt||0}건)`).join('\n');
+  if(!await appConfirm(`아래 운행자 이름을 변경합니다. 총 ${total}건\n\n${msg}\n\n서버에 바로 반영됩니다. 데이터 백업을 먼저 받으셨나요?`, {title:'운행자 이름 일괄 변경', okText:'변경 실행', cancelText:'취소'})) return;
+  const btn = document.getElementById('driverRenameApplyBtn');
+  const resEl = document.getElementById('driverRenameResult');
+  if(btn) btn.disabled = true;
+  const plates = Object.keys(data.vehicles).filter(p=>(data.vehicles[p]?.trips||[]).some(t=>t && map[sanitizeNameInput(t.user)]));
+  let changed = 0; const failed = [];
+  for(let pi=0; pi<plates.length; pi++){
+    const plate = plates[pi];
+    if(resEl) resEl.textContent = `반영 중… (${pi+1}/${plates.length}대)`;
+    let ok = false, n = 0;
+    for(let attempt=0; attempt<3 && !ok; attempt++){
+      let vr;
+      try{ vr = await refreshVehicleFromStorage(plate); }catch(e){ break; }
+      n = 0;
+      (data.vehicles[plate]?.trips||[]).forEach(t=>{
+        if(!t) return;
+        const to = map[sanitizeNameInput(t.user)];
+        if(!to) return;
+        const before = {...t};
+        t.user = to;
+        appendEditLog(t, before, '관리자(이름 일괄정리)');
+        n++;
+      });
+      if(!n){ ok = true; break; } // 그 사이 이미 변경됨
+      ok = await saveVehicleToStorage(plate, !vr.exists, true);
+      if(!ok && !_lastSaveConflict) break;
+    }
+    if(ok) changed += n;
+    else{
+      failed.push(plate);
+      try{ await refreshVehicleFromStorage(plate); }catch(e){} // 메모리를 서버 상태로 되돌림
+    }
+  }
+  applyRegistryDefaults();
+  renderAll();
+  refreshDriverNameIndex();
+  _driverRenameRows = buildDriverRenameCandidates(driverNameStats());
+  const result = failed.length
+    ? `<span style="color:var(--bad);">⚠ ${changed}건 변경, 일부 차량 저장 실패: ${failed.map(escapeHtml).join(', ')} — 다시 시도해 주세요.</span>`
+    : `<span style="color:var(--good);font-weight:700;">✓ ${changed}건의 운행자 이름을 변경했습니다.</span>`;
+  renderDriverRenameModal(result);
 }
 
 // ── 처리 대기 요약(관리자 대시보드 최상단) ─────────────────────────────

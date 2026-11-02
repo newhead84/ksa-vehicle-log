@@ -6,6 +6,17 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 ## 2026-11-02
 
+- 관리자 운행자 이름 일괄 정리 기능 추가 ([데이터 관리▾ > 운행자 이름 정리])
+  - 기록이 3배 이상 많은 이름과 한 글자 차이·한 글자 누락인 이름을 후보로 표시(기본 미선택, 해당 기록 차량·일자 예시 표시)
+  - 관리자가 확인 후 체크, 바꿀 이름 수정, 목록에 없는 경우 직접 추가 → 변경 요약 확인 후 실행
+  - 차량별로 서버 최신화 → user 필드만 변경 → 조건부 저장(충돌 시 재시도), submitter(제출 당시 입력값) 유지, 기록별 변경 이력에 남김
+  - 열람 전용 모드에서는 메뉴 자동 숨김(화이트리스트)
+  | 변경: openDriverRenameModal(), renderDriverRenameModal(), applyDriverRename(), addDriverRenameManual(), buildDriverRenameCandidates(), driverNameStats(), #driverRenameBtn
+- QR 진입·첫 화면 지연 개선
+  - 관리자 전용 라이브러리(엑셀·QR 생성·PDF) 화면 그리기를 막지 않도록 defer 로드
+  - Paperlogy 폰트 WOFF2 추가(파일당 약 255KB→163KB), font-display:swap으로 폰트 로딩 중에도 글자 즉시 표시(TTF는 대체용·PDF용 유지)
+  - 첫 화면 배경 이미지 축소(244KB→122KB), 이름 색인 다운로드는 첫 화면 표시 2초 뒤 시작
+  | 변경: @font-face, fonts/*.woff2, images/home-bg.jpg, script defer, proceedEnterUserMode()
 - 운행자 이름 확인창("혹시 아래 이름이 맞으신가요?")이 뜨지 않던 문제 수정
   - 원인: QR 진입은 해당 차량만 먼저 로드하고 전체 이름 색인은 백그라운드로 받는데, 그 전에 제출하면 QR 차량 기록만으로 비교됨
   - 제출 시 색인이 없으면 로드를 시작하고 완료까지 대기(최대 10초) 후 비교
