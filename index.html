@@ -35,6 +35,9 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-02] 운행자 이름 확인창 미표시 수정 — QR 진입 직후 제출하면 전체 이름 색인(백그라운드 로드)이 아직 없어 QR 차량
+  기록만으로 비교되어 확인창이 뜨지 않던 문제. 제출 시 색인 로드를 시작/완료 대기(최대 10초) 후 비교 | 변경:
+  confirmSimilarDriverNames(), refreshDriverNameIndex(), _driverNameIndexReady/_driverNameIndexPromise
   [2026-11-02] 운행기록 null·객체형 데이터 로드 시 정규화 + 미사용 코드 정리 — Firebase가 운행기록을 null 포함 배열/듬성한
   객체로 돌려줘도 화면 정렬에서 멈추지 않도록 로드 시점에 null 제거·배열 변환, 호출부 없던 이미지 전체화면 오버레이 제거
   | 변경: tripsToArray(), fetchMergedFleetData(), #imgFullscreenOverlay·openImgFullscreen()·closeImgFullscreen() 삭제,
@@ -9164,6 +9167,8 @@ const DRIVER_NAME_MIN_COUNT = 2;
 const DRIVER_NAME_EXCLUDE = new Set(['롯데렌탈']);
 let _driverNameCounts = {}; // {이름: 기록 건수}
 let _driverNameIndexLoading = false;
+let _driverNameIndexReady = false;   // 전체 기록 기준 색인 확보 여부(전체 로드·유효 캐시·백그라운드 로드 성공)
+let _driverNameIndexPromise = null;  // 백그라운드 로드 진행 Promise(제출 시 완료 대기용)
 function countDriverNames(vehicles){
   const counts = {};
   Object.values(vehicles||{}).forEach(v=>{
@@ -9199,6 +9204,7 @@ function renderDriverNameDatalist(){
 function refreshDriverNameIndex(){
   if(!_partialData && !_staleData && Object.keys(data?.vehicles||{}).length){
     _driverNameCounts = countDriverNames(data.vehicles);
+    _driverNameIndexReady = true;
     writeDriverNameCache(_driverNameCounts);
     renderDriverNameDatalist();
     return;
@@ -9210,12 +9216,14 @@ function refreshDriverNameIndex(){
   _driverNameCounts = merged;
   renderDriverNameDatalist();
   const fresh = cache && (Date.now()-(Number(cache.at)||0) < DRIVER_NAME_INDEX_TTL_MS);
-  if(fresh || _driverNameIndexLoading || FIREBASE_URL.includes('YOUR-PROJECT')) return;
+  if(fresh){ _driverNameIndexReady = true; return; }
+  if(_driverNameIndexLoading || FIREBASE_URL.includes('YOUR-PROJECT')) return;
   _driverNameIndexLoading = true;
   const savedYearNodes = _loadedYearNodes; // fetchMergedFleetData가 덮어쓰는 로드 연도 정보 보존
-  fetchMergedFleetData().then(full=>{
+  _driverNameIndexPromise = fetchMergedFleetData().then(full=>{
     _loadedYearNodes = savedYearNodes;
     _driverNameCounts = countDriverNames(full?.vehicles);
+    _driverNameIndexReady = true;
     writeDriverNameCache(_driverNameCounts);
     renderDriverNameDatalist();
   }).catch(e=>{
@@ -9269,6 +9277,12 @@ function appChoice(message, choices, opts={}){
 }
 // 제출 전 운행자 이름 유사도 확인 — 선택한 이름으로 입력칸·rows를 함께 교체
 async function confirmSimilarDriverNames(rows){
+  // QR 진입 직후 바로 제출하면 전체 이름 색인이 아직 로드 중(또는 이전 시도 실패)일 수 있어
+  // QR 차량 기록만으로 비교하게 됨 → 색인 로드를 시작/대기(최대 10초, 초과 시 현재 색인으로 진행)
+  if(!_driverNameIndexReady){
+    if(!_driverNameIndexLoading) refreshDriverNameIndex();
+    if(_driverNameIndexPromise) await Promise.race([_driverNameIndexPromise, new Promise(r=>setTimeout(r,10000))]);
+  }
   const checked = new Set();
   for(const r of rows){
     if(!r.user || checked.has(r.user)) continue;
