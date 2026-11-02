@@ -14,7 +14,7 @@
 4. QA 체크(3장) 통과 후 변경 이력(5장) 갱신.
 5. **커밋**: 작업 단위마다 직접 add/commit 한다. 커밋 후 항상 **미푸시 커밋 수**(`git rev-list --count origin/main..HEAD`)를 보고한다.
 6. **푸시**: 임의로 하지 않는다. 커밋을 모아 두었다가 사용자가 명시적으로 요청할 때만 일괄 푸시한다.
-7. **PC 동기화**: 푸시 후 PC가 연결돼 있으면 Claude가 PC 로컬 저장소를 fast-forward 동기화한다(변경 파일 CRLF 변환 기록 + 신규 git 객체·`refs/heads/main`·`refs/remotes/origin/main`·`.git/index` 기록). 사전에 PC 파일이 직전 커밋과 같은지 확인하고, 다르면(미커밋 변경) 중단하고 알린다.
+7. **PC 동기화**: 푸시 후 PC가 연결돼 있으면 Claude가 변경된 파일을 PC 폴더에 CRLF로 복사한다(덮어쓰기 전 PC 파일 수정시각 확인). PC의 `.git`은 원격 도구로 쓸 수 없어 PC 로컬 git 기록은 갱신되지 않는다 — 기준 저장소는 GitHub이며, PC에서 git 작업이 필요해지면 PC 폴더를 새로 클론한다.
 - 커밋 메시지에 `Claude-Session:` 줄을 넣지 않는다.
 - PC 로컬 저장소 git 설정: 토큰 인증 `.git/.gh-cred`(커밋 대상 아님), `core.autocrlf=true`.
 
