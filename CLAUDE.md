@@ -8,12 +8,13 @@
 - 단일파일 구조(`index.html`, `accident-report.html`)는 의도된 설계다. 공통 로직을 별도 파일로 분리하지 않는다.
 
 ## 2. 작업 흐름
-1. 작업 폴더: 세션에 GitHub 저장소(`newhead84/ksa-vehicle-log`)를 연결(푸시 권한)해 클론한 작업본에서 수정·커밋·푸시까지 직접 한다. 사용자 PC 셸이 없다는 이유로 "커밋/푸시 불가"로 결론내리지 않는다. 사용자 PC 로컬 저장소는 필요 시 사용자가 `git pull`로 동기화한다.
+1. 작업 폴더: 세션에 GitHub 저장소(`newhead84/ksa-vehicle-log`)를 연결(푸시 권한)해 클론한 작업본에서 수정·커밋·푸시까지 직접 한다. 사용자 PC 셸이 없다는 이유로 "커밋/푸시 불가"로 결론내리지 않는다. 사용자에게 PowerShell 명령 실행을 요구하지 않는다.
 2. 시작 시 `git status` / `git log origin/main..HEAD`로 미반영 수정분·미푸시 커밋을 먼저 확인한다.
 3. grep으로 위치 파악 → 필요한 라인만 확인(전체 열람 지양) → 요청 범위 내 최소 수정.
 4. QA 체크(3장) 통과 후 변경 이력(5장) 갱신.
 5. **커밋**: 작업 단위마다 직접 add/commit 한다. 커밋 후 항상 **미푸시 커밋 수**(`git rev-list --count origin/main..HEAD`)를 보고한다.
 6. **푸시**: 임의로 하지 않는다. 커밋을 모아 두었다가 사용자가 명시적으로 요청할 때만 일괄 푸시한다.
+7. **PC 동기화**: 푸시 후 PC가 연결돼 있으면 Claude가 PC 로컬 저장소를 fast-forward 동기화한다(변경 파일 CRLF 변환 기록 + 신규 git 객체·`refs/heads/main`·`refs/remotes/origin/main`·`.git/index` 기록). 사전에 PC 파일이 직전 커밋과 같은지 확인하고, 다르면(미커밋 변경) 중단하고 알린다.
 - 커밋 메시지에 `Claude-Session:` 줄을 넣지 않는다.
 - PC 로컬 저장소 git 설정: 토큰 인증 `.git/.gh-cred`(커밋 대상 아님), `core.autocrlf=true`.
 

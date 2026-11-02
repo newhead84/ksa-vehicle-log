@@ -35,6 +35,10 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-02] 운행기록 null·객체형 데이터 로드 시 정규화 + 미사용 코드 정리 — Firebase가 운행기록을 null 포함 배열/듬성한
+  객체로 돌려줘도 화면 정렬에서 멈추지 않도록 로드 시점에 null 제거·배열 변환, 호출부 없던 이미지 전체화면 오버레이 제거
+  | 변경: tripsToArray(), fetchMergedFleetData(), #imgFullscreenOverlay·openImgFullscreen()·closeImgFullscreen() 삭제,
+  accident-report.html localDateKey() 삭제
   [2026-11-02] 운행자 이름 오타 방지 — ① 운행자 입력칸에 기존 운행자 이름(2회 이상 기록) 자동완성 추천 ② 제출 시 명단에
   없는 이름이 기존 이름과 한 글자 차이·성 누락 등으로 비슷하면 "혹시 ○○○님인가요?" 선택창(변경/그대로 입력). QR 단건
   로드 시에는 전체 기록 기준 이름 색인을 백그라운드로 1회 받아 기기에 7일 캐시 | 변경: refreshDriverNameIndex(),
@@ -1640,15 +1644,6 @@
       </button>
     </div>
   </div>
-</div>
-<!-- 이미지 전체화면 오버레이 -->
-<div id="imgFullscreenOverlay"
-  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:600;align-items:center;justify-content:center;padding:12px;"
-  onclick="if(event.target===this)closeImgFullscreen()">
-  <img id="imgFullscreenImg" src="" alt="확대 이미지"
-    style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;display:block;">
-  <button onclick="closeImgFullscreen()"
-    style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.2);border:none;color:#fff;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
 </div>
 
 <!-- 제출완료/수정완료 안내 팝업 -->
@@ -3907,6 +3902,7 @@ async function fetchMergedFleetData(extraYears){
   const res = await fbGet(STORAGE_KEY);
   const merged = (res && typeof res==='object') ? res : {vehicles:{}};
   if(!merged.vehicles) merged.vehicles = {};
+  Object.values(merged.vehicles).forEach(v=>{ if(v && v.trips!==undefined) v.trips = tripsToArray(v.trips); });
   const curYear = new Date().getFullYear();
   const yearsToLoad = new Set((extraYears||[]).filter(y=>y>LEGACY_DATA_MAX_YEAR));
   // 2027년~당해년도 전부 로드 — 당해년도만 읽으면 연초 첫 입력의 "이전 종료거리"·중복/겹침 검사가
@@ -3920,7 +3916,7 @@ async function fetchMergedFleetData(extraYears){
       const yd = results[i];
       if(!yd || !yd.vehicles) return;
       Object.keys(yd.vehicles).forEach(plate=>{
-        const yTrips = yd.vehicles[plate].trips || [];
+        const yTrips = tripsToArray(yd.vehicles[plate]?.trips);
         if(!yTrips.length) return;
         if(!merged.vehicles[plate]) merged.vehicles[plate] = {trips:[]};
         if(!Array.isArray(merged.vehicles[plate].trips)) merged.vehicles[plate].trips = [];
@@ -4009,9 +4005,11 @@ async function refreshDataFromStorage(){
 // 저장 위치·필드 구조는 기존과 동일(경로 추가·필드 변경 없음)하므로 기존 데이터와 그대로 호환된다.
 function vehicleNodePath(plate){ return `${STORAGE_KEY}/vehicles/${encodeURIComponent(plate)}`; }
 // Firebase는 연속 정수 키 배열을 배열로, 키가 비면 객체로 돌려주므로 둘 다 배열로 정규화(객체여도 기록이 사라지지 않게)
+// Firebase는 연속 정수 키를 배열로 바꾸며 빈 키 자리를 null로 채우거나, 키가 듬성하면 객체로 반환한다.
+// 화면·정렬 코드 전반이 운행기록을 "null 없는 배열"로 가정하므로 로드 시점에 한 번 정규화한다.
 function tripsToArray(raw){
-  if(Array.isArray(raw)) return raw;
-  if(raw && typeof raw==='object') return Object.keys(raw).sort((a,b)=>Number(a)-Number(b)).map(k=>raw[k]);
+  if(Array.isArray(raw)) return raw.filter(Boolean);
+  if(raw && typeof raw==='object') return Object.keys(raw).sort((a,b)=>Number(a)-Number(b)).map(k=>raw[k]).filter(Boolean);
   return [];
 }
 // 해당 차량만 서버에서 다시 읽어 메모리(data.vehicles[plate])에 반영. 실패 시 예외를 던져 낡은 데이터로
@@ -5919,18 +5917,6 @@ function openVehicle(plate){
   const _alreadyShown = document.getElementById('modalOverlay').classList.contains('show');
   document.getElementById('modalOverlay').classList.add('show');
   if(!_alreadyShown) lockBodyScroll();
-}
-// 이미지 전체화면 확대
-function openImgFullscreen(src){
-  const overlay = document.getElementById('imgFullscreenOverlay');
-  const img = document.getElementById('imgFullscreenImg');
-  if(!overlay || !img) return;
-  img.src = src;
-  overlay.style.display = 'flex';
-}
-function closeImgFullscreen(){
-  document.getElementById('imgFullscreenOverlay').style.display = 'none';
-  document.getElementById('imgFullscreenImg').src = '';
 }
 
 function openWeekendModal(){

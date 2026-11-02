@@ -414,11 +414,6 @@ const ctx = {
   document.getElementById('occurredAt').value = local;
 })();
 
-function localDateKey(d){
-  const pad = n=>String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-}
-
 // ============================================================
 // GPS → 대한민국 주소 변환(역지오코딩) — OpenStreetMap Nominatim(무료, 키 불필요) 사용.
 // 실패/시간초과/권한거부 등 GPS를 사용할 수 없는 경우에는 좌표만 표시하거나 안내문구만 남기고,
