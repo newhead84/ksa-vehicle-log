@@ -35,6 +35,12 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-02] 처리 대기 요약 상세 목록 + 관리자 2차인증 원인 표시 — ① 처리대기 항목을 누르면 대상 건(차량번호·일자·사유)
+  목록이 펼쳐지고, 건을 누르면 차량 상세 창 열기(사고·개인사용은 해당 섹션을 차량번호/운행자로 검색해 이동) ② 인증코드를
+  다시 요구할 때 OTP 화면에 사유 표시(기기 기억 정보 없음/만료/서버 기록 없음/확인 오류), 확인 오류 시 1회 재시도, 기기 기억
+  저장 실패 시 관리자에게 알림 | 변경: pendingSummaryDetails()(pendingSummaryCounts 대체), renderPendingSummary(),
+  togglePendingDetail(), openPendingRow(), isDeviceTrusted(), trustThisDevice(), tryAdminLogin(), verifyAdminOtp(),
+  #otpTrustReason, CSS(.pending-detail, .pending-row, .otp-trust-reason)
   [2026-11-01] QA 후속 수정 — 제출 실패 시 메모리 추가분 되돌림(재제출 때 영수증·게이지 사진 누락 방지), QR 빠른 로드에
   사고 이력 포함(차량 알림 패널), 내 기록 수정 재저장 시 새 영수증 유지, ETag 조회 실패 시 일반 조회로 대체, 과거 대차 기록
   거리공백 오탐 제외, 엑셀 업로드 실패 차량 화면 복구, 달력 최대일 갱신 | 변경: doSubmit(), loadVehicleForQr(), saveUserEdits(),
@@ -461,6 +467,8 @@
   }
   .login-err{color:var(--bad);font-size:13px;margin-top:8px;display:none;}
   .otp-guide{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:12px;word-break:keep-all;overflow-wrap:break-word;}
+  .otp-trust-reason{font-size:11.5px;color:var(--muted);line-height:1.5;margin:-6px 0 12px;word-break:keep-all;overflow-wrap:break-word;}
+  .otp-trust-reason:empty{display:none;}
   .otp-links{display:flex;justify-content:center;gap:16px;margin-top:10px;}
   .otp-links a{font-size:12.5px;color:var(--muted);text-decoration:underline;cursor:pointer;}
   .otp-trust-label{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--muted);
@@ -1042,6 +1050,16 @@
   .pending-label{font-size:12.5px;color:var(--ink);word-break:keep-all;overflow-wrap:break-word;}
   .pending-n{font-size:17px;font-weight:700;color:var(--muted);flex-shrink:0;}
   .pending-item.has .pending-n{color:var(--bad);}
+  .pending-item.open{box-shadow:0 0 0 2px var(--bad) inset;}
+  .pending-detail{margin-top:10px;border:1px solid var(--line);border-radius:10px;background:var(--paper);padding:8px 10px;}
+  .pending-detail-head{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:12.5px;color:var(--ink);padding:2px 2px 6px;}
+  .pending-detail-go{margin-left:auto;padding:2px 8px;font-size:11.5px;}
+  .pending-row{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;width:100%;padding:7px 4px;border:0;border-top:1px solid var(--line);
+    background:transparent;font-family:'Paperlogy',sans-serif;cursor:pointer;text-align:left;font-size:12.5px;color:var(--ink);}
+  .pending-row:hover{background:var(--bad-soft);}
+  .pending-row-plate{font-weight:700;color:var(--navy);white-space:nowrap;}
+  .pending-row-date{color:var(--muted);font-size:11.5px;white-space:nowrap;}
+  .pending-row-text{flex:1 1 180px;word-break:keep-all;overflow-wrap:break-word;}
   /* 차량 상세: 주행거리 공백(odoGapListHtml) · 변경 이력(changeHistoryHtml) */
   .gap-box{margin-top:14px;padding:12px 14px;border:1px solid #F59E0B;background:#FFFBEB;border-radius:12px;font-size:12.5px;line-height:1.6;}
   .gap-title{font-weight:700;color:#92400E;margin-bottom:6px;word-break:keep-all;overflow-wrap:break-word;}
@@ -1298,6 +1316,7 @@
         <!-- 2차 인증(이메일 OTP) 단계: 비밀번호 확인 후에만 표시됨 -->
         <div class="admin-login-wrap" id="adminOtpWrap" style="display:none;">
           <div class="otp-guide" id="otpGuide">관리자 이메일로 인증코드를 보냈습니다.<br>5분 이내에 입력해 주세요.</div>
+          <div class="otp-trust-reason" id="otpTrustReason"></div>
           <input type="text" inputmode="numeric" maxlength="6" id="adminOtpInput" placeholder="인증코드 6자리" onkeydown="if(event.key==='Enter')verifyAdminOtp()">
           <label class="otp-trust-label" for="trustDeviceChk">
             <input type="checkbox" id="trustDeviceChk">
@@ -2741,31 +2760,41 @@ function generateDeviceId(){
   return 'd'+Date.now().toString(36)+Math.random().toString(36).slice(2);
 }
 
-// 이 기기가 이미 신뢰(2차 인증 생략) 상태인지 서버 기준으로 확인
+// 이 기기가 이미 신뢰(2차 인증 생략) 상태인지 서버 기준으로 확인.
+// 결과와 함께 사유(reason)를 반환해, 인증코드를 다시 요구할 때 OTP 화면에 원인을 표시한다
+// (기존엔 사유 없이 OTP로 넘어가 "30일이 안 됐는데 왜 또 묻는지" 알 수 없었음).
 async function isDeviceTrusted(){
-  const id = localStorage.getItem(ADMIN_TRUST_STORAGE_KEY);
-  if(!id) return false;
-  try{
-    const rec = await fbGet(`${ADMIN_TRUSTED_DEVICES_NODE}/${id}`);
-    if(rec && Number(rec.expiresAt||0) > Date.now()) return true;
-    // 만료되었거나 서버에 기록이 없으면 로컬 값도 함께 정리
-    localStorage.removeItem(ADMIN_TRUST_STORAGE_KEY);
-    return false;
-  }catch(e){
-    // 조회 실패 시에는 안전하게 신뢰하지 않음(OTP 단계로 진행)
-    return false;
+  let id = null;
+  try{ id = localStorage.getItem(ADMIN_TRUST_STORAGE_KEY); }catch(e){}
+  if(!id) return {ok:false, reason:'이 브라우저에 기기 기억 정보가 없습니다. (처음 로그인, 체크박스 미선택, 브라우저 데이터 삭제, 다른 브라우저·프로필·시크릿 창인 경우)'};
+  for(let attempt=0; attempt<2; attempt++){ // 일시적 네트워크 오류 대비 1회 재시도
+    try{
+      const rec = await fbGet(`${ADMIN_TRUSTED_DEVICES_NODE}/${id}`);
+      const exp = Number(rec?.expiresAt||0);
+      if(rec && exp > Date.now()) return {ok:true};
+      // 만료되었거나 서버에 기록이 없으면 로컬 값도 함께 정리
+      try{ localStorage.removeItem(ADMIN_TRUST_STORAGE_KEY); }catch(e){}
+      return {ok:false, reason: rec
+        ? `기기 기억 기간이 만료되었습니다. (만료: ${new Date(exp).toLocaleString('ko-KR')})`
+        : '서버에 이 기기의 기억 기록이 없습니다. (기록이 삭제되었거나 저장되지 않음)'};
+    }catch(e){
+      if(attempt===1) return {ok:false, reason:`기기 기억 확인 중 오류가 발생해 인증코드로 진행합니다. (${e.message||e})`};
+    }
   }
 }
 
 // 사용자가 체크박스를 선택한 경우에만 호출: 새 기기 ID 발급 후 서버에 만료시간과 함께 기록
+// 저장 성공 여부를 반환 — 실패 시 호출부에서 관리자에게 알린다(기존엔 콘솔에만 남아 저장된 줄 알았음)
 async function trustThisDevice(){
   const id = generateDeviceId();
   const expiresAt = Date.now() + ADMIN_TRUST_TTL_MS;
   try{
     await fbSet(`${ADMIN_TRUSTED_DEVICES_NODE}/${id}`, { expiresAt });
     localStorage.setItem(ADMIN_TRUST_STORAGE_KEY, id);
+    return localStorage.getItem(ADMIN_TRUST_STORAGE_KEY) === id;
   }catch(e){
     console.error('[2차 인증] 기기 기억 저장 실패:', e);
+    return false;
   }
 }
 
@@ -2805,10 +2834,13 @@ async function tryAdminLogin(){
     // 실제 비밀번호 검증은 Firebase 서버가 수행 (코드 안에는 비밀번호가 존재하지 않음)
     await firebase.auth().signInWithEmailAndPassword(ADMIN_LOGIN_EMAIL, pw);
     // 비밀번호(1차 인증) 통과 → 이 기기가 이미 신뢰된 상태라면 2차 인증 없이 바로 로그인
-    if(await isDeviceTrusted()){
+    const trust = await isDeviceTrusted();
+    if(trust.ok){
       completeAdminLogin();
       return;
     }
+    const reasonEl = document.getElementById('otpTrustReason');
+    if(reasonEl) reasonEl.textContent = trust.reason ? `인증코드가 필요한 이유: ${trust.reason}` : '';
     // 신뢰된 기기가 아니면 이메일 OTP(2차 인증) 단계로 전환
     adminOtpFailCount = 0;
     await sendAdminOtp();
@@ -2846,10 +2878,12 @@ async function verifyAdminOtp(){
       return;
     }
     await fbSet(ADMIN_OTP_NODE, null); // 사용된 코드는 즉시 폐기
+    let trustFailed = false;
     if(document.getElementById('trustDeviceChk')?.checked){
-      await trustThisDevice();
+      trustFailed = !(await trustThisDevice());
     }
     completeAdminLogin();
+    if(trustFailed) showAdminToast('⚠ 이 기기 기억 저장에 실패했습니다. 다음 로그인 때도 인증코드가 필요합니다.','bad');
   } catch(e){
     document.getElementById('otpErr').textContent = '인증 확인 중 오류가 발생했습니다. 다시 시도해 주세요.';
     document.getElementById('otpErr').style.display = 'block';
@@ -5404,38 +5438,72 @@ async function ackOdoGap(btn){
 
 // ── 처리 대기 요약(관리자 대시보드 최상단) ─────────────────────────────
 // 여러 섹션에 흩어진 "확인이 필요한 건"을 한 곳에 모아 보여주고, 누르면 해당 위치로 이동한다.
-function pendingSummaryCounts(){
-  let maint=0, gaps=0, late=0;
+function pendingSummaryDetails(){
+  const maint=[], gaps=[], late=[];
   const lateSince = Date.now() - 30*86400000;
+  const dOf = t=>t.isoDate||t.date||'';
   Object.keys(data.vehicles||{}).forEach(p=>{
     const v = data.vehicles[p];
     if(!v || v.active===false) return;
     (v.trips||[]).filter(Boolean).forEach(t=>{
-      if(t.status==='점검요망' && !t.maintenanceResolved) maint++;
-      if(t.lateEntryConflict && t.submittedAt && new Date(t.submittedAt).getTime() >= lateSince) late++;
+      if(t.status==='점검요망' && !t.maintenanceResolved) maint.push({plate:p, date:dOf(t), text:`점검요망 · ${t.user||''}`});
+      if(t.lateEntryConflict && t.submittedAt && new Date(t.submittedAt).getTime() >= lateSince)
+        late.push({plate:p, date:dOf(t), text:`시작 ${t.startOdo!=null?Number(t.startOdo).toLocaleString():'?'}km 겹침 · ${t.user||''}`});
     });
-    gaps += odoGapsForPlate(p).length;
+    odoGapsForPlate(p).forEach(g=>gaps.push({plate:p, date:dOf(g.trip), text:`${dOf(g.prev)} → ${dOf(g.trip)} ${g.gap.toLocaleString()}km 공백`}));
   });
   const monitored = personalUseTrips().filter(isMonitoredTrip);
-  const receipt = new Set([...monitored.filter(isReceiptProblem), ...monitored.filter(isFuelUnderpaid)]).size;
-  const accident = accidentListSorted().filter(a=>(a.status||'접수')!=='완료').length;
+  const receipt = monitored.filter(t=>isReceiptProblem(t)||isFuelUnderpaid(t)).map(t=>({
+    plate:t.plate, date:dOf(t), name:t.user||'',
+    text:[isReceiptProblem(t)?(t.receiptPath?'증빙 부적격':'증빙 미첨부(기한초과)'):'', isFuelUnderpaid(t)?'주유비 과소':''].filter(Boolean).join('·')+` · ${t.user||''}`
+  }));
+  const accident = accidentListSorted().filter(a=>(a.status||'접수')!=='완료').map(a=>({
+    plate:a.ourVehicle?.plate||'미확인', date:formatAccidentDateTime(a.occurredAt), text:`${a.status||'접수'} · ${a.reportedBy?.name||''}`
+  }));
   return {maint, accident, receipt, gaps, late};
 }
+let pendingOpenKey = null; // 처리 대기 요약에서 펼쳐 둔 항목(재렌더링 후에도 유지)
+let _pendingDetails = null;
 function renderPendingSummary(){
   const el = document.getElementById('pendingSummary');
   if(!el) return;
-  const c = pendingSummaryCounts();
+  const d = _pendingDetails = pendingSummaryDetails();
   const items = [
-    {k:'maint',    label:'점검요청 미처리', n:c.maint,    target:'vehicleAreaWrap'},
-    {k:'accident', label:'사고 미완료',     n:c.accident, target:'accidentHistoryWrap'},
-    {k:'receipt',  label:'개인사용 증빙·주유비 확인', n:c.receipt, target:'personalUseWrap'},
-    {k:'gaps',     label:'주행거리 공백',   n:c.gaps,     target:'vehicleAreaWrap'},
-    {k:'late',     label:'늦은입력 겹침(30일)', n:c.late, target:'vehicleAreaWrap'}
-  ];
+    {k:'maint',    label:'점검요청 미처리', target:'vehicleAreaWrap'},
+    {k:'accident', label:'사고 미완료',     target:'accidentHistoryWrap'},
+    {k:'receipt',  label:'개인사용 증빙·주유비 확인', target:'personalUseWrap'},
+    {k:'gaps',     label:'주행거리 공백',   target:'vehicleAreaWrap'},
+    {k:'late',     label:'늦은입력 겹침(30일)', target:'vehicleAreaWrap'}
+  ].map(i=>({...i, n:d[i.k].length}));
+  if(pendingOpenKey && !d[pendingOpenKey]?.length) pendingOpenKey = null;
   const total = items.reduce((s,i)=>s+i.n,0);
-  el.innerHTML = `<div class="pending-head">처리 대기 <b style="color:${total?'var(--bad)':'var(--good)'};">${total}건</b>${total?'':' — 모두 처리됨'}</div>
-    <div class="pending-grid">${items.map(i=>`<button type="button" class="pending-item${i.n?' has':''}" onclick="scrollToPendingTarget('${i.target}')" ${i.n?'':'disabled'}>
-      <span class="pending-label">${i.label}</span><span class="pending-n">${i.n}</span></button>`).join('')}</div>`;
+  const open = items.find(i=>i.k===pendingOpenKey);
+  const detailHtml = open ? `<div class="pending-detail">
+      <div class="pending-detail-head"><b>${open.label}</b> ${open.n}건 <button type="button" class="btn-ghost pending-detail-go" onclick="scrollToPendingTarget('${open.target}')">해당 섹션으로 이동 ↓</button></div>
+      ${d[open.k].map((r,idx)=>`<button type="button" class="pending-row" onclick="openPendingRow('${open.k}',${idx})">
+        <span class="pending-row-plate">${escapeHtml(r.plate)}</span>
+        <span class="pending-row-date">${escapeHtml(r.date)}</span>
+        <span class="pending-row-text">${escapeHtml(r.text)}</span></button>`).join('')}
+    </div>` : '';
+  el.innerHTML = `<div class="pending-head">처리 대기 <b style="color:${total?'var(--bad)':'var(--good)'};">${total}건</b>${total?' <span class="muted" style="font-weight:400;font-size:12px;">— 항목을 누르면 대상 차량 목록이 펼쳐집니다</span>':' — 모두 처리됨'}</div>
+    <div class="pending-grid">${items.map(i=>`<button type="button" class="pending-item${i.n?' has':''}${i.k===pendingOpenKey?' open':''}" onclick="togglePendingDetail('${i.k}')" ${i.n?'':'disabled'}>
+      <span class="pending-label">${i.label}</span><span class="pending-n">${i.n}</span></button>`).join('')}</div>${detailHtml}`;
+}
+function togglePendingDetail(k){
+  pendingOpenKey = pendingOpenKey===k ? null : k;
+  renderPendingSummary();
+}
+// 상세 목록의 한 건을 누르면: 차량 관련 항목은 차량 상세 창, 사고·개인사용은 해당 섹션을 검색어로 좁혀 이동
+function openPendingRow(k, idx){
+  const r = _pendingDetails?.[k]?.[idx];
+  if(!r) return;
+  if(k==='accident' || k==='receipt'){
+    const box = document.getElementById(k==='accident'?'accidentSearchBox':'personalSearchBox');
+    if(box){ box.value = k==='accident' ? (r.plate==='미확인'?'':r.plate) : r.name; box.dispatchEvent(new Event('input')); }
+    scrollToPendingTarget(k==='accident'?'accidentHistoryWrap':'personalUseWrap');
+    return;
+  }
+  if(data.vehicles?.[r.plate]) openVehicle(r.plate);
 }
 function scrollToPendingTarget(id){
   const wrap = document.getElementById(id);

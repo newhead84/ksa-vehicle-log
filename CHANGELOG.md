@@ -4,6 +4,17 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 형식: 각 항목은 `요청내용 요약 | 변경: 함수/영역`
 
+## 2026-11-02
+
+- 대시보드 처리 대기 뱃지가 섹션 이동만 해서 어떤 차량 건인지 알 수 없던 문제 개선
+  - 항목을 누르면 대상 건(차량번호·일자·사유) 목록이 펼쳐짐(다시 누르면 접힘), "해당 섹션으로 이동" 버튼 유지
+  - 점검요청·주행거리 공백·늦은입력 겹침 건은 누르면 해당 차량 상세 창, 사고 미완료는 사고 이력을 차량번호로, 개인사용 증빙·주유비는 개인사용 목록을 운행자 이름으로 검색해 이동
+  | 변경: pendingSummaryDetails()(pendingSummaryCounts 대체), renderPendingSummary(), togglePendingDetail(), openPendingRow(), CSS(.pending-detail, .pending-row)
+- 관리자 로그인 시 30일 이내인데도 인증코드를 다시 요구하는 원인을 확인할 수 있도록 개선
+  - OTP 화면에 사유 표시: 이 브라우저에 기기 기억 정보 없음 / 기간 만료(만료일시) / 서버 기록 없음 / 확인 오류
+  - 기기 기억 확인이 일시 오류로 실패하면 1회 재시도, 기기 기억 저장 실패 시 로그인 직후 알림(기존엔 콘솔에만 기록)
+  | 변경: isDeviceTrusted(), trustThisDevice(), tryAdminLogin(), verifyAdminOtp(), #otpTrustReason, CSS(.otp-trust-reason)
+
 ## 2026-11-01
 
 - QA 후속 수정 (독립 검토·재현 테스트 결과)
