@@ -35,6 +35,12 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-03] 과태료·범칙금 등록·현황 관리 — 과태료 운전자 조회 결과에서 운행자(조회 결과 선택/직접 입력)·종류(속도위반·
+  주정차위반·신호위반·버스전용차로·통행료 미납·기타)·금액·메모로 등록(fleet-data/fines/{id} 건별 저장, 중복 확인), 대시보드
+  "과태료·범칙금 현황" 섹션(연도·미처리 필터, 검색, 건수·금액·미처리 요약, 종류별·운행자별 집계, 처리상태 확인중/운전자 통보/
+  납부완료 변경, 삭제), 처리 대기 "과태료 미처리", 엑셀 내보내기 "과태료현황" 시트(관리자만), 열람 전용 화면에서는 숨김 |
+  변경: runFineLookup(), fineRegFormHtml(), registerFine(), renderFines(), updateFineStatus(), deleteFine(),
+  pendingSummaryDetails(), openPendingRow(), exportToExcel(), applyViewerModeUI(), #fineSection
   [2026-11-02] 총무·관리 기능 고도화 — ① [데이터 관리▾ > 과태료 운전자 조회]: 차량번호(대차 차량 포함)+위반일자로 당시
   운행기록·운행자 조회, 같은 날 여럿이면 모두 표시, 기록 없으면 직전·직후 기록, 결과 복사 ② 처리 대기에 "계약 만료 임박
   (4개월)"(만료 경과 운용 차량 포함)·"운행자 중복(30일)"(같은 운행자가 같은 기간 다른 차량, 확인완료 처리 가능) 추가
@@ -1620,6 +1626,22 @@
       <div id="accidentHistoryList"></div>
     </div>
     </section>
+
+    <section class="dash-card" id="fineSection">
+    <div class="section-head">
+      <h2 class="collapsible-title" onclick="toggleSection(this)"><span class="chevron rot">▾</span>과태료·범칙금 현황 <span id="fineCountBadge" style="font-size:11px;color:var(--bad);font-weight:700;"></span></h2>
+    </div>
+    <div class="section-body collapsed" id="fineSectionWrap">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+        <select id="fineYearSel" class="pr-sel" onchange="renderFines()" style="font-family:'Paperlogy';font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;"></select>
+        <select id="fineStatusSel" onchange="renderFines()" style="font-family:'Paperlogy';font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;"><option value="">전체 상태</option><option value="open">미처리(납부완료 제외)</option></select>
+        <input class="search-box" id="fineSearchBox" placeholder="차량번호·운행자 검색…" oninput="renderFines()" style="max-width:220px;margin:0;">
+        <button type="button" class="btn btn-ghost" style="font-size:12px;padding:6px 12px;margin-left:auto;" onclick="openFineLookupModal()">+ 과태료 조회·등록</button>
+      </div>
+      <div id="fineSummary"></div>
+      <div id="fineList"></div>
+    </div>
+    </section>
   </div>
 
 </div><!-- /mainWrap -->
@@ -3001,7 +3023,7 @@ function applyViewerModeUI(){
   });
   // 상단 관리자 툴바(admin-topbar-actions) 밖에 있는 차량목록 영역의 관리 전용 버튼(차량추가/QR PDF)은
   // 화이트리스트 대상 컨테이너 밖이라 위 로직으로 잡히지 않으므로 별도로 숨김 처리
-  ['addVehicleBtn','qrBulkPdfBtn'].forEach(id=>{
+  ['addVehicleBtn','qrBulkPdfBtn','fineSection'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.style.display = 'none';
   });
@@ -4356,7 +4378,7 @@ async function applyContractImport(rows,resultEl){
 // ============================================================
 // 렌더 (관리자 전용)
 // ============================================================
-function renderAll(){ renderStats(); renderVehicles(); renderMonthly(monthlyYear); renderAccidentHistory(); renderPendingSummary(); }
+function renderAll(){ renderStats(); renderVehicles(); renderMonthly(monthlyYear); renderAccidentHistory(); renderFines(); renderPendingSummary(); }
 
 // ============================================================
 // 사고 이력 (관리자 대시보드) — accident-report.html이 fleet-data/accidents/{accidentId}에
@@ -5539,8 +5561,11 @@ async function runFineLookup(){
     if(dayTrips.length) dayTrips.forEach(t=>hits.push(fineTripLine(pd.origPlate, t, `대차 사용기간 ${from}~${pd.returnTrip?to:'사용중'}`)));
     else near.push(...pd.trips.slice(-2).map(t=>fineTripLine(pd.origPlate, t, `대차 사용기간 ${from}~${pd.returnTrip?to:'사용중'} 중 기록(해당 일자 기록 없음)`)));
   });
+  window._fineDraft = {plate:q, violationDate:d, origPlate: own || hits[0]?.plate || near[0]?.plate || '', type:'', driver:''};
+  const candidates = Array.from(new Set((hits.length?hits:near).map(h=>h.user).filter(Boolean)));
   if(!own && !hits.length && !near.length){
-    el.innerHTML = `<span style="color:var(--bad);">"${escapeHtml(q)}" 차량을 공용차량·대차 이력에서 찾지 못했습니다. 차량번호를 다시 확인해 주세요.</span>`;
+    el.innerHTML = `<span style="color:var(--bad);">"${escapeHtml(q)}" 차량을 공용차량·대차 이력에서 찾지 못했습니다. 차량번호를 다시 확인해 주세요.</span>` + fineRegFormHtml(candidates);
+    syncFineDriverChips();
     return;
   }
   const rowHtml = r=>`<tr><td>${escapeHtml(r.plate)}</td><td>${escapeHtml(r.range)}</td><td><b>${escapeHtml(r.user)}</b></td><td>${escapeHtml(r.dest)}</td><td style="white-space:nowrap;">${escapeHtml(r.odo)}</td><td>${escapeHtml([r.kind,r.note].filter(Boolean).join(' · '))}</td></tr>`;
@@ -5555,6 +5580,152 @@ async function runFineLookup(){
        <button type="button" class="btn btn-ghost" style="margin-top:10px;font-size:12px;padding:6px 12px;" onclick="navigator.clipboard?.writeText(window._fineLookupText||'').then(()=>showAdminToast('조회 결과를 복사했습니다.','good')).catch(()=>showAdminToast('복사하지 못했습니다.','bad'))">결과 복사</button>`
     : `<div style="margin-bottom:8px;color:var(--bad);font-weight:700;">${escapeHtml(d)}에 해당하는 운행기록이 없습니다.</div>
        ${near.length?`<div class="muted" style="margin-bottom:6px;">참고: 가까운 운행기록 — 미입력 운행일 가능성이 있으니 당시 사용자에게 확인하세요.</div>${table(near)}`:''}`;
+  el.innerHTML += fineRegFormHtml(candidates);
+  syncFineDriverChips();
+}
+function syncFineDriverChips(){
+  const v = document.getElementById('fineDriverInput')?.value || '';
+  document.querySelectorAll('.fine-chip[data-g="driver"]').forEach(b=>fineChipStyle(b, b.dataset.v===v));
+}
+// ── 과태료·범칙금 등록·현황 ──────────────────────────────────────────
+// 저장 위치: fleet-data/fines/{id} (사고 이력과 같은 건별 저장 — 현행 RTDB 규칙 범위 내, 다른 데이터에 영향 없음)
+const FINE_TYPES = ['속도위반','주정차위반','신호위반','버스전용차로','통행료 미납','기타'];
+const FINE_STATUSES = ['확인중','운전자 통보','납부완료'];
+function fineNodePath(id){ return `${STORAGE_KEY}/fines/${encodeURIComponent(id)}`; }
+function fineListSorted(){
+  const f = data.fines || {};
+  return Object.keys(f).filter(id=>f[id]).map(id=>({id, ...f[id]})).sort((a,b)=>(b.violationDate||'').localeCompare(a.violationDate||'') || (b.createdAt||'').localeCompare(a.createdAt||''));
+}
+function fineRegFormHtml(candidates){
+  const btn = "font-family:'Paperlogy';font-size:12.5px;padding:6px 11px;border:1.5px solid var(--line);border-radius:18px;background:#fff;color:var(--ink);cursor:pointer;";
+  return `<div style="margin-top:16px;padding:14px;border:1.5px solid var(--line);border-radius:12px;background:#FAFBFA;">
+    <div style="font-weight:700;color:var(--navy);margin-bottom:10px;">과태료 등록</div>
+    <div class="muted" style="font-size:12px;margin-bottom:5px;">운행자${candidates.length?' — 조회된 운행자를 누르거나 직접 입력':''}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+      ${candidates.map(u=>`<button type="button" class="fine-chip" data-g="driver" data-v="${escapeHtml(u)}" style="${btn}" onclick="pickFineChip(this)">${escapeHtml(u)}</button>`).join('')}
+      <input type="text" id="fineDriverInput" placeholder="운행자 이름" value="${candidates.length===1?escapeHtml(candidates[0]):''}" oninput="this.value=sanitizeNameInput(this.value);syncFineDriverChips()" style="width:120px;text-align:left;padding:6px 9px;border:1px solid var(--line);border-radius:8px;font-family:'Paperlogy';font-size:13px;">
+    </div>
+    <div class="muted" style="font-size:12px;margin-bottom:5px;">종류</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+      ${FINE_TYPES.map(t=>`<button type="button" class="fine-chip" data-g="type" data-v="${t}" style="${btn}" onclick="pickFineChip(this)">${t}</button>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+      <div><div class="muted" style="font-size:12px;margin-bottom:4px;">금액(원)</div>
+        <input type="text" inputmode="numeric" id="fineAmountInput" placeholder="예: 40,000" oninput="formatFuelInput(this)" style="width:120px;text-align:right;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:'Paperlogy';font-size:14px;"></div>
+      <div style="flex:1;min-width:160px;"><div class="muted" style="font-size:12px;margin-bottom:4px;">메모 (선택 · 위반장소·고지서번호 등)</div>
+        <input type="text" id="fineNoteInput" style="width:100%;text-align:left;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:'Paperlogy';font-size:13px;box-sizing:border-box;"></div>
+      <button type="button" class="btn btn-primary" id="fineRegBtn" style="font-size:13px;padding:9px 18px;" onclick="registerFine()">등록</button>
+    </div>
+    <div id="fineRegMsg" style="margin-top:8px;font-size:12.5px;word-break:keep-all;"></div>
+  </div>`;
+}
+function fineChipStyle(b, on){
+  b.style.background = on ? 'var(--navy)' : '#fff';
+  b.style.color = on ? '#fff' : 'var(--ink)';
+  b.style.borderColor = on ? 'var(--navy)' : 'var(--line)';
+}
+function pickFineChip(b){
+  const g = b.dataset.g;
+  document.querySelectorAll(`.fine-chip[data-g="${g}"]`).forEach(x=>fineChipStyle(x, x===b));
+  if(g==='type') window._fineDraft.type = b.dataset.v;
+  else document.getElementById('fineDriverInput').value = b.dataset.v;
+}
+async function registerFine(){
+  if(viewerMode || currentRole!=='admin') return;
+  const dr = window._fineDraft || {};
+  const msg = document.getElementById('fineRegMsg');
+  const amount = parseInt(String(document.getElementById('fineAmountInput').value).replace(/[^0-9]/g,''),10) || 0;
+  const driver = sanitizeNameInput(document.getElementById('fineDriverInput').value);
+  const note = document.getElementById('fineNoteInput').value.trim();
+  if(!dr.type){ msg.innerHTML = '<span style="color:var(--bad);">과태료 종류를 선택해 주세요.</span>'; return; }
+  if(!amount){ msg.innerHTML = '<span style="color:var(--bad);">금액을 입력해 주세요.</span>'; return; }
+  if(!driver && !await appConfirm('운행자를 입력하지 않았습니다. "운행자 미확인"으로 등록할까요?', {title:'과태료 등록'})) return;
+  const dupe = fineListSorted().find(f=>normDaeChaPlate(f.plate)===normDaeChaPlate(dr.plate) && f.violationDate===dr.violationDate && f.type===dr.type && Number(f.amount)===amount);
+  if(dupe && !await appConfirm(`같은 차량·일자·종류·금액의 과태료가 이미 등록되어 있습니다.\n(${dupe.driver||'운행자 미확인'}, ${dupe.status||'확인중'})\n\n그래도 추가로 등록할까요?`, {title:'중복 확인'})) return;
+  const id = `${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+  const now = new Date().toISOString();
+  const rec = {plate:dr.plate, origPlate:dr.origPlate||'', violationDate:dr.violationDate, type:dr.type, amount, driver, note, status:'확인중', createdAt:now, updatedAt:now};
+  const btn = document.getElementById('fineRegBtn'); if(btn) btn.disabled = true;
+  try{
+    await fbSet(fineNodePath(id), rec);
+  }catch(e){
+    if(btn) btn.disabled = false;
+    msg.innerHTML = `<span style="color:var(--bad);">저장 실패: ${escapeHtml(e.message)}</span>`;
+    return;
+  }
+  if(!data.fines) data.fines = {};
+  data.fines[id] = rec;
+  msg.innerHTML = `<span style="color:var(--good);font-weight:700;">✓ 등록했습니다. 대시보드 "과태료·범칙금 현황"에서 처리 상태를 관리할 수 있습니다.</span>`;
+  renderFines(); renderPendingSummary();
+}
+async function updateFineStatus(id, status){
+  if(viewerMode) return;
+  let cur;
+  try{ cur = await fbGet(fineNodePath(id)); }catch(e){ showAdminToast('⚠ 서버의 최신 데이터를 불러오지 못했습니다. 다시 시도해 주세요.','bad'); renderFines(); return; }
+  if(!cur){ showAdminToast('해당 과태료 기록이 없습니다(삭제됨). 새로고침해 주세요.','bad'); if(data.fines) delete data.fines[id]; renderFines(); return; }
+  const now = new Date().toISOString();
+  const rec = {...cur, status, updatedAt:now, ...(status==='납부완료' ? {paidAt: cur.paidAt || now} : {})};
+  try{ await fbSet(fineNodePath(id), rec); }catch(e){ showAdminToast('⚠ 저장 실패: '+e.message,'bad'); renderFines(); return; }
+  data.fines[id] = rec;
+  renderFines(); renderPendingSummary();
+  showAdminToast(`처리 상태를 "${status}"(으)로 변경했습니다.`,'good');
+}
+async function deleteFine(id){
+  if(viewerMode) return;
+  const f = data.fines?.[id]; if(!f) return;
+  if(!await appConfirm(`과태료 기록을 삭제합니다.\n${f.violationDate} · ${f.plate} · ${f.type} ${Number(f.amount||0).toLocaleString()}원 · ${f.driver||'운행자 미확인'}\n\n되돌릴 수 없습니다. 계속할까요?`, {title:'과태료 삭제', danger:true, okText:'삭제'})) return;
+  try{ await fbSet(fineNodePath(id), null); }catch(e){ showAdminToast('⚠ 삭제 실패: '+e.message,'bad'); return; }
+  delete data.fines[id];
+  renderFines(); renderPendingSummary();
+}
+function renderFines(){
+  const listEl = document.getElementById('fineList');
+  if(!listEl) return;
+  const all = fineListSorted();
+  const badge = document.getElementById('fineCountBadge');
+  const openCnt = all.filter(f=>f.status!=='납부완료').length;
+  if(badge) badge.textContent = openCnt ? `미처리 ${openCnt}건` : '';
+  const ysel = document.getElementById('fineYearSel');
+  const years = Array.from(new Set([todayLocalISO().slice(0,4), ...all.map(f=>(f.violationDate||'').slice(0,4)).filter(Boolean)])).sort().reverse();
+  const prevY = ysel.value;
+  ysel.innerHTML = `<option value="">전체 연도</option>` + years.map(y=>`<option value="${y}">${y}년</option>`).join('');
+  ysel.value = ysel.dataset.init ? prevY : todayLocalISO().slice(0,4);
+  ysel.dataset.init = '1';
+  const y = ysel.value, st = document.getElementById('fineStatusSel').value;
+  const q = normDaeChaPlate(document.getElementById('fineSearchBox').value);
+  const list = all.filter(f=>(!y || (f.violationDate||'').startsWith(y)) && (st!=='open' || f.status!=='납부완료')
+    && (!q || normDaeChaPlate(f.plate).includes(q) || normDaeChaPlate(f.origPlate).includes(q) || normDaeChaPlate(f.driver).includes(q)));
+  const sum = a=>a.reduce((s,f)=>s+(Number(f.amount)||0),0);
+  const byType = FINE_TYPES.map(t=>({t, n:list.filter(f=>f.type===t).length, amt:sum(list.filter(f=>f.type===t))})).filter(x=>x.n);
+  const drv = {};
+  list.forEach(f=>{ const k=f.driver||'운행자 미확인'; (drv[k]=drv[k]||{n:0,amt:0}).n++; drv[k].amt+=Number(f.amount)||0; });
+  const drvTop = Object.keys(drv).sort((a,b)=>drv[b].amt-drv[a].amt).slice(0,5);
+  const card = (label,val,sub)=>`<div style="flex:1;min-width:140px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;"><div class="muted" style="font-size:11.5px;">${label}</div><div style="font-size:18px;font-weight:700;color:var(--navy);">${val}</div>${sub?`<div class="muted" style="font-size:11px;">${sub}</div>`:''}</div>`;
+  const openList = list.filter(f=>f.status!=='납부완료');
+  document.getElementById('fineSummary').innerHTML = list.length ? `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      ${card('건수', `${list.length}건`, '')}
+      ${card('금액 합계', `${sum(list).toLocaleString()}원`, '')}
+      ${card('미처리', `${openList.length}건`, `${sum(openList).toLocaleString()}원`)}
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;margin-bottom:12px;">
+      <div><b style="color:var(--navy);">종류별</b> ${byType.map(x=>`<span style="margin-left:8px;white-space:nowrap;">${x.t} ${x.n}건 · ${x.amt.toLocaleString()}원</span>`).join('')}</div>
+      <div><b style="color:var(--navy);">운행자별(금액 상위)</b> ${drvTop.map(k=>`<span style="margin-left:8px;white-space:nowrap;">${escapeHtml(k)} ${drv[k].n}건 · ${drv[k].amt.toLocaleString()}원</span>`).join('')}</div>
+    </div>` : '';
+  const stSel = f=>`<select onchange="updateFineStatus('${escapeHtml(f.id)}',this.value)" style="font-family:'Paperlogy';font-size:12px;padding:3px 4px;border:1px solid var(--line);border-radius:6px;background:#fff;color:${f.status==='납부완료'?'var(--good)':'var(--bad)'};font-weight:700;">${FINE_STATUSES.map(s=>`<option${(f.status||'확인중')===s?' selected':''}>${s}</option>`).join('')}</select>`;
+  listEl.innerHTML = list.length ? `<div class="table-scroll"><table class="data-table" style="width:100%;font-size:12.5px;">
+    <thead><tr><th>위반일</th><th>차량</th><th>종류</th><th style="text-align:right;">금액</th><th>운행자</th><th>처리상태</th><th>메모</th><th></th></tr></thead>
+    <tbody>${list.map(f=>`<tr>
+      <td style="white-space:nowrap;">${escapeHtml(f.violationDate||'')}</td>
+      <td style="white-space:nowrap;">${escapeHtml(f.plate||'')}${f.origPlate && normDaeChaPlate(f.origPlate)!==normDaeChaPlate(f.plate)?`<div class="muted" style="font-size:11px;">대차 · ${escapeHtml(f.origPlate)}</div>`:''}</td>
+      <td style="white-space:nowrap;">${escapeHtml(f.type||'')}</td>
+      <td style="text-align:right;white-space:nowrap;">${Number(f.amount||0).toLocaleString()}원</td>
+      <td style="white-space:nowrap;">${escapeHtml(f.driver||'운행자 미확인')}</td>
+      <td>${stSel(f)}</td>
+      <td style="min-width:120px;word-break:keep-all;overflow-wrap:break-word;">${escapeHtml(f.note||'')}</td>
+      <td><button type="button" class="btn-ghost" style="font-size:11px;padding:2px 7px;color:var(--bad);" onclick="deleteFine('${escapeHtml(f.id)}')">삭제</button></td>
+    </tr>`).join('')}</tbody></table></div>`
+    : `<div class="empty-state" style="padding:18px;">${all.length?'조건에 맞는 과태료 기록이 없습니다.':'등록된 과태료가 없습니다. [+ 과태료 조회·등록]에서 고지서를 조회한 뒤 등록하세요.'}</div>`;
 }
 
 // ── 기간 보고서(관리자): 월·분기·반기·연간 사업장별 운행 현황 요약 ─────────────────
@@ -5896,7 +6067,11 @@ function pendingSummaryDetails(){
     contract.push({plate:p, date:end, text: days>=0 ? `계약종료 D-${days} · ${v.model||''}` : `계약 만료 ${-days}일 경과 · ${v.model||''}`});
   });
   contract.sort((a,b)=>a.date.localeCompare(b.date));
-  return {maint, accident, receipt, gaps, late, contract, dup: dupDriverTrips()};
+  const fine = viewerMode ? [] : fineListSorted().filter(f=>f.status!=='납부완료').map(f=>({
+    plate:f.plate||'', date:f.violationDate||'', name:f.driver||'',
+    text:`${f.type||''} ${Number(f.amount||0).toLocaleString()}원 · ${f.driver||'운행자 미확인'} · ${f.status||'확인중'}`
+  }));
+  return {maint, accident, receipt, gaps, late, contract, fine, dup: dupDriverTrips()};
 }
 const CONTRACT_NOTICE_MONTHS = 4;
 // 최근 30일 내 같은 운행자가 같은 기간(운행기간 겹침)에 서로 다른 차량을 운행한 것으로 기록된 건(입력 실수 의심).
@@ -5954,7 +6129,8 @@ function renderPendingSummary(){
     {k:'gaps',     label:'주행거리 공백',   target:'vehicleAreaWrap'},
     {k:'late',     label:'늦은입력 겹침(30일)', target:'vehicleAreaWrap'},
     {k:'dup',      label:'운행자 중복(30일)', target:'vehicleAreaWrap'},
-    {k:'contract', label:`계약 만료 임박(${CONTRACT_NOTICE_MONTHS}개월)`, target:'vehicleAreaWrap'}
+    {k:'contract', label:`계약 만료 임박(${CONTRACT_NOTICE_MONTHS}개월)`, target:'vehicleAreaWrap'},
+    {k:'fine',     label:'과태료 미처리', target:'fineSectionWrap'}
   ].map(i=>({...i, n:d[i.k].length}));
   if(pendingOpenKey && !d[pendingOpenKey]?.length) pendingOpenKey = null;
   const total = items.reduce((s,i)=>s+i.n,0);
@@ -5983,6 +6159,14 @@ function togglePendingDetail(k){
 function openPendingRow(k, idx){
   const r = _pendingDetails?.[k]?.[idx];
   if(!r) return;
+  if(k==='fine'){
+    const box = document.getElementById('fineSearchBox');
+    const ys = document.getElementById('fineYearSel'); if(ys) ys.value = '';
+    if(box){ box.value = r.plate; }
+    renderFines();
+    scrollToPendingTarget('fineSectionWrap');
+    return;
+  }
   if(k==='accident' || k==='receipt'){
     const box = document.getElementById(k==='accident'?'accidentSearchBox':'personalSearchBox');
     if(box){ box.value = k==='accident' ? (r.plate==='미확인'?'':r.plate) : r.name; box.dispatchEvent(new Event('input')); }
@@ -7614,6 +7798,12 @@ function exportToExcel(){
   XLSX.utils.book_append_sheet(wb,ws4,'운행자별현황');
   XLSX.utils.book_append_sheet(wb,ws5,'개인사용현황');
   XLSX.utils.book_append_sheet(wb,ws6,'출퇴근사용현황');
+  if(!viewerMode && fineListSorted().length){
+    const ws7=XLSX.utils.json_to_sheet(fineListSorted().map(f=>({'위반일자':excelDateCell(f.violationDate),'고지 차량번호':f.plate||'','소속 차량':f.origPlate||'','지역구분':data.vehicles[f.origPlate]?.branch||'','종류':f.type||'','금액(원)':Number(f.amount)||0,'운행자':f.driver||'','처리상태':f.status||'확인중','메모':f.note||'','등록일':(f.createdAt||'').slice(0,10)})));
+    ws7['!cols']=[{wch:12},{wch:14},{wch:12},{wch:16},{wch:12},{wch:12},{wch:10},{wch:12},{wch:30},{wch:12}];
+    applyCellFormats(ws7,{0:XLSX_DATE_FMT,5:XLSX_NUM_FMT});
+    XLSX.utils.book_append_sheet(wb,ws7,'과태료현황');
+  }
   XLSX.writeFile(wb,`차량운행관리_${todayLocalISO()}.xlsx`);
 }
 
