@@ -35,6 +35,7 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-11] 관리자 링크에서 전용 로그인 화면 바로 표시, 로그아웃 후 전용 로그인으로 복귀 | 변경: showAdminEntry(), exitToRole(), 관리자 진입 화면
   [2026-11-03] 과태료 현황 단순화 — 납부 여부 관리(처리상태·미처리 필터·처리대기 "과태료 미처리") 제거, 등록 = 고지 내역
   기록으로 하고 금액·대상자 현황만 관리(건수·금액 합계·대상자 수, 종류별·대상자별 집계, 등록일 표시) | 변경: renderFines(),
   registerFine(), pendingSummaryDetails(), exportToExcel(), updateFineStatus()·FINE_STATUSES 삭제
@@ -473,6 +474,28 @@
   .role-title{font-family:'Paperlogy',sans-serif;font-size:22px;font-weight:600;color:var(--navy);margin-bottom:4px;}
   .role-sub{font-size:13px;color:var(--muted);margin-bottom:28px;}
   .role-btns{display:flex;flex-direction:column;gap:10px;}
+  #roleOverlay.admin-entry{
+    align-items:safe center;
+    overflow-y:auto;
+    padding:max(24px, var(--safe-top)) 20px max(24px, var(--safe-bottom));
+    background:linear-gradient(145deg,#eff5f2,#ddebe4);
+  }
+  #roleOverlay.admin-entry .role-logo-area,
+  #roleOverlay.admin-entry .role-decoration,
+  #roleOverlay.admin-entry .role-start-hint,
+  #roleOverlay.admin-entry .drive-phone-warning,
+  #roleOverlay.admin-entry .btn-role-user{display:none;}
+  #roleOverlay.admin-entry .role-box{
+    max-width:420px;
+    max-height:none;
+    padding:28px 24px;
+    border:1px solid var(--line);
+    border-radius:24px;
+    box-shadow:0 16px 48px rgba(13,61,41,.12);
+  }
+  .admin-entry-brand{font-size:13px;color:var(--muted);font-weight:600;}
+  .admin-entry-title{margin:8px 0 20px;font-size:24px;color:var(--navy);}
+  .admin-home-link{display:inline-flex;align-items:center;min-height:44px;color:var(--navy);font-size:13px;}
   .drive-phone-warning{
     background:rgba(232,22,87,.08);border:1px solid rgba(232,22,87,.3);
     color:var(--bad);border-radius:12px;padding:10px 14px;
@@ -483,10 +506,6 @@
     padding:17px;font-size:16px;font-weight:700;cursor:pointer;
     box-shadow:0 4px 16px rgba(16,151,92,.35);
     display:flex;align-items:center;justify-content:center;gap:8px;
-  }
-  .btn-role-admin{
-    background:rgba(16,151,92,.08);border:1.5px solid rgba(16,151,92,.2);color:var(--navy);border-radius:14px;
-    padding:15px;font-size:14px;font-weight:600;cursor:pointer;
   }
   .admin-login-wrap{margin-top:14px;display:none;}
   .admin-login-wrap input{
@@ -554,7 +573,6 @@
     .role-sub{font-size:16px;margin-bottom:34px;}
     .role-btns{gap:14px;}
     .btn-role-user{padding:22px;font-size:19px;border-radius:16px;}
-    .btn-role-admin{padding:19px;font-size:17px;border-radius:16px;}
     .admin-login-wrap input{padding:17px 14px;font-size:17px;}
     .btn-login{padding:17px;font-size:16px;}
   }
@@ -1319,7 +1337,7 @@
 <!-- ===== 역할 선택 오버레이 ===== -->
 <div id="roleOverlay">
   <!-- 배경 장식 -->
-  <div style="position:absolute;inset:0;overflow:hidden;pointer-events:none;">
+  <div class="role-decoration" style="position:absolute;inset:0;overflow:hidden;pointer-events:none;">
     <div style="position:absolute;top:-40px;right:-40px;width:160px;height:160px;border-radius:50%;background:rgba(126,177,56,.18);"></div>
     <div style="position:absolute;top:60px;right:30px;width:80px;height:80px;border-radius:50%;background:rgba(251,215,75,.12);"></div>
     <div style="position:absolute;top:140px;right:60px;width:10px;height:10px;border-radius:50%;background:rgba(251,215,75,.5);"></div>
@@ -1337,23 +1355,25 @@
     </div>
   </div>
   <div class="role-box">
-    <div style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px;">아래 버튼을 눌러 시작해 주세요</div>
+    <div class="role-start-hint" style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px;">아래 버튼을 눌러 시작해 주세요</div>
     <div class="role-btns">
       <div class="drive-phone-warning">⚠️ 운전 중 휴대전화 조작 금지 - 범칙금 부과 및 사고 위험</div>
       <button class="btn-role-user" onclick="enterUserMode()">차량 운행정보 입력</button>
       <!-- 관리자 진입은 기본 화면(QR 스캔 포함)에 노출하지 않음. ?admin=1 로 접속했을 때만 아래 블록이 보임 -->
       <div id="adminEntryWrap" style="display:none;">
-        <button class="btn-role-admin" onclick="showAdminLogin()">관리자 대시보드 →</button>
+        <div class="admin-entry-brand">한국표준협회 · 차량 운행정보</div>
+        <h1 class="admin-entry-title">관리자 대시보드</h1>
         <div class="admin-login-wrap" id="adminLoginWrap">
-          <input type="password" id="adminPwInput" placeholder="관리자 비밀번호" onkeydown="if(event.key==='Enter')tryAdminLogin()">
+          <input type="password" id="adminPwInput" placeholder="관리자 비밀번호" aria-label="관리자 비밀번호" autocomplete="current-password" onkeydown="if(event.key==='Enter')tryAdminLogin()">
           <button class="btn-login" onclick="tryAdminLogin()">로그인</button>
           <div class="login-err" id="loginErr">비밀번호가 틀렸습니다.</div>
+          <a class="admin-home-link" href="./">운행정보 메인으로</a>
         </div>
         <!-- 2차 인증(이메일 OTP) 단계: 비밀번호 확인 후에만 표시됨 -->
         <div class="admin-login-wrap" id="adminOtpWrap" style="display:none;">
           <div class="otp-guide" id="otpGuide">관리자 이메일로 인증코드를 보냈습니다.<br>5분 이내에 입력해 주세요.</div>
           <div class="otp-trust-reason" id="otpTrustReason"></div>
-          <input type="text" inputmode="numeric" maxlength="6" id="adminOtpInput" placeholder="인증코드 6자리" onkeydown="if(event.key==='Enter')verifyAdminOtp()">
+          <input type="text" inputmode="numeric" maxlength="6" id="adminOtpInput" placeholder="인증코드 6자리" aria-label="인증코드 6자리" autocomplete="one-time-code" onkeydown="if(event.key==='Enter')verifyAdminOtp()">
           <label class="otp-trust-label" for="trustDeviceChk">
             <input type="checkbox" id="trustDeviceChk">
             <span class="otp-trust-icon"></span>
@@ -2768,14 +2788,11 @@ REGION_GROUPS[REGION_ALL_TOKEN] = {
 // ============================================================
 // 역할 관리
 // ============================================================
-function showAdminLogin(){
-  const w = document.getElementById('adminLoginWrap');
-  const notice = document.getElementById('noticeBtnGroup');
-  const wasOpen = w.style.display==='block' || document.getElementById('adminOtpWrap').style.display==='block';
-  w.style.display = wasOpen ? 'none' : 'block';
-  document.getElementById('adminOtpWrap').style.display = 'none';
-  if(notice) notice.style.display = w.style.display==='block' ? 'none' : 'inline-grid';
-  if(w.style.display==='block') document.getElementById('adminPwInput').focus();
+function showAdminEntry(){
+  document.title = '관리자 대시보드 — KSA 차량운행정보';
+  document.getElementById('roleOverlay').classList.add('admin-entry');
+  document.getElementById('adminEntryWrap').style.display = 'block';
+  document.getElementById('adminLoginWrap').style.display = 'block';
 }
 
 // ============================================================
@@ -3349,6 +3366,7 @@ function exitToRole(){
   const trustChkExit = document.getElementById('trustDeviceChk');
   if(trustChkExit) trustChkExit.checked = false;
   adminOtpFailCount = 0;
+  if(document.getElementById('roleOverlay').classList.contains('admin-entry')) showAdminEntry();
 }
 
 // ============================================================
@@ -11621,14 +11639,11 @@ renderSubmitLog();
 syncFuelPriceFromOpinet();
 // 부서장 등을 위한 열람 전용 링크 진입 체크: URL에 ?view=readonly 가 있으면
 // 역할선택 화면 없이 곧바로 관리자 대시보드(열람 전용)로 진입한다.
-if(new URLSearchParams(window.location.search).get('view') === 'readonly'){
+const entryParams = new URLSearchParams(window.location.search);
+if(entryParams.get('view') === 'readonly'){
   enterViewerMode();
-}
-// 관리자 전용 진입 링크(?admin=1) 체크: 일반 접속(QR 스캔 포함)에서는
-// 관리자 대시보드 버튼을 아예 노출하지 않고, 이 파라미터로 접속했을 때만 보이게 한다.
-if(new URLSearchParams(window.location.search).get('admin') === '1'){
-  const w = document.getElementById('adminEntryWrap');
-  if(w) w.style.display = 'block';
+} else if(entryParams.get('admin') === '1'){
+  showAdminEntry();
 }
 </script>
 </body>
