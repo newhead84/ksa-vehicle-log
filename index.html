@@ -1940,7 +1940,8 @@ const FIREBASE_URL = 'https://ksa-vehicle-log-default-rtdb.asia-southeast1.fireb
 // Firebase 서버가 직접 검증합니다. 계정은 Firebase 콘솔 → Authentication → 사용자에서 만드세요.
 // 계정을 추가하면 보안 규칙(adminOtp·adminTrustedDevices·dedicated-fleet-data)의 허용 목록도 함께 바꿔야 합니다.
 const ADMIN_ACCOUNTS = {
-  'newhead': 'newhead@ksa.or.kr'
+  'newhead': 'newhead@ksa.or.kr',
+  'admin':   'admin@ksa-log.com'  // 전환용 임시 계정 — 새 계정 확인 후 규칙·Authentication에서 삭제하고 이 줄도 제거
 };
 const APP_URL      = 'https://newhead84.github.io/ksa-vehicle-log/'; // ← QR에 사용할 앱 URL
 // ============================================================
