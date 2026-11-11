@@ -6,6 +6,9 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 ## 2026-11-11
 
+- 관리자 로그인을 ID+비밀번호 방식으로 변경 — ID로 계정 이메일을 찾아 로그인(목록에 없는 ID는 비밀번호 오류와 같은 메시지), 계정 목록은 ADMIN_ACCOUNTS(최대 3명)
+  - 변경: tryAdminLogin(), ADMIN_ACCOUNTS(기존 ADMIN_LOGIN_EMAIL 대체), 관리자 로그인 ID 입력칸
+  - 배포 전 필요: Firebase Authentication 계정 생성, RTDB 보안 규칙 허용 목록에 계정 이메일 추가
 - 관리자 진입 화면 분리 — ?admin=1 접속 시 전용 관리자 로그인 화면 바로 표시, 로그아웃 후 전용 로그인 화면으로 복귀
   - 변경: showAdminEntry(), exitToRole(), 관리자 진입 화면(#roleOverlay.admin-entry)
 

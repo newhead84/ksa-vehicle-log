@@ -17,8 +17,8 @@
        }
      }
   5. Authentication > Sign-in method > "익명" 활성화
-  6. Authentication > Users > 사용자 추가 → 아래 ADMIN_LOGIN_EMAIL과 동일한 이메일로
-     원하는 관리자 비밀번호를 설정 (비밀번호는 코드에 직접 넣지 않음)
+  6. Authentication > Users > 사용자 추가 → 아래 ADMIN_ACCOUNTS의 이메일과 동일하게
+     관리자 계정을 만들고 비밀번호를 설정 (비밀번호는 코드에 직접 넣지 않음)
   7. firebaseConfig(apiKey, authDomain, projectId)를 본인 프로젝트 값으로 교체
   8. [2026-07-29 추가] 관리자 로그인 2차 인증(이메일 OTP)용 규칙 반영 필요:
      {
@@ -35,6 +35,7 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-11] 관리자 로그인을 ID+비밀번호 방식으로 변경(계정 목록 ADMIN_ACCOUNTS, 최대 3명) | 변경: tryAdminLogin(), ADMIN_ACCOUNTS, 관리자 로그인 입력칸
   [2026-11-11] 관리자 링크에서 전용 로그인 화면 바로 표시, 로그아웃 후 전용 로그인으로 복귀 | 변경: showAdminEntry(), exitToRole(), 관리자 진입 화면
   [2026-11-03] 과태료 현황 단순화 — 납부 여부 관리(처리상태·미처리 필터·처리대기 "과태료 미처리") 제거, 등록 = 고지 내역
   기록으로 하고 금액·대상자 현황만 관리(건수·금액 합계·대상자 수, 종류별·대상자별 집계, 등록일 표시) | 변경: renderFines(),
@@ -1364,6 +1365,7 @@
         <div class="admin-entry-brand">한국표준협회 · 차량 운행정보</div>
         <h1 class="admin-entry-title">관리자 대시보드</h1>
         <div class="admin-login-wrap" id="adminLoginWrap">
+          <input type="text" id="adminIdInput" placeholder="관리자 ID" aria-label="관리자 ID" autocomplete="username" autocapitalize="none" spellcheck="false" onkeydown="if(event.key==='Enter')document.getElementById('adminPwInput').focus()">
           <input type="password" id="adminPwInput" placeholder="관리자 비밀번호" aria-label="관리자 비밀번호" autocomplete="current-password" onkeydown="if(event.key==='Enter')tryAdminLogin()">
           <button class="btn-login" onclick="tryAdminLogin()">로그인</button>
           <div class="login-err" id="loginErr">비밀번호가 틀렸습니다.</div>
@@ -1933,10 +1935,13 @@
 // ★ 설정 - 이 두 줄만 변경하면 됩니다 ★
 // ============================================================
 const FIREBASE_URL = 'https://ksa-vehicle-log-default-rtdb.asia-southeast1.firebasedatabase.app';
-// 관리자 로그인용 계정 이메일 (실제 비밀번호는 여기 없음 — Firebase Authentication에
-// 별도로 등록해둔 계정의 비밀번호를 입력하면 Firebase 서버가 직접 검증합니다.
-// Firebase 콘솔 → Authentication → Users 에서 이 이메일로 계정을 만들어 두세요.)
-const ADMIN_LOGIN_EMAIL  = 'admin@ksa-log.com';
+// 관리자 로그인 계정 목록 (ID → 계정 이메일). 최대 3명.
+// 실제 비밀번호는 여기 없음 — Firebase Authentication에 등록된 계정 비밀번호를
+// Firebase 서버가 직접 검증합니다. 계정은 Firebase 콘솔 → Authentication → 사용자에서 만드세요.
+// 계정을 추가하면 보안 규칙(adminOtp·adminTrustedDevices·dedicated-fleet-data)의 허용 목록도 함께 바꿔야 합니다.
+const ADMIN_ACCOUNTS = {
+  'newhead': 'newhead@ksa.or.kr'
+};
 const APP_URL      = 'https://newhead84.github.io/ksa-vehicle-log/'; // ← QR에 사용할 앱 URL
 // ============================================================
 // ★ 점검요망 이메일 알림 설정 (EmailJS) ★
@@ -2890,12 +2895,16 @@ async function sendAdminOtp(){
 
 async function tryAdminLogin(){
   const pw = document.getElementById('adminPwInput').value;
+  const adminId = (document.getElementById('adminIdInput').value || '').trim().toLowerCase();
+  const adminEmail = Object.prototype.hasOwnProperty.call(ADMIN_ACCOUNTS, adminId) ? ADMIN_ACCOUNTS[adminId] : null;
   const btn = document.querySelector('#adminLoginWrap .btn-login');
   document.getElementById('loginErr').style.display = 'none';
   if(btn){ btn.disabled = true; btn.textContent = '확인 중...'; }
   try{
+    // ID가 목록에 없으면 비밀번호 오류와 같은 메시지를 보여줌 (계정 존재 여부를 노출하지 않음)
+    if(!adminEmail) throw new Error('unknown-admin-id');
     // 실제 비밀번호 검증은 Firebase 서버가 수행 (코드 안에는 비밀번호가 존재하지 않음)
-    await firebase.auth().signInWithEmailAndPassword(ADMIN_LOGIN_EMAIL, pw);
+    await firebase.auth().signInWithEmailAndPassword(adminEmail, pw);
     // 비밀번호(1차 인증) 통과 → 이 기기가 이미 신뢰된 상태라면 2차 인증 없이 바로 로그인
     const trust = await isDeviceTrusted();
     if(trust.ok){
