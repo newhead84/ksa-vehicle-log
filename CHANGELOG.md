@@ -6,6 +6,8 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 ## 2026-11-11
 
+- 서브관리자 체계(주관리자 1 + 서브 최대 2) — 인증코드는 항상 주관리자 메일로 발송, 메일에 로그인 요청 ID 표시(재발송 포함)
+  - 변경: sendAdminOtp(), tryAdminLogin()
 - 관리자 로그인을 ID+비밀번호 방식으로 변경 — ID로 계정 이메일을 찾아 로그인(목록에 없는 ID는 비밀번호 오류와 같은 메시지), 계정 목록은 ADMIN_ACCOUNTS(최대 3명)
   - 변경: tryAdminLogin(), ADMIN_ACCOUNTS(기존 ADMIN_LOGIN_EMAIL 대체), 관리자 로그인 ID 입력칸
   - 배포 전 필요: Firebase Authentication 계정 생성, RTDB 보안 규칙 허용 목록에 계정 이메일 추가

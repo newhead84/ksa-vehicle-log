@@ -35,6 +35,7 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-11] 서브관리자 체계: 인증코드 메일에 로그인 요청 ID 표시 | 변경: sendAdminOtp(), tryAdminLogin()
   [2026-11-11] 관리자 로그인을 ID+비밀번호 방식으로 변경(계정 목록 ADMIN_ACCOUNTS, 최대 3명) | 변경: tryAdminLogin(), ADMIN_ACCOUNTS, 관리자 로그인 입력칸
   [2026-11-11] 관리자 링크에서 전용 로그인 화면 바로 표시, 로그아웃 후 전용 로그인으로 복귀 | 변경: showAdminEntry(), exitToRole(), 관리자 진입 화면
   [2026-11-03] 과태료 현황 단순화 — 납부 여부 관리(처리상태·미처리 필터·처리대기 "과태료 미처리") 제거, 등록 = 고지 내역
@@ -1935,7 +1936,9 @@
 // ★ 설정 - 이 두 줄만 변경하면 됩니다 ★
 // ============================================================
 const FIREBASE_URL = 'https://ksa-vehicle-log-default-rtdb.asia-southeast1.firebasedatabase.app';
-// 관리자 로그인 계정 목록 (ID → 계정 이메일). 최대 3명.
+// 관리자 로그인 계정 목록 (ID → 계정 이메일). 주관리자 1명 + 서브관리자 최대 2명.
+// 2차 인증코드는 계정과 관계없이 항상 주관리자 메일(ADMIN_EMAIL)로 발송된다(EmailJS 수신 주소 고정).
+// 서브관리자는 주관리자에게 코드를 받아 로그인한다.
 // 실제 비밀번호는 여기 없음 — Firebase Authentication에 등록된 계정 비밀번호를
 // Firebase 서버가 직접 검증합니다. 계정은 Firebase 콘솔 → Authentication → 사용자에서 만드세요.
 // 계정을 추가하면 보안 규칙(adminOtp·adminTrustedDevices·dedicated-fleet-data)의 허용 목록도 함께 바꿔야 합니다.
@@ -2871,7 +2874,9 @@ function generateOtpCode(){
   return String(Math.floor(100000 + Math.random()*900000));
 }
 
+let pendingAdminLoginId = ''; // 2차 인증 중인 로그인 ID (재발송 시에도 메일에 표시)
 async function sendAdminOtp(){
+  const adminId = pendingAdminLoginId;
   const code = generateOtpCode();
   const expiresAt = Date.now() + ADMIN_OTP_TTL_MS;
   await fbSet(ADMIN_OTP_NODE, { code, expiresAt });
@@ -2882,8 +2887,8 @@ async function sendAdminOtp(){
         plate: '-',
         branch: '관리자 로그인 2차 인증',
         submitter: '(시스템)',
-        status: '인증코드 발송',
-        detail: `인증코드: ${code}\n(5분간 유효합니다. 본인이 요청하지 않았다면 즉시 관리자 비밀번호를 변경해 주세요.)`,
+        status: `인증코드 발송 (로그인 ID: ${adminId || '-'})`,
+        detail: `로그인 요청 ID: ${adminId || '-'}\n인증코드: ${code}\n(5분간 유효합니다. 서브관리자의 요청이면 본인 확인 후 코드를 전달해 주세요. 요청한 적이 없다면 해당 계정 비밀번호를 즉시 변경해 주세요.)`,
         submitted_at: new Date().toLocaleString('ko-KR')
       });
     }catch(e){
@@ -2916,6 +2921,7 @@ async function tryAdminLogin(){
     if(reasonEl) reasonEl.textContent = trust.reason ? `인증코드가 필요한 이유: ${trust.reason}` : '';
     // 신뢰된 기기가 아니면 이메일 OTP(2차 인증) 단계로 전환
     adminOtpFailCount = 0;
+    pendingAdminLoginId = adminId;
     await sendAdminOtp();
     document.getElementById('adminLoginWrap').style.display = 'none';
     document.getElementById('adminOtpWrap').style.display = 'block';
