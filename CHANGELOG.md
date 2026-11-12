@@ -6,6 +6,11 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 ## 2026-11-12
 
+- 백업·복원 점검: 운행기록 건수를 객체형 trips도 정확히 세도록 수정(복원 확인창 NaN 방지), 백업→복원 왕복 테스트로 fleet-data(차량·운행기록·사고·과태료·기타 하위 항목)와 연도 노드가 원본과 동일하게 복원됨을 확인
+  - 변경: backupData(), restoreData()
+- 자동 백업 보관 기간을 최근 7일치로 변경(7일 지난 파일 자동 삭제)
+  - 변경: tools/db-backup/ksa-db-backup.ps1 ($KeepDays), README.md
+
 - 관리자 PC 일일 자동 백업 추가 — Windows 작업 스케줄러로 매일 12:10(놓치면 PC 켜진 뒤) 대시보드 백업과 같은 형식(version 4)으로 문서\KSA-vehicle-backup에 저장, 새 백업 성공 시에만 이전 파일 삭제(최신 1개 유지)
   - 변경: tools/db-backup/ (ksa-db-backup.ps1, install-backup.bat, uninstall-backup.bat, README.md) — index.html 변경 없음
 

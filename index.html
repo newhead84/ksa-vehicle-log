@@ -35,6 +35,7 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-12] 백업·복원 운행기록 건수를 객체형 trips도 정확히 세도록 수정(복원 확인창 NaN 방지) | 변경: backupData(), restoreData()
   [2026-11-11] 전환용 기존 관리자 ID(admin) 제거 — newhead 로그인 확인 완료 | 변경: ADMIN_ACCOUNTS
   [2026-11-11] 서브관리자 체계: 인증코드 메일에 로그인 요청 ID 표시 | 변경: sendAdminOtp(), tryAdminLogin()
   [2026-11-11] 관리자 로그인을 ID+비밀번호 방식으로 변경(계정 목록 ADMIN_ACCOUNTS, 최대 3명) | 변경: tryAdminLogin(), ADMIN_ACCOUNTS, 관리자 로그인 입력칸
@@ -7531,7 +7532,7 @@ async function backupData(){
     a.href=url; a.download=`차량관리_백업_${todayLocalISO()}.json`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(url),1000);
-    const yearTripCount = Object.values(yearData).reduce((s,yd)=>s+Object.values(yd.vehicles||{}).reduce((s2,v)=>s2+(v.trips||[]).length,0),0);
+    const yearTripCount = Object.values(yearData).reduce((s,yd)=>s+Object.values(yd.vehicles||{}).reduce((s2,v)=>s2+tripsToArray(v.trips).length,0),0);
     const yearNote = Object.keys(yearData).length ? ` · 연도별노드 ${Object.keys(yearData).length}개(${yearTripCount}건)` : '';
     showAdminToast(`백업 완료 · 차량 ${Object.keys(fleetData.vehicles).length}대${yearNote}`,'good');
   }catch(e){ showAdminToast('백업 오류: '+e.message,'bad'); }
@@ -7555,8 +7556,8 @@ async function restoreData(input){
       if(!parsed.vehicles) throw new Error('올바른 백업 파일이 아닙니다.');
       const yearData = backup.yearData || null;
       const vehicleCount=Object.keys(parsed.vehicles).length;
-      let tripCount=Object.values(parsed.vehicles).reduce((s,v)=>s+(v.trips||[]).length,0);
-      if(yearData) tripCount += Object.values(yearData).reduce((s,yd)=>s+Object.values(yd.vehicles||{}).reduce((s2,v)=>s2+(v.trips||[]).length,0),0);
+      let tripCount=Object.values(parsed.vehicles).reduce((s,v)=>s+tripsToArray(v.trips).length,0);
+      if(yearData) tripCount += Object.values(yearData).reduce((s,yd)=>s+Object.values(yd.vehicles||{}).reduce((s2,v)=>s2+tripsToArray(v.trips).length,0),0);
       showRestoreConfirm(fleetData, vehicleCount, tripCount, yearData);
     }catch(err){
       showAdminToast('파일을 읽을 수 없습니다. 올바른 백업 파일인지 확인해 주세요.','bad');

@@ -1,8 +1,8 @@
 ﻿# KSA 차량 운행정보 DB 자동 백업 (작업 스케줄러가 매일 1회 실행)
 # - 대시보드 [데이터 백업]과 같은 형식(version 4)으로 저장 → 대시보드 [데이터 복원]으로 그대로 복원 가능
-# - 새 백업이 정상 저장된 경우에만 오래된 백업을 지운다(실패하면 기존 파일 유지)
+# - 최근 7일치 보관. 새 백업이 정상 저장된 경우에만 7일 지난 파일을 지운다(실패하면 기존 파일 유지)
 # - 저장 위치: 문서\KSA-vehicle-backup
-param([int]$KeepCount = 1)   # 남길 백업 개수 (예: 7로 바꾸면 최근 7일치 보관)
+param([int]$KeepDays = 7)   # 최근 N일치 보관, 그보다 오래된 백업 파일은 자동 삭제
 
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -81,8 +81,12 @@ try {
   if ((Get-Item $tmp).Length -lt 1000) { Remove-Item $tmp -Force; throw '백업 파일 크기가 비정상적으로 작습니다. 기존 백업을 유지합니다.' }
   Move-Item -Force $tmp $file
 
-  # 새 백업 저장이 끝난 뒤에만 오래된 백업 정리 (파일명 날짜 기준 최신 $KeepCount개 유지)
-  $old = @(Get-ChildItem $BackupDir -Filter 'ksa-vehicle-backup_*.json' | Sort-Object Name -Descending | Select-Object -Skip $KeepCount)
+  # 새 백업 저장이 끝난 뒤에만 오래된 백업 정리 (파일명 날짜 기준 $KeepDays일 지난 파일 삭제, 방금 만든 파일은 항상 유지)
+  $cutoff = (Get-Date).Date.AddDays(-($KeepDays - 1))
+  $old = @(Get-ChildItem $BackupDir -Filter 'ksa-vehicle-backup_*.json' | Where-Object {
+    $_.FullName -ne $file -and $_.Name -match '^ksa-vehicle-backup_(\d{4}-\d{2}-\d{2})\.json$' -and
+    [datetime]::ParseExact($Matches[1], 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture) -lt $cutoff
+  })
   foreach ($f in $old) { Remove-Item $f.FullName -Force }
 
   if (Test-Path $FailFlag) { Remove-Item $FailFlag -Force }
