@@ -4,6 +4,11 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 형식: 각 항목은 `요청내용 요약 | 변경: 함수/영역`
 
+## 2026-11-12
+
+- 관리자 PC 일일 자동 백업 추가 — Windows 작업 스케줄러로 매일 12:10(놓치면 PC 켜진 뒤) 대시보드 백업과 같은 형식(version 4)으로 문서\KSA-vehicle-backup에 저장, 새 백업 성공 시에만 이전 파일 삭제(최신 1개 유지)
+  - 변경: tools/db-backup/ (ksa-db-backup.ps1, install-backup.bat, uninstall-backup.bat, README.md) — index.html 변경 없음
+
 ## 2026-11-11
 
 - 전환용 기존 관리자 ID(admin → admin@ksa-log.com) 제거 — 주관리자 newhead 실로그인 확인 완료
