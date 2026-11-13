@@ -35,11 +35,11 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-13] 영수증 OCR 인식률 개선(사진 1장 여러 영수증 분리·합산, 카드문자·앱 캡처 금액/날짜, 선승인 취소 제외, 정유사 상호) | 변경: parseReceiptAmount(), parseReceiptDate(), isFuelReceiptText(), splitReceiptRegions() 신규, callVisionOcr(), analyzeReceiptEntry(), receiptEntriesHtml()
   [2026-11-12] 백업·복원 운행기록 건수를 객체형 trips도 정확히 세도록 수정(복원 확인창 NaN 방지) | 변경: backupData(), restoreData()
   [2026-11-11] 전환용 기존 관리자 ID(admin) 제거 — newhead 로그인 확인 완료 | 변경: ADMIN_ACCOUNTS
   [2026-11-11] 서브관리자 체계: 인증코드 메일에 로그인 요청 ID 표시 | 변경: sendAdminOtp(), tryAdminLogin()
   [2026-11-11] 관리자 로그인을 ID+비밀번호 방식으로 변경(계정 목록 ADMIN_ACCOUNTS, 최대 3명) | 변경: tryAdminLogin(), ADMIN_ACCOUNTS, 관리자 로그인 입력칸
-  [2026-11-11] 관리자 링크에서 전용 로그인 화면 바로 표시, 로그아웃 후 전용 로그인으로 복귀 | 변경: showAdminEntry(), exitToRole(), 관리자 진입 화면
   ※ 이전 변경 이력은 저장소 CHANGELOG.md 참고 (이 주석은 최근 5건만 유지)
 -->
 
@@ -1967,7 +1967,7 @@ async function notifyOcrUsageWarning(monthKey, count){
   }
 }
 
-// Google Cloud Vision TEXT_DETECTION 호출 → {text, debug} 반환.
+// Google Cloud Vision TEXT_DETECTION 호출 → {text, debug, annotation} 반환(annotation: 단어 위치 포함 원본, 여러 장 분리용).
 // text: 인식된 전체 텍스트(실패 시 null). debug: 실패 원인 진단용 문자열(성공 시 null) —
 // 2026-08-11 OCR 인식률 이슈 진단을 위해 임시로 추가, 원인 확인 후 제거 예정.
 async function callVisionOcr(file){
@@ -1996,90 +1996,203 @@ async function callVisionOcr(file){
     }
     const visionErr = json?.responses?.[0]?.error;
     if(visionErr) throw new Error(`Vision 응답 오류: ${visionErr.message||visionErr.status||'알수없음'}`);
-    const text = json?.responses?.[0]?.fullTextAnnotation?.text || null;
+    const annotation = json?.responses?.[0]?.fullTextAnnotation || null;
+    const text = annotation?.text || null;
     if(!text) return {text:null, debug:'API 호출 성공, 텍스트 인식 결과 없음(빈 응답)'};
-    return {text, debug:null};
+    return {text, debug:null, annotation};
   }catch(e){
     console.error('[영수증 OCR] 인식 실패', e);
     return {text:null, debug: (e && e.message) ? e.message : String(e)};
   }
 }
 
-// OCR 텍스트에서 금액 후보 추출 (설계 3-2)
-// 2026-08-18 수정: 키워드 줄 바로 다음 줄의 숫자를 무조건 후보로 넣던 로직이
-// 거래번호/승인번호/가맹점번호처럼 콤마 없는 ID성 숫자를 금액으로 오인식하는
-// 사례(예: "거래번호 :S6-4052" → 405원 오인식) 발생 → 다음 줄은 콤마(천단위
-// 구분자) 형식 숫자만 인정하도록 제한. 소수점 수량(예: "22.117"L)의 소수점
-// 뒷자리가 별도 숫자로 잘못 잡히는 것도 함께 방지.
+// OCR 텍스트에서 금액 후보 추출 (설계 3-2) — 우선순위 높은 후보부터 반환(호출부는 [0] 사용)
+// 2026-08-18: 키워드 다음 줄은 콤마(천단위) 형식 숫자만 인정(거래번호 등 ID성 숫자 오인식 방지).
+// 2026-11-13 개정(실제 첨부 영수증 50장 분석 반영):
+//  - 키워드를 글자 사이 공백 허용으로 매칭("합 계 (주유금액)", "승인 금액" 등 인쇄 간격 대응)
+//  - 우선순위: 승인/결제/거래금액·결제총액 > 문자메시지("50,000원 일시불") > 합계·주유금액 > 앱 화면 "금액"
+//  - 선승인(취소)·누적·잔액·포인트·공급가·부가세·과세 줄은 금액 후보에서 제외
+//    (예: "선승인금액 149,900(취소) / 실승인금액 87,000" → 87,000, 카드문자 "누적2,156,180원" 제외)
+function receiptSpacedRe(list){
+  return new RegExp('(?:' + list.map(w=>[...w].map(c=>c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s*')).join('|') + ')');
+}
+const RECEIPT_AMT_TIER1_RE = receiptSpacedRe(['승인금액','결제금액','결제총액','거래금액','받을금액']);
+const RECEIPT_AMT_TIER2_RE = receiptSpacedRe(['합계','총액','주유금액']);
+const RECEIPT_AMT_LABEL_ONLY_RE = /^\s*금\s*액\s*[:：]?\s*$/;      // 앱 화면: "금액:" 라벨만 있는 줄
+const RECEIPT_AMT_APP_RE = /^\s*금\s*액\s*[:：]?\s*[₩\\]?\s*\d/;   // 앱 화면: "금액: ₩90,000"
+const RECEIPT_AMT_SMS_RE = /(\d{1,3}(?:,\d{3})+)\s*원\s*(?:일시불|할부|\d+\s*개월)/; // 카드 승인 문자
+const RECEIPT_AMT_EXCLUDE_RE = /(선\s*승\s*인|취\s*소|누\s*적|잔\s*액|한\s*도|포\s*인\s*트|공\s*급|부\s*가|과\s*세|면\s*세|봉\s*사\s*료|보\s*증\s*금|할\s*인|단\s*가|적\s*립)/;
 function parseReceiptAmount(text){
   if(!text) return [];
   const lines = text.split('\n');
-  const keywordRe = /(합계|결제금액|승인금액|총액|받을금액)/;
   const idLineRe = /(거래번호|승인번호|승인No|승인NO|가맹점|카드번호|일련번호|사업자|전화|가맹점NO)/i;
-  const numRe = /(?<!\.)\d{1,3}(,\d{3})*/g; // 소수점 뒤 자릿수 오매칭 방지
-  const commaNumRe = /(?<!\.)\d{1,3}(,\d{3})+/g; // 천단위 구분자가 있는 "금액다운" 숫자만
+  // 콤마 금액은 뒤에 글자가 숫자로 오인식돼 붙어도("72,000원"→"72,0002") 인정, 콤마 없는 숫자는 독립된 1~3자리만
+  // (긴 승인번호·일련번호의 일부를 금액으로 잘라 읽지 않도록), 소수점 수량("22.117")의 뒷자리는 제외
+  const numRe = /(?<![.\d,])(?:\d{1,3}(?:,\d{3})+|\d{1,3}(?![\d,.]))/g;
+  const commaNumRe = /(?<![.\d,])\d{1,3}(?:,\d{3})+/g; // 천단위 구분자가 있는 "금액다운" 숫자만
   const toNum = s => Number(s.replace(/,/g,''));
-
-  // 1순위: 키워드 포함 줄. 같은 줄에 숫자가 있으면 그것만 사용하고,
-  // 없을 때만 다음 줄을 보되 ID류 줄은 제외하고 콤마 형식 숫자만 인정
-  // (거래번호/승인번호 등은 콤마가 없으므로 자동 제외됨)
-  const candidates1 = [];
+  const inRange = v => v>=100 && v<=1000000;
+  const tiers = [[],[],[],[]]; // 0: 승인/결제금액, 1: 문자메시지, 2: 합계류, 3: 앱 "금액"
+  const nextLineNums = (i)=>{
+    const nextLine = lines[i+1] || '';
+    if(idLineRe.test(nextLine) || RECEIPT_AMT_EXCLUDE_RE.test(nextLine)) return [];
+    return (nextLine.match(commaNumRe) || []).map(toNum).filter(inRange);
+  };
   lines.forEach((line, i)=>{
-    if(keywordRe.test(line)){
-      const sameLineNums = (line.match(numRe) || []).map(toNum).filter(v=> v>=100 && v<=1000000);
-      if(sameLineNums.length){
-        candidates1.push(...sameLineNums);
-      } else {
-        const nextLine = lines[i+1] || '';
-        if(!idLineRe.test(nextLine)){
-          const nextNums = (nextLine.match(commaNumRe) || []).map(toNum).filter(v=> v>=100 && v<=1000000);
-          candidates1.push(...nextNums);
-        }
-      }
-    }
+    if(RECEIPT_AMT_EXCLUDE_RE.test(line)) return;
+    const sms = line.match(RECEIPT_AMT_SMS_RE);
+    if(sms){ const v = toNum(sms[1]); if(inRange(v)) tiers[1].push(v); return; }
+    let tier = -1;
+    if(RECEIPT_AMT_TIER1_RE.test(line)) tier = 0;
+    else if(RECEIPT_AMT_TIER2_RE.test(line)) tier = 2;
+    else if(RECEIPT_AMT_APP_RE.test(line)) tier = 3;
+    else if(RECEIPT_AMT_LABEL_ONLY_RE.test(line)){ tiers[3].push(...nextLineNums(i)); return; }
+    if(tier<0) return;
+    const sameLineNums = (line.match(numRe) || []).map(toNum).filter(inRange);
+    if(sameLineNums.length) tiers[tier].push(...sameLineNums);
+    else tiers[tier].push(...nextLineNums(i));
   });
-  if(candidates1.length) return candidates1;
+  const ranked = [...new Set(tiers.flat())];
+  if(ranked.length) return ranked;
 
-  // 2순위: 전체 텍스트에서 원 단위로 타당한 범위(1,000~200,000)의 숫자 중 최댓값
-  const all = (text.match(numRe) || []).map(toNum).filter(v=> v>=1000 && v<=200000);
+  // 최후순위: 전체 텍스트에서 원 단위로 타당한 범위(1,000~200,000)의 숫자 중 최댓값(제외 줄은 빼고)
+  const all = lines.filter(l=>!RECEIPT_AMT_EXCLUDE_RE.test(l))
+    .flatMap(l=>(l.match(numRe) || []).map(toNum)).filter(v=> v>=1000 && v<=200000);
   if(!all.length) return [];
   return [Math.max(...all)];
 }
 
-// OCR 텍스트에서 날짜 후보 추출 (승인일자/발행일/거래일시 등 키워드 우선)
-// 반환: 'YYYY-MM-DD' 형식 문자열 또는 null
-function parseReceiptDate(text){
+// OCR 텍스트에서 날짜 추출 (승인일자/발행일/거래일시 등 키워드 줄 우선) → 'YYYY-MM-DD' 또는 null
+// 2026-11-13 개정: 앞뒤가 숫자인 경우 제외(사업자번호 "114-03-31588"을 2014-03-31로 오인식 방지),
+//  "2026년10월21일" 형식 지원, 연도 없는 카드문자 "08/31 07:19"·"8월 31일"은 운행일(refDateStr)에
+//  가장 가까운 연도로 보정(연도 있는 날짜가 하나도 없을 때만 사용). "일시불" 줄·유효기간 줄은 제외.
+function parseReceiptDate(text, refDateStr){
   if(!text) return null;
   const lines = text.split('\n');
-  const keywordRe = /(승인일자|승인일시|발행일|거래일시|결제일시|일시)/;
-  // YYYY-MM-DD, YYYY.MM.DD, YYYY/MM/DD, YY-MM-DD 등 다양한 구분자 지원
-  const dateRe = /(20\d{2}|\d{2})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/;
-
-  function normalize(m){
-    let y = m[1], mo = m[2].padStart(2,'0'), d = m[3].padStart(2,'0');
-    if(y.length===2) y = '20'+y;
-    return `${y}-${mo}-${d}`;
+  const keywordRe = /(승인일자|승인일시|승인시각|발행일|거래일|결제일|일시(?!불)|날짜|공급일자)/; // "일시불"은 제외
+  const skipRe = /(유효|까지|만료)/; // 쿠폰·할인권의 유효기간 날짜는 영수증 날짜로 쓰지 않음
+  const dateRe = /(?<![\d.\-\/])(20\d{2}|\d{2})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})(?![\d])/g;
+  const valid = (y,mo,d)=> mo>=1 && mo<=12 && d>=1 && d<=31 && y>=2020 && y<=2039; // 오인식 연도("96/11/01") 배제
+  const fmt = (y,mo,d)=> `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  function firstDate(str){
+    for(const m of str.matchAll(dateRe)){
+      let y = Number(m[1]); if(m[1].length===2) y += 2000;
+      const mo = Number(m[2]), d = Number(m[3]);
+      if(valid(y,mo,d)) return fmt(y,mo,d);
+    }
+    return null;
   }
-
-  // 1순위: 키워드가 있는 줄
-  for(const line of lines){
-    if(keywordRe.test(line)){
-      const m = line.match(dateRe);
-      if(m) return normalize(m);
+  const usable = lines.filter(l=>!skipRe.test(l));
+  for(const line of usable){
+    if(keywordRe.test(line)){ const d = firstDate(line); if(d) return d; }
+  }
+  for(const line of usable){ const d = firstDate(line); if(d) return d; }
+  text = usable.join('\n');
+  // 연도 없는 날짜(카드 승인 문자 등): "08/31 07:19" 또는 "8월 31일"
+  const md = text.match(/(?<![\d.\-\/])(\d{1,2})\s*\/\s*(\d{1,2})\s+\d{1,2}:\d{2}/) || text.match(/(?<!\d)(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+  if(md){
+    const mo = Number(md[1]), d = Number(md[2]);
+    const ref = new Date(((refDateStr||todayLocalISO())) + 'T00:00:00');
+    if(mo>=1 && mo<=12 && d>=1 && d<=31 && !isNaN(ref.getTime())){
+      let best = null;
+      for(const y of [ref.getFullYear()-1, ref.getFullYear(), ref.getFullYear()+1]){
+        const c = new Date(y, mo-1, d);
+        if(c.getMonth()!==mo-1) continue;
+        if(!best || Math.abs(c-ref) < Math.abs(best-ref)) best = c;
+      }
+      if(best) return fmt(best.getFullYear(), best.getMonth()+1, best.getDate());
     }
   }
-  // 2순위: 전체 텍스트에서 첫 날짜 패턴
-  const m = text.match(dateRe);
-  if(m) return normalize(m);
   return null;
 }
 
 // OCR 텍스트가 주유영수증인지 판정 (식당/마트 등 무관한 영수증 오첨부 방지)
 // 반환: true(주유영수증으로 판단) / false(주유영수증 아닌 것으로 판단) / null(OCR 인식 실패로 판정 불가)
+// 2026-11-13: "휘발유"(단독)·"주유금액"·정유사 상호(GS칼텍스·SK에너지·S-OIL·현대오일뱅크·EX-OIL) 추가
 function isFuelReceiptText(text){
   if(!text) return null; // 인식 실패
-  const fuelKeywordRe = /(주유소|주유기|무연휘발유|보통휘발유|고급휘발유|무연|경유|리터|ℓ|유종|주유량|셀프주유|전기차충전|급유|충전소|오피넷)/;
+  const fuelKeywordRe = /(주\s*유|휘발유|경유|리터|ℓ|유종|전기차충전|급유|충전소|오피넷|칼텍스|SK\s*에너지|S-?OIL|에쓰오일|오일뱅크|E[XK]-?OIL|알뜰)/i;
   return fuelKeywordRe.test(text);
+}
+
+// ── 사진 1장에 영수증 여러 장이 찍힌 경우 영역 분리 (2026-11-13) ──
+// Vision 응답(fullTextAnnotation)의 단어 위치로, 단어가 하나도 없는 가로/세로 빈 띠(영수증 사이 틈)를 찾아
+// 사진을 나눈다. 오분리로 금액이 두 번 합산되는 일을 막기 위해 나눈 양쪽이 모두
+// ① 사업자 표시(사업자 / 000-00-00000) ② 금액 키워드 금액이 정확히 1종류
+// ③ 같은 승인번호가 양쪽에 없음 — 을 만족할 때만 분리한다. 하나라도 어긋나면 기존처럼 1장으로 처리.
+// 반환: 영수증별 텍스트 배열(2장 이상일 때) 또는 null
+function ocrWordsFromAnnotation(annotation){
+  const page = annotation?.pages?.[0];
+  if(!page) return [];
+  const words = [];
+  (page.blocks||[]).forEach(b=>(b.paragraphs||[]).forEach(p=>(p.words||[]).forEach(w=>{
+    const v = (w.boundingBox?.vertices||[]).map(o=>({x:o.x||0, y:o.y||0}));
+    const text = (w.symbols||[]).map(s=>s.text||'').join('');
+    if(v.length<4 || !text) return;
+    const xs = v.map(o=>o.x), ys = v.map(o=>o.y);
+    words.push({text, v, x0:Math.min(...xs), x1:Math.max(...xs), y0:Math.min(...ys), y1:Math.max(...ys),
+      cx:(Math.min(...xs)+Math.max(...xs))/2, cy:(Math.min(...ys)+Math.max(...ys))/2});
+  })));
+  return words;
+}
+// 단어 목록 → 읽는 방향 기준으로 줄을 다시 묶어 텍스트 재구성 (사진이 옆으로 누운 경우도 처리)
+function ocrWordsToText(words){
+  if(!words.length) return '';
+  let dx=0, dy=0;
+  words.forEach(w=>{ dx += w.v[1].x - w.v[0].x; dy += w.v[1].y - w.v[0].y; });
+  const q = ((Math.round(Math.atan2(dy, dx) / (Math.PI/2)) % 4) + 4) % 4; // 0:정상 1:90° 2:180° 3:270°
+  const dir = [[1,0],[0,1],[-1,0],[0,-1]][q];
+  const items = words.map(w=>({text:w.text, rx:w.cx*dir[0]+w.cy*dir[1], ry:-w.cx*dir[1]+w.cy*dir[0], h:(q%2? w.x1-w.x0 : w.y1-w.y0)}));
+  const hs = items.map(i=>i.h).sort((a,b)=>a-b);
+  const tol = Math.max(2, (hs[Math.floor(hs.length/2)]||10) * 0.5);
+  items.sort((a,b)=>a.ry-b.ry);
+  const lines = [];
+  items.forEach(it=>{
+    const ln = lines[lines.length-1];
+    if(ln && Math.abs(it.ry - ln.ry) <= tol){ ln.items.push(it); ln.ry = (ln.ry*(ln.items.length-1)+it.ry)/ln.items.length; }
+    else lines.push({ry:it.ry, items:[it]});
+  });
+  return lines.map(l=>l.items.sort((a,b)=>a.rx-b.rx).map(i=>i.text).join(' ')).join('\n') + '\n';
+}
+function receiptRegionInfo(words){
+  const text = ocrWordsToText(words);
+  const amounts = parseReceiptAmount(text);
+  const strongCount = text.split('\n').filter(l=>!RECEIPT_AMT_EXCLUDE_RE.test(l) && (RECEIPT_AMT_TIER1_RE.test(l)||RECEIPT_AMT_TIER2_RE.test(l))).length;
+  const approvals = new Set();
+  text.split('\n').forEach(l=>{ if(/승\s*인\s*(번\s*호|N\s*[oO0])/.test(l)) (l.match(/\d{6,}/g)||[]).forEach(n=>approvals.add(n)); });
+  const ok = words.length>=12 && /(사\s*업\s*자|(?<!\d)\d{3}-\d{2}-\d{5}(?!\d))/.test(text) && strongCount>0 && amounts.length===1;
+  return {text, ok, approvals};
+}
+function splitReceiptRegions(annotation){
+  const all = ocrWordsFromAnnotation(annotation);
+  if(all.length < 24) return null;
+  const hs = all.map(w=>Math.min(w.x1-w.x0, w.y1-w.y0)).sort((a,b)=>a-b);
+  const minGap = Math.max(3, (hs[Math.floor(hs.length/2)]||10) * 0.4);
+  function bestCut(words){
+    let best = null;
+    for(const ax of ['x','y']){
+      const iv = words.map(w=>[w[ax+'0'], w[ax+'1']]).sort((a,b)=>a[0]-b[0]);
+      let end = iv[0][1];
+      for(let i=1;i<iv.length;i++){
+        const gap = iv[i][0] - end;
+        if(gap >= minGap && (!best || gap > best.gap)){
+          const pos = (end + iv[i][0]) / 2;
+          const A = words.filter(w=>w['c'+ax] < pos), B = words.filter(w=>w['c'+ax] >= pos);
+          const a = receiptRegionInfo(A), b = receiptRegionInfo(B);
+          if(a.ok && b.ok && ![...a.approvals].some(n=>b.approvals.has(n))) best = {gap, A, B};
+        }
+        end = Math.max(end, iv[i][1]);
+      }
+    }
+    return best;
+  }
+  const out = [];
+  (function rec(words, depth){
+    const cut = (depth<3 && out.length<4) ? bestCut(words) : null;
+    if(!cut){ out.push(words); return; }
+    rec(cut.A, depth+1); rec(cut.B, depth+1);
+  })(all, 0);
+  return out.length>=2 ? out.map(ocrWordsToText) : null;
 }
 
 // 대조 로직: 오차 허용 없음 — 정확히 일치해야 true (설계 3-3, 정책 확정사항)
@@ -9126,13 +9239,30 @@ function newReceiptEntry(file){
 // 영수증 1장 OCR 판정(기존 단일 첨부와 동일 로직) — 결과를 entry에 직접 기록
 async function analyzeReceiptEntry(entry, tripDateStr){
   try{
-    const { text, debug } = await callVisionOcr(entry.file);
-    const cands = parseReceiptAmount(text);
-    entry.ocrAmount = cands.length ? cands[0] : null;
-    entry.ocrDate = parseReceiptDate(text);
-    const { valid, diffDays } = validateReceiptDate(entry.ocrDate, tripDateStr);
-    entry.dateValid = valid; entry.diffDays = diffDays;
-    entry.typeValid = isFuelReceiptText(text);
+    const { text, debug, annotation } = await callVisionOcr(entry.file);
+    // 2026-11-13: 사진 1장에 영수증이 여러 장이면 영수증별로 판정해 금액은 합산(분리 조건 불충족 시 1장 처리)
+    const regions = splitReceiptRegions(annotation);
+    if(regions){
+      const parts = regions.map(t=>{
+        const amt = parseReceiptAmount(t)[0] ?? null;
+        const date = parseReceiptDate(t, tripDateStr);
+        return {amt, date, ...validateReceiptDate(date, tripDateStr), type:isFuelReceiptText(t)};
+      });
+      const tri = (k)=> parts.some(p=>p[k]===false) ? false : (parts.every(p=>p[k]===true) ? true : null);
+      entry.subAmounts = parts.map(p=>p.amt);
+      entry.ocrAmount = parts.every(p=>p.amt!==null) ? parts.reduce((s,p)=>s+p.amt,0) : null;
+      entry.ocrDate = [...new Set(parts.map(p=>p.date).filter(Boolean))].join(', ') || null;
+      entry.dateValid = tri('valid');
+      entry.diffDays = parts.reduce((m,p)=> p.diffDays!==null && Math.abs(p.diffDays)>Math.abs(m??0) ? p.diffDays : m, null);
+      entry.typeValid = tri('type');
+    } else {
+      const cands = parseReceiptAmount(text);
+      entry.ocrAmount = cands.length ? cands[0] : null;
+      entry.ocrDate = parseReceiptDate(text, tripDateStr);
+      const { valid, diffDays } = validateReceiptDate(entry.ocrDate, tripDateStr);
+      entry.dateValid = valid; entry.diffDays = diffDays;
+      entry.typeValid = isFuelReceiptText(text);
+    }
     entry.debug = debug || '';
   }catch(e){
     console.error('[영수증 OCR 실패]', e);
@@ -9156,7 +9286,8 @@ function receiptEntriesHtml(list, removeJs){
     let info;
     if(e.pending) info = '🔄 영수증 인식 중...';
     else {
-      const amt = e.ocrAmount!==null ? `<b>${e.ocrAmount.toLocaleString()}원</b>` : `<span style="color:#B45309;font-weight:700;">금액 인식 실패</span>`;
+      const multi = (e.subAmounts||[]).length>1 ? `<span style="color:#1D4ED8;">한 사진에 영수증 ${e.subAmounts.length}장 인식: ${e.subAmounts.map(v=>v===null?'?':v.toLocaleString()).join(' + ')}</span><br>` : '';
+      const amt = multi + (e.ocrAmount!==null ? `<b>${e.ocrAmount.toLocaleString()}원</b>` : `<span style="color:#B45309;font-weight:700;">금액 인식 실패</span>`);
       const dt = e.ocrDate ? `${e.ocrDate} ${e.dateValid===false?'<span style="color:#DC2626;font-weight:700;">⚠️일자부적격</span>':(e.dateValid===true?'✅':'')}` : `<span style="color:#B45309;">일자 인식 실패</span>`;
       const tp = e.typeValid===false ? ` · <span style="color:#DC2626;font-weight:700;">⚠️주유영수증 아님</span>` : '';
       info = `${amt} · ${dt}${tp}` + (e.debug ? `<br><span style="color:#9CA3AF;font-size:10.5px;">🛠 진단정보(임시): ${String(e.debug).replace(/</g,'&lt;')}</span>` : '');
