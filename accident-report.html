@@ -289,7 +289,9 @@ let _authReadyResolve;
 const authReadyPromise = new Promise(res=>{ _authReadyResolve = res; });
 firebase.auth().onAuthStateChanged(()=>{ _authReadyResolve(); });
 setTimeout(()=>_authReadyResolve(), 5000);
-firebase.auth().signInAnonymously().then(()=>{
+// 최초 익명 로그인 Promise — getAuthToken()이 완료를 기다린다(첫 접속 시 onAuthStateChanged가 로그인 전 null로 먼저 와서
+// 토큰 없이 요청이 나가 DB/Storage 규칙(auth != null)에 거부되는 것을 방지, index.html과 동일 방식)
+const _anonSignInPromise = firebase.auth().signInAnonymously().then(()=>{
   document.getElementById('connFlag').textContent = '✓ 서버 연결됨 — 제출 시 실제 DB에 저장됩니다';
 }).catch(e=>{
   const flag = document.getElementById('connFlag');
@@ -300,7 +302,8 @@ firebase.auth().signInAnonymously().then(()=>{
 
 async function getAuthToken(){
   await authReadyPromise;
-  const user = firebase.auth().currentUser;
+  let user = firebase.auth().currentUser;
+  if(!user){ await _anonSignInPromise; user = firebase.auth().currentUser; }
   if(!user) return null;
   try{ return await user.getIdToken(); }catch(e){ return null; }
 }
