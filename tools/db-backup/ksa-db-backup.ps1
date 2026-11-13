@@ -65,6 +65,29 @@ function Get-IdToken {
   return $r.idToken
 }
 
+# DB 백업 데이터를 훑어 사진 경로마다 차량번호를 찾는다
+#  - vehicles/{차량번호}/... 아래 → 그 차량번호 / plate 필드가 있는 항목 → plate / 사고(ourVehicle.plate) → 그 차량번호
+function Add-PhotoPath([string]$s, [string]$plate) {
+  if ($s -match '^(receipts|daecha-photos|accidents)/' -and -not $PhotoMap.ContainsKey($s)) { $PhotoMap[$s] = $plate }
+}
+function Find-Photos($o, [string]$plate, [string]$parentKey) {
+  if ($o -is [System.Collections.IDictionary]) {
+    $p = $plate
+    if ($o.ContainsKey('plate') -and ($o['plate'] -is [string]) -and $o['plate']) { $p = $o['plate'] }
+    elseif ($o.ContainsKey('ourVehicle') -and ($o['ourVehicle'] -is [System.Collections.IDictionary]) -and $o['ourVehicle']['plate']) { $p = [string]$o['ourVehicle']['plate'] }
+    foreach ($k in @($o.Keys)) {
+      $v = $o[$k]
+      $cp = $p; if ($parentKey -eq 'vehicles') { $cp = [string]$k }
+      if ($v -is [string]) { Add-PhotoPath $v $cp }
+      elseif (($v -is [System.Collections.IDictionary]) -or ($v -is [System.Collections.IList])) { Find-Photos $v $cp ([string]$k) }
+    }
+  } elseif ($o -is [System.Collections.IList]) {
+    foreach ($v in $o) {
+      if ($v -is [string]) { Add-PhotoPath $v $plate }
+      elseif (($v -is [System.Collections.IDictionary]) -or ($v -is [System.Collections.IList])) { Find-Photos $v $plate '' }
+    }
+  }
+}
 $exitCode = 0
 try {
   $idToken = Get-IdToken
@@ -101,17 +124,40 @@ try {
   Write-Log ('백업 성공: {0} ({1} KB), 연도별 노드 {2}개, 이전 백업 {3}개 삭제' -f (Split-Path $file -Leaf), [math]::Round((Get-Item $file).Length / 1KB), $yearParts.Count, $old.Count)
 
   # ── 사진 원본 백업 (DB 백업이 저장된 뒤 별도 진행 — 여기서 실패해도 DB 백업은 유지)
+  # 저장 이름: photos\{구분}\{차량번호}_{원래 파일명}.jpg (사고사진은 {차량번호}_{사고ID}_{번호}.jpg)
+  # 원본 Storage 경로와의 대응표: photos\index.csv
   try {
-    $paths = New-Object 'System.Collections.Generic.HashSet[string]'
-    # 경로 문자열만 추출 (JSON에서 / 가 \/ 로 이스케이프된 경우도 처리)
-    foreach ($m in [regex]::Matches($out, '"((?:receipts|daecha-photos|accidents)(?:/|\\/)(?:[^"\\]|\\/)+)"')) { [void]$paths.Add(($m.Groups[1].Value -replace '\\/', '/')) }
-    $got = 0; $have = 0; $missing = 0; $fail = 0; $later = 0
+    $PhotoMap = New-Object 'System.Collections.Generic.Dictionary[string,string]'   # Storage 경로 -> 차량번호
+    Add-Type -AssemblyName System.Web.Extensions
+    $ser = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+    $ser.MaxJsonLength = [int]::MaxValue
+    $ser.RecursionLimit = 1000
+    Find-Photos ($ser.DeserializeObject($out)) '차량미상' ''
+    $got = 0; $moved = 0; $have = 0; $missing = 0; $fail = 0; $later = 0
+    $csv = New-Object System.Collections.Generic.List[string]
+    $csv.Add('차량번호,구분,파일명,원본경로(Storage)')
     $deadline = (Get-Date).AddMinutes($PhotoMinutes)
-    foreach ($p in $paths) {
+    foreach ($p in $PhotoMap.Keys) {
       if ($p -match '\.\.|[<>:|?*\\]') { $missing++; Write-Log ('사진 경로 형식 오류로 건너뜀: ' + $p); continue }   # 폴더 밖 저장·잘못된 파일명 방지
-      $local = Join-Path $PhotoDir ($p -replace '/', '\')
+      $plate = $PhotoMap[$p] -replace '[\\/:*?"<>|\s]', ''
+      if (-not $plate) { $plate = '차량미상' }
+      $cat  = $p.Split('/')[0]
+      $name = $plate + '_' + ($p.Substring($cat.Length + 1) -replace '/', '_')
+      $local = Join-Path (Join-Path $PhotoDir $cat) $name
+      $csv.Add(('"{0}","{1}","{2}","{3}"' -f $plate, $cat, $name, $p))
       $fi = New-Object IO.FileInfo($local)
       if ($fi.Exists -and $fi.Length -gt 0) { $have++; continue }
+      # 이전 방식(원래 경로 그대로)으로 받아 둔 파일이 있으면 다시 받지 않고 새 이름으로 옮김
+      $oldLocal = Join-Path $PhotoDir ($p -replace '/', '\')
+      $ofi = New-Object IO.FileInfo($oldLocal)
+      if ($ofi.Exists -and $ofi.Length -gt 0) {
+        try {
+          [void][IO.Directory]::CreateDirectory($fi.DirectoryName)
+          if ($fi.Exists) { [IO.File]::Delete($local) }
+          [IO.File]::Move($oldLocal, $local)
+          $moved++; continue
+        } catch { Write-Log ('사진 이름 변경 실패, 다시 받습니다: {0} ({1})' -f $p, $_.Exception.Message) }
+      }
       if ((Get-Date) -gt $deadline) { $later++; continue }
       try {
         $req = New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Get, ('https://firebasestorage.googleapis.com/v0/b/{0}/o/{1}?alt=media' -f $Bucket, [Uri]::EscapeDataString($p)))
@@ -138,7 +184,12 @@ try {
         if ($fail -le 5) { Write-Log ('사진 받기 실패: {0} ({1})' -f $p, $_.Exception.Message) }
       }
     }
-    Write-Log ('사진 백업: 새로 받음 {0}, 이미 있음 {1}, 서버에 없음·건너뜀 {2}, 실패 {3}, 다음 실행으로 넘김 {4} (총 {5}건)' -f $got, $have, $missing, $fail, $later, $paths.Count)
+    # 대응표 저장(엑셀에서 바로 열리도록 UTF-8 BOM), 이름 변경 후 비어 버린 이전 폴더 정리
+    [IO.File]::WriteAllLines((Join-Path $PhotoDir 'index.csv'), $csv, (New-Object Text.UTF8Encoding($true)))
+    Get-ChildItem -LiteralPath $PhotoDir -Directory -Recurse | Sort-Object { $_.FullName.Length } -Descending | ForEach-Object {
+      if (-not (Get-ChildItem -LiteralPath $_.FullName -Force | Select-Object -First 1)) { Remove-Item -LiteralPath $_.FullName -Force }
+    }
+    Write-Log ('사진 백업: 새로 받음 {0}, 이름 변경 {1}, 이미 있음 {2}, 서버에 없음·건너뜀 {3}, 실패 {4}, 다음 실행으로 넘김 {5} (총 {6}건)' -f $got, $moved, $have, $missing, $fail, $later, $PhotoMap.Count)
     if ($fail -gt 0) {
       Set-Content -Path $PhotoFailFlag -Value ((Get-Date -Format 'yyyy-MM-dd HH:mm') + "`r`n사진 원본 $fail 건을 받지 못했습니다(다음 실행 때 다시 시도). 자세한 내용은 backup.log 참고") -Encoding UTF8
     } elseif (Test-Path $PhotoFailFlag) { Remove-Item $PhotoFailFlag -Force }

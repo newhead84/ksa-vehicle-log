@@ -12,6 +12,8 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
   - 변경: tools/db-backup/ksa-db-backup.ps1(사진 백업 단계, $PhotoMinutes), install.ps1(첫 실행 10분)
 - 사고접수 페이지 첫 접속 시 익명 로그인 완료 전 요청이 토큰 없이 나가 규칙에 거부될 수 있던 문제 수정(index.html과 동일 방식)
   - 변경: accident-report.html getAuthToken(), _anonSignInPromise
+- 사진 백업 파일명을 차량번호로 시작하도록 변경 — `photos\{구분}\{차량번호}_{원래 파일명}`(사고사진 `{차량번호}_{사고ID}_{번호}`), 차량번호는 DB의 vehicles/{차량번호}·plate·사고 ourVehicle.plate에서 찾음, 기존 받은 파일은 재다운로드 없이 이름 변경, 대응표 `photos\index.csv` 생성
+  - 변경: tools/db-backup/ksa-db-backup.ps1(Find-Photos(), Add-PhotoPath(), 사진 백업 단계), README.md
 - index.html 상단 CHANGELOG 주석을 최근 5건으로 정리 — CHANGELOG.md에 없던 2026-10-27 ~ 2026-08-13 항목 33건을 이 파일로 옮김
   - 변경: index.html 주석, CHANGELOG.md
 
