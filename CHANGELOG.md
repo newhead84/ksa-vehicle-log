@@ -4,6 +4,16 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 형식: 각 항목은 `요청내용 요약 | 변경: 함수/영역`
 
+## 2026-11-16
+
+- 개인사용 점검 시작일을 2026-11-01로 변경(11월 이전 건은 시스템 정상화 이전 건이라 처리 대기·개인사용 요약 카드·문제건 목록에서 제외, 전체보기·이름 검색으로는 계속 조회) | 변경: PERSONAL_MONITORING_SINCE
+- 개인사용 영수증 "일자부적격/일자확인필요" 오판정 재발 방지
+  - 영수증을 먼저 첨부하고 운행 시작일을 나중에 바꾸면, OCR 재호출 없이 읽어 둔 날짜(영수증별)로 일자 판정을 다시 함(운행 입력·내 제출기록 수정). 주유비 입력란은 건드리지 않음
+  - 저장된 기록의 시작일을 바꿀 때(관리자 수정·내 제출기록 수정) 저장된 읽은 날짜로 일자 판정 재계산(관리자 첨부·날짜 못 읽은 건 제외)
+  - 관리자 개인사용 목록 증빙 칸에 OCR이 읽은 날짜 표시("날짜 못 읽음" 포함)
+  - 관리자 "🔁 다시 판정" 버튼(운전자 첨부 증빙만): 원본을 다시 OCR해 금액·일자·유형 판정 갱신. 저장 직전 해당 차량만 재조회해 같은 기록·증빙인지 확인 후 판정 필드만 변경, 이전 판정은 receiptRejudge(신규 필드)에 보관. 인식 실패 시 저장 안 함
+  - 변경: rejudgeReceiptEntryDates(), rejudgeSavedReceiptDate(), analyzeReceiptEntry(), applyReceiptAggregate(), ueApplyReceiptAggregate(), onDateRangeChange(), autoFormatUeDate(), receiptStatusBadgeHtml(), adminRejudgeReceiptBtnHtml(), adminRejudgeReceipt()
+
 ## 2026-11-13
 
 - 개인사용 영수증 OCR 인식률 개선(실제 첨부 영수증 50장 분석 반영)

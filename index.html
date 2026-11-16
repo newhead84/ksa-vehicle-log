@@ -35,11 +35,11 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-16] 개인사용 점검 시작일 2026-11-01로 변경(11월 이전 건 처리 대기·문제건 집계 제외, 전체보기로는 조회) | 변경: PERSONAL_MONITORING_SINCE
+  [2026-11-16] 영수증 일자 판정 보완: 첨부 후 운행일 변경 시 재판정, 관리자 목록에 읽은 날짜 표시, 관리자 "다시 판정"(금액·일자·유형) | 변경: rejudgeReceiptEntryDates(), rejudgeSavedReceiptDate(), applyReceiptAggregate(), ueApplyReceiptAggregate(), onDateRangeChange(), autoFormatUeDate(), receiptStatusBadgeHtml(), adminRejudgeReceipt()
   [2026-11-13] 영수증 OCR 인식률 개선(사진 1장 여러 영수증 분리·합산, 카드문자·앱 캡처 금액/날짜, 선승인 취소 제외, 정유사 상호) | 변경: parseReceiptAmount(), parseReceiptDate(), isFuelReceiptText(), splitReceiptRegions() 신규, callVisionOcr(), analyzeReceiptEntry(), receiptEntriesHtml()
   [2026-11-12] 백업·복원 운행기록 건수를 객체형 trips도 정확히 세도록 수정(복원 확인창 NaN 방지) | 변경: backupData(), restoreData()
   [2026-11-11] 전환용 기존 관리자 ID(admin) 제거 — newhead 로그인 확인 완료 | 변경: ADMIN_ACCOUNTS
-  [2026-11-11] 서브관리자 체계: 인증코드 메일에 로그인 요청 ID 표시 | 변경: sendAdminOtp(), tryAdminLogin()
-  [2026-11-11] 관리자 로그인을 ID+비밀번호 방식으로 변경(계정 목록 ADMIN_ACCOUNTS, 최대 3명) | 변경: tryAdminLogin(), ADMIN_ACCOUNTS, 관리자 로그인 입력칸
   ※ 이전 변경 이력은 저장소 CHANGELOG.md 참고 (이 주석은 최근 5건만 유지)
 -->
 
@@ -1744,8 +1744,11 @@ const OCR_USAGE_NODE = 'system-meta/ocrUsage'; // Firebase 경로: {yyyy-mm: {co
 //                                대상으로 집계. 기능 도입 이전 과거 기록까지 소급 적용하면
 //                                (당시엔 없던 기준으로) 오탐이 쌓이므로, 기능 배포 시점 이후
 //                                신규 제출 건부터만 문제건 판정 대상에 포함한다.
+//                                (2026-11-16: 기능 도입 시점 2026-08-17 → 2026-11-01로 변경.
+//                                 11월 이전 건은 시스템 정상화 이전 건이라 처리 대기·문제건 집계에서
+//                                 제외. 전체보기·이름 검색으로는 계속 조회 가능)
 const FUEL_UNDERPAID_TOLERANCE_WON = 1000;
-const PERSONAL_MONITORING_SINCE = '2026-08-17T20:31:33+09:00';
+const PERSONAL_MONITORING_SINCE = '2026-11-01T00:00:00+09:00';
 // VEHICLE_IDLE_ALERT_DAYS : 이 일수 이상 운행기록(개인사용·출퇴근사용 포함 전체)이 없는 차량은
 //                          차량카드/차량목록 제목에 "미운행" 경고로 표시한다.
 const VEHICLE_IDLE_ALERT_DAYS = 10;
@@ -4900,12 +4903,16 @@ function receiptStatusBadgeHtml(t){
   if(t.receiptDateValid===true) badges.push(`<span style="background:var(--good-soft);color:var(--good);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">✅ 일자적격</span>`);
   else if(t.receiptDateValid===false) badges.push(`<span style="background:var(--bad-soft);color:var(--bad);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">⚠️ 일자부적격</span>`);
   else badges.push(`<span style="background:#FEF3C7;color:#B45309;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">🔍 일자확인필요</span>`);
+  // 2026-11-16: OCR이 읽은 날짜를 함께 표시(판정 근거 확인용)
+  badges.push(t.receiptOcrDate
+    ? `<span style="color:var(--muted);font-size:10.5px;line-height:1.3;">읽은 날짜 ${escapeHtml(String(t.receiptOcrDate))}</span>`
+    : `<span style="color:var(--muted);font-size:10.5px;line-height:1.3;">날짜 못 읽음</span>`);
   if(t.receiptTypeValid===true) badges.push(`<span style="background:var(--good-soft);color:var(--good);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">✅ 주유영수증</span>`);
   else if(t.receiptTypeValid===false) badges.push(`<span style="background:var(--bad-soft);color:var(--bad);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">⚠️ 유형상이</span>`);
   else badges.push(`<span style="background:#FEF3C7;color:#B45309;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">🔍 유형확인필요</span>`);
   if(t.receiptAdminAddedAt) badges.push(`<span style="background:var(--accent-soft);color:var(--navy);font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;">👤 관리자 추가첨부</span>`);
   return `<div style="display:flex;flex-direction:column;gap:3px;">${badges.join('')}
-    ${receiptOriginalBtnsHtml(t)}${adminReceiptManageBtnsHtml(t)}</div>`;
+    ${receiptOriginalBtnsHtml(t)}${adminReceiptManageBtnsHtml(t)}${adminRejudgeReceiptBtnHtml(t)}</div>`;
 }
 // 영수증 원본 열람 버튼 — 복수 첨부(receiptPaths) 건은 장별 버튼(🧾 1 ~ 🧾 n), 단일 건은 기존과 동일하게 "🧾 원본"
 function receiptOriginalBtnsHtml(t){
@@ -5004,6 +5011,62 @@ function adminAttachReceipt(plate, isoDate, startOdo, endOdo, mode){
   };
   document.body.appendChild(inp);
   inp.click();
+}
+
+// 2026-11-16 관리자 "다시 판정": 운전자가 첨부한 증빙 원본을 현재 OCR 로직으로 다시 읽어 금액·일자·유형 판정만 갱신한다.
+// 저장 직전에 해당 차량만 다시 읽어 같은 기록·같은 증빙인지 확인하고, 그 기록의 판정 필드만 바꿔 차량 단위로 저장한다.
+// 이전 판정값은 receiptRejudge(신규 필드)에 보관한다(무손실). 인식 실패(한도 도달 등) 시 저장하지 않는다.
+function adminRejudgeReceiptBtnHtml(t){
+  if(currentRole!=='admin' || viewerMode || !t.plate || !t.isoDate || !t.receiptPath || t.receiptAttachedBy==='admin') return '';
+  const a=(v)=>String(v==null?'':v).replace(/['"\\<>&]/g,'');
+  return `<button class="btn-ghost" style="padding:2px 6px;font-size:10.5px;width:fit-content;" onclick="adminRejudgeReceipt('${a(t.plate)}','${a(t.isoDate)}','${a(t.startOdo)}','${a(t.endOdo)}')">🔁 다시 판정</button>`;
+}
+async function adminRejudgeReceipt(plate, isoDate, startOdo, endOdo){
+  if(currentRole!=='admin' || viewerMode) return;
+  const findTrip=()=>((data.vehicles[plate]&&data.vehicles[plate].trips)||[]).find(x=>x && x.isPersonal && x.isoDate===isoDate && String(x.startOdo)===startOdo && String(x.endOdo)===endOdo);
+  const curT=findTrip();
+  if(!curT || !curT.receiptPath || curT.receiptAttachedBy==='admin') return;
+  const paths=receiptPathsOf(curT);
+  const ok=await appConfirm(`${plate} · ${isoDate} 개인사용 건의 증빙 ${paths.length}장을 다시 인식해 금액·일자·유형 판정을 갱신합니다.\n이전 판정값은 이력으로 보관됩니다.\n\nOCR 사용량이 ${paths.length}건 늘어납니다(월 한도 ${OCR_MONTHLY_SOFT_LIMIT}건).\n\n계속하시겠습니까?`,{title:'증빙 다시 판정', okText:'다시 판정'});
+  if(!ok) return;
+  showAdminToast('🔁 증빙을 다시 인식하고 있습니다...');
+  try{
+    const entries=[];
+    for(const p of paths){
+      const url=await fetchReceiptImageUrl(p);
+      let blob;
+      try{ blob=await (await fetch(url)).blob(); } finally { try{ URL.revokeObjectURL(url); }catch(_){} }
+      const entry={file:blob, pending:true, ocrAmount:null, ocrDate:null, dateValid:null, diffDays:0, typeValid:null, debug:''};
+      await analyzeReceiptEntry(entry, isoDate);
+      if(entry.ocrFailed) throw new Error(entry.debug || '영수증 글자를 읽지 못했습니다.');
+      entries.push(entry);
+    }
+    const agg=aggregateReceiptEntries(entries);
+    // 저장 직전 해당 차량만 최신 재조회(DB 전체 덮어쓰기 방지) 후 같은 기록·같은 증빙인지 확인
+    const vr=await refreshVehicleOrWarn(plate);
+    if(!vr) return;
+    const t=findTrip();
+    if(!t || t.receiptAttachedBy==='admin' || JSON.stringify(receiptPathsOf(t))!==JSON.stringify(paths)){
+      await appAlert('그 사이 기록이나 증빙이 바뀌었습니다. 새로고침 후 다시 시도해 주세요.',{title:'다시 판정 중단',danger:true});
+      renderPersonalUseList();
+      return;
+    }
+    const now=new Date().toISOString();
+    t.receiptRejudge={at:now, prev:{ocrAmount:t.receiptOcrAmount??null, ocrMatched:t.receiptOcrMatched??null, ocrDate:t.receiptOcrDate??null, dateValid:t.receiptDateValid??null, typeValid:t.receiptTypeValid??null}}; // 신규 필드(최근 1회)
+    t.receiptOcrAmount=agg.amountSum;
+    t.receiptOcrMatched=agg.amountSum===null ? null : matchReceiptAmount(Number(String(t.fuel??'').replace(/,/g,''))||0, [agg.amountSum]);
+    t.receiptOcrDate=agg.ocrDate;
+    t.receiptDateValid=agg.dateValid;
+    t.receiptTypeValid=agg.typeValid;
+    const saved=await saveVehicleToStorage(plate, !vr.exists);
+    if(!saved) return;
+    renderPersonalUseList();
+    const tx=(v,y,n)=>v===true?y:(v===false?n:'확인필요');
+    showDoneModal('다시 판정 완료', `금액: ${agg.amountSum!==null?agg.amountSum.toLocaleString()+'원 · '+tx(t.receiptOcrMatched,'일치','상이'):'인식 실패'}\n일자: ${agg.ocrDate||'못 읽음'} · ${tx(agg.dateValid,'적격','부적격')}\n유형: ${tx(agg.typeValid,'주유영수증','유형상이')}`);
+  }catch(e){
+    console.error('[관리자 다시 판정 실패]', e);
+    await appAlert(`다시 판정에 실패했습니다. 기존 판정은 그대로입니다.\n${e.message||''}`,{title:'다시 판정 실패',danger:true});
+  }
 }
 
 // 관리자 화면에서 Storage의 영수증 원본 이미지를 새 창으로 열람
@@ -6915,6 +6978,7 @@ async function saveTripEdits(plate){
         target.isoDate = fromVal;
         target.dateTo = dateTo;
         target.usageDates = allDates;
+        rejudgeSavedReceiptDate(target); // 2026-11-16 시작일 변경 시 영수증 일자 재판정
       }
     }
     // 관리자 수정 시각 기록 (최초 제출시각 submittedAt과 별개, 마지막 수정시각만 유지)
@@ -8337,6 +8401,7 @@ const MAX_TRIP_RANGE_DAYS = 10;
 function onDateRangeChange(id){
   const card = document.getElementById(id);
   if(!card) return;
+  if((window._receiptFileMap[id]||[]).length) applyReceiptAggregate(id, {dateOnly:true}); // 2026-11-16 영수증 일자 재판정
   const fromInp = card.querySelector('.tr-date-from');
   const toInp = card.querySelector('.tr-date-to');
   const fromVal = fromInp?.value || '';
@@ -9240,6 +9305,7 @@ function newReceiptEntry(file){
 async function analyzeReceiptEntry(entry, tripDateStr){
   try{
     const { text, debug, annotation } = await callVisionOcr(entry.file);
+    entry.ocrFailed = !text; // 한도 도달·키 미설정 등으로 글자를 못 받은 경우(관리자 다시 판정에서 저장 중단용)
     // 2026-11-13: 사진 1장에 영수증이 여러 장이면 영수증별로 판정해 금액은 합산(분리 조건 불충족 시 1장 처리)
     const regions = splitReceiptRegions(annotation);
     if(regions){
@@ -9255,17 +9321,20 @@ async function analyzeReceiptEntry(entry, tripDateStr){
       entry.dateValid = tri('valid');
       entry.diffDays = parts.reduce((m,p)=> p.diffDays!==null && Math.abs(p.diffDays)>Math.abs(m??0) ? p.diffDays : m, null);
       entry.typeValid = tri('type');
+      entry.ocrDates = parts.map(p=>p.date); // 2026-11-16: 영수증별 읽은 날짜 보관(운행일 변경 시 재판정용)
     } else {
       const cands = parseReceiptAmount(text);
       entry.ocrAmount = cands.length ? cands[0] : null;
       entry.ocrDate = parseReceiptDate(text, tripDateStr);
       const { valid, diffDays } = validateReceiptDate(entry.ocrDate, tripDateStr);
       entry.dateValid = valid; entry.diffDays = diffDays;
+      entry.ocrDates = [entry.ocrDate];
       entry.typeValid = isFuelReceiptText(text);
     }
     entry.debug = debug || '';
   }catch(e){
     console.error('[영수증 OCR 실패]', e);
+    entry.ocrFailed = true;
   }
   entry.pending = false;
 }
@@ -9279,6 +9348,25 @@ function aggregateReceiptEntries(list){
   const tri = (k)=> done.some(e=>e[k]===false) ? false : (done.length>0 && done.every(e=>e[k]===true) ? true : null);
   const dates = [...new Set(done.map(e=>e.ocrDate).filter(Boolean))];
   return { count:list.length, pending, amountSum, ocrDate: dates.join(', ') || null, dateValid: tri('dateValid'), typeValid: tri('typeValid') };
+}
+// 2026-11-16: 영수증 첨부 후 운행 시작일을 바꾸면 OCR을 다시 부르지 않고 읽어 둔 날짜(영수증별)로 일자 판정만 다시 한다.
+// 날짜가 완성(10자)되지 않았으면 이전 판정을 유지한다.
+function rejudgeReceiptEntryDates(list, tripDateStr){
+  if(!tripDateStr || tripDateStr.length!==10) return;
+  (list||[]).forEach(e=>{
+    if(!e || e.pending || !Array.isArray(e.ocrDates) || !e.ocrDates.length) return;
+    const r = e.ocrDates.map(d=>validateReceiptDate(d, tripDateStr));
+    e.dateValid = r.some(x=>x.valid===false) ? false : (r.every(x=>x.valid===true) ? true : null);
+    e.diffDays = r.reduce((m,x)=> x.diffDays!==null && Math.abs(x.diffDays)>Math.abs(m??0) ? x.diffDays : m, null);
+  });
+}
+// 이미 저장된 기록의 시작일을 바꿀 때: 저장된 읽은 날짜(receiptOcrDate)로 일자 판정만 다시 계산.
+// 관리자 첨부 건, 날짜를 못 읽은 건, 처음 판정이 확인필요(null)였던 건은 그대로 둔다.
+function rejudgeSavedReceiptDate(t){
+  if(!t || !t.receiptPath || t.receiptAttachedBy==='admin' || !t.receiptOcrDate || typeof t.receiptDateValid!=='boolean' || !t.isoDate) return;
+  const r = String(t.receiptOcrDate).split(',').map(x=>x.trim()).filter(Boolean).map(d=>validateReceiptDate(d, t.isoDate));
+  if(!r.length || r.some(x=>x.valid===null)) return;
+  t.receiptDateValid = r.every(x=>x.valid===true);
 }
 // 첨부 영수증 목록(썸네일 + 장별 인식결과 + 삭제버튼) 마크업. removeJs(idx)는 삭제 onclick 문자열 반환
 function receiptEntriesHtml(list, removeJs){
@@ -9441,9 +9529,11 @@ function removeReceiptFile(id, idx){
 // 첨부된 영수증 전체의 OCR 결과를 합산해 card.dataset(collectRows()가 읽는 값)과 화면에 반영.
 // 전 장 금액 인식 성공 시 합산 금액을 주유비 입력란에 자동 입력한다 — 이후 사용자가 이 값을 임의로
 // 고치면 checkReceiptAmountMismatch()가 감지해 별도 안내 문구를 띄운다(fuelOcrWarn-${id}).
-function applyReceiptAggregate(id){
+function applyReceiptAggregate(id, opts){
   const card = document.getElementById(id);
   const list = window._receiptFileMap[id] || [];
+  const dateOnly = !!(opts && opts.dateOnly); // 운행일 변경에 따른 일자 재판정만(주유비 입력란은 건드리지 않음)
+  rejudgeReceiptEntryDates(list, card?.querySelector('.tr-date-from')?.value || '');
   const wrap = document.getElementById('receiptThumbWrap-'+id);
   if(!list.length){
     delete window._receiptFileMap[id];
@@ -9462,7 +9552,10 @@ function applyReceiptAggregate(id){
   if(!agg.pending){
     const fuelInp = card?.querySelector('.tr-fuel');
     let matched = null; // 금액 인식 실패 — 기존 입력값 유지, 관리자 확인 대상
-    if(agg.amountSum!==null && fuelInp){
+    if(dateOnly){
+      const m = card?.dataset.receiptOcrMatched;
+      matched = (m===undefined || m==='') ? null : (m==='true');
+    } else if(agg.amountSum!==null && fuelInp){
       fuelInp.value = String(agg.amountSum);
       formatFuelInput(fuelInp);
       matched = true;
@@ -9478,7 +9571,7 @@ function applyReceiptAggregate(id){
       card.dataset.receiptDateValid = agg.dateValid===null ? '' : String(agg.dateValid);
       card.dataset.receiptTypeValid = agg.typeValid===null ? '' : String(agg.typeValid);
     }
-    const amountText = matched===true
+    const amountText = (dateOnly ? agg.amountSum!==null : matched===true)
       ? `<span style="color:#059669;font-weight:700;">✅ ${agg.count>1?'합산 금액이':'인식된 금액이'} 주유비 입력란에 자동으로 입력되었습니다 (임의 수정 시 안내 표시)</span>`
       : `<span style="color:#B45309;font-weight:700;">🔍 금액 자동 인식 실패${agg.count>1?'(일부 영수증)':''} - 주유비를 직접 입력해주세요 (관리자 확인 예정)</span>`;
     summary = receiptAggSummaryHtml(agg, amountText);
@@ -11108,9 +11201,11 @@ function ueRemoveReceiptFile(btn, idx){
 
 // 내 제출기록 수정 화면 — 첨부 영수증 합산 판정을 row.dataset(saveUserEdits()가 읽는 값)과 화면에 반영.
 // 전 장 금액 인식 성공 시 합산 금액을 주유비 입력란에 자동 입력(제출 화면과 동일하게 연동)
-function ueApplyReceiptAggregate(row){
+function ueApplyReceiptAggregate(row, opts){
   const key = row.dataset.key;
   const list = (window._ueReceiptFileMap && window._ueReceiptFileMap[key]) || [];
+  const dateOnly = !!(opts && opts.dateOnly);
+  rejudgeReceiptEntryDates(list, row.querySelector('.ue-date-from')?.value || '');
   const wrap = row.querySelector('.ue-receipt-thumb-wrap');
   const btns = row.querySelectorAll('.ue-receipt-btn');
   btns.forEach(b=>{ const off = list.length>=MAX_RECEIPT_FILES; b.disabled=off; b.style.opacity=off?'.4':'1'; b.style.cursor=off?'not-allowed':'pointer'; });
@@ -11125,7 +11220,10 @@ function ueApplyReceiptAggregate(row){
   if(!agg.pending){
     const fuelInp = row.querySelector('[data-f="fuel"]');
     let matched = null;
-    if(agg.amountSum!==null && fuelInp){
+    if(dateOnly){
+      const m = row.dataset.receiptOcrMatched;
+      matched = (m===undefined || m==='') ? null : (m==='true');
+    } else if(agg.amountSum!==null && fuelInp){
       fuelInp.value = agg.amountSum.toLocaleString();
       matched = true;
     }
@@ -11134,7 +11232,7 @@ function ueApplyReceiptAggregate(row){
     row.dataset.receiptOcrDate = agg.ocrDate || '';
     row.dataset.receiptDateValid = agg.dateValid===null ? '' : String(agg.dateValid);
     row.dataset.receiptTypeValid = agg.typeValid===null ? '' : String(agg.typeValid);
-    const amountText = matched===true
+    const amountText = (dateOnly ? agg.amountSum!==null : matched===true)
       ? `<span style="color:#059669;font-weight:700;">✅ ${agg.count>1?'합산 금액이':'인식된 금액이'} 주유비 입력란에 자동으로 입력되었습니다</span>`
       : `<span style="color:#B45309;font-weight:700;">🔍 금액 자동 인식 실패${agg.count>1?'(일부 영수증)':''} - 관리자 확인 예정</span>`;
     summary = receiptAggSummaryHtml(agg, amountText) + `<div style="margin-top:4px;font-size:11px;color:#6B7280;">저장 버튼을 눌러야 최종 반영됩니다.</div>`;
@@ -11168,6 +11266,7 @@ function autoFormatUeDate(inp){
     toInp.value=fromVal;
     toInp.style.borderColor='var(--good)';
   }
+  if(window._ueReceiptFileMap && (window._ueReceiptFileMap[row.dataset.key]||[]).length) ueApplyReceiptAggregate(row, {dateOnly:true}); // 2026-11-16 영수증 일자 재판정
 }
 
 // 출퇴근 출근/퇴근 구분 선택 — 다시 누르면 선택 해제
@@ -11328,6 +11427,7 @@ async function saveUserEdits(){
         t.isoDate = fromVal;
         t.dateTo = dateTo;
         t.usageDates = allDates;
+        rejudgeSavedReceiptDate(t); // 2026-11-16 시작일 변경 시 영수증 일자 재판정
       }
     }
     appendEditLog(t, beforeSnap, `사용자(${t.user||''})`);
