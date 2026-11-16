@@ -35,11 +35,11 @@
 <!--
 =================================================================
   CHANGELOG
+  [2026-11-16] 늦은입력 겹침 관리자 확인완료(lateEntryCheckedAt, 처리 대기에서 제외) | 변경: ackLateEntry(), pendingSummaryDetails(), renderPendingSummary()
   [2026-11-16] 개인사용 점검 시작일 2026-11-01로 변경(11월 이전 건 처리 대기·문제건 집계 제외, 전체보기로는 조회) | 변경: PERSONAL_MONITORING_SINCE
   [2026-11-16] 영수증 일자 판정 보완: 첨부 후 운행일 변경 시 재판정, 관리자 목록에 읽은 날짜 표시, 관리자 "다시 판정"(금액·일자·유형) | 변경: rejudgeReceiptEntryDates(), rejudgeSavedReceiptDate(), applyReceiptAggregate(), ueApplyReceiptAggregate(), onDateRangeChange(), autoFormatUeDate(), receiptStatusBadgeHtml(), adminRejudgeReceipt()
   [2026-11-13] 영수증 OCR 인식률 개선(사진 1장 여러 영수증 분리·합산, 카드문자·앱 캡처 금액/날짜, 선승인 취소 제외, 정유사 상호) | 변경: parseReceiptAmount(), parseReceiptDate(), isFuelReceiptText(), splitReceiptRegions() 신규, callVisionOcr(), analyzeReceiptEntry(), receiptEntriesHtml()
   [2026-11-12] 백업·복원 운행기록 건수를 객체형 trips도 정확히 세도록 수정(복원 확인창 NaN 방지) | 변경: backupData(), restoreData()
-  [2026-11-11] 전환용 기존 관리자 ID(admin) 제거 — newhead 로그인 확인 완료 | 변경: ADMIN_ACCOUNTS
   ※ 이전 변경 이력은 저장소 CHANGELOG.md 참고 (이 주석은 최근 5건만 유지)
 -->
 
@@ -5895,8 +5895,8 @@ function pendingSummaryDetails(){
     if(!v || v.active===false) return;
     (v.trips||[]).filter(Boolean).forEach(t=>{
       if(t.status==='점검요망' && !t.maintenanceResolved) maint.push({plate:p, date:dOf(t), text:`점검요망 · ${t.user||''}`});
-      if(t.lateEntryConflict && t.submittedAt && new Date(t.submittedAt).getTime() >= lateSince)
-        late.push({plate:p, date:dOf(t), text:`시작 ${t.startOdo!=null?Number(t.startOdo).toLocaleString():'?'}km 겹침 · ${t.user||''}`});
+      if(t.lateEntryConflict && !t.lateEntryCheckedAt && t.submittedAt && new Date(t.submittedAt).getTime() >= lateSince)
+        late.push({plate:p, date:dOf(t), key:tripKeyOf(t), text:`시작 ${t.startOdo!=null?Number(t.startOdo).toLocaleString():'?'}km 겹침 · ${t.user||''}`});
     });
     odoGapsForPlate(p).forEach(g=>gaps.push({plate:p, date:dOf(g.trip), text:`${dOf(g.prev)} → ${dOf(g.trip)} ${g.gap.toLocaleString()}km 공백`}));
   });
@@ -5967,6 +5967,23 @@ async function ackDupDriver(idx){
   showAdminToast('확인완료 처리되었습니다.','good');
   renderAll();
 }
+// 2026-11-16 늦은입력 겹침 확인완료: 해당 차량만 재조회해 같은 기록인지 확인한 뒤 lateEntryCheckedAt(신규 필드)만 남긴다.
+// lateEntryConflict·lateEntryConflictWith는 이력으로 그대로 둔다.
+async function ackLateEntry(idx){
+  if(viewerMode) return;
+  const r = _pendingDetails?.late?.[idx];
+  if(!r) return;
+  if(!await appConfirm(`${r.plate} ${r.date}\n${r.text}\n\n겹친 기록을 확인했거나 이미 바로잡은 경우 확인완료 처리합니다.\n이후 처리 대기에서 제외됩니다.`, {title:'늦은입력 겹침 확인완료'})) return;
+  const vr = await refreshVehicleOrWarn(r.plate);
+  if(!vr || !data.vehicles[r.plate]) return;
+  const t = (data.vehicles[r.plate].trips||[]).find(x=>x && x.lateEntryConflict && tripKeyOf(x)===r.key);
+  if(!t){ showAdminToast('해당 기록을 찾지 못했습니다(그 사이 수정·삭제됨). 화면을 새로고침해 주세요.','bad'); return; }
+  t.lateEntryCheckedAt = new Date().toISOString();
+  const saved = await saveVehicleToStorage(r.plate, !vr.exists, true);
+  if(!saved){ showAdminToast(_lastSaveConflict ? '⚠ 그 사이 다른 저장이 있어 반영하지 않았습니다. 다시 눌러 주세요.' : '⚠ 저장 실패: 서버에 반영되지 않았습니다.','bad'); return; }
+  showAdminToast('확인완료 처리되었습니다.','good');
+  renderAll();
+}
 let pendingOpenKey = null; // 처리 대기 요약에서 펼쳐 둔 항목(재렌더링 후에도 유지)
 let _pendingDetails = null;
 function renderPendingSummary(){
@@ -5992,8 +6009,9 @@ function renderPendingSummary(){
         <span class="pending-row-plate">${escapeHtml(r.plate)}</span>
         <span class="pending-row-date">${escapeHtml(r.date)}</span>
         <span class="pending-row-text">${escapeHtml(r.text)}</span></button>`;
-        return (open.k==='dup' && !viewerMode)
-          ? `<div style="display:flex;align-items:center;gap:6px;">${row}<button type="button" class="btn-ghost" style="flex-shrink:0;font-size:11px;padding:3px 8px;white-space:nowrap;" onclick="ackDupDriver(${idx})">확인완료</button></div>`
+        const ackFn = open.k==='dup' ? 'ackDupDriver' : (open.k==='late' ? 'ackLateEntry' : '');
+        return (ackFn && !viewerMode)
+          ? `<div style="display:flex;align-items:center;gap:6px;">${row}<button type="button" class="btn-ghost" style="flex-shrink:0;font-size:11px;padding:3px 8px;white-space:nowrap;" onclick="${ackFn}(${idx})">확인완료</button></div>`
           : row;
       }).join('')}
     </div>` : '';

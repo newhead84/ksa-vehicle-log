@@ -6,6 +6,7 @@ KSA 업무용 차량 운행정보 관리 시스템 (`index.html`) 변경 이력.
 
 ## 2026-11-16
 
+- 늦은입력 겹침에 관리자 "확인완료" 추가: 처리 대기 상세 목록 버튼 → 해당 차량 재조회·같은 기록 확인 후 `lateEntryCheckedAt`(신규 필드)만 기록, 이후 처리 대기에서 제외. `lateEntryConflict`·`lateEntryConflictWith`는 이력으로 유지 | 변경: ackLateEntry(), pendingSummaryDetails(), renderPendingSummary()
 - 개인사용 점검 시작일을 2026-11-01로 변경(11월 이전 건은 시스템 정상화 이전 건이라 처리 대기·개인사용 요약 카드·문제건 목록에서 제외, 전체보기·이름 검색으로는 계속 조회) | 변경: PERSONAL_MONITORING_SINCE
 - 개인사용 영수증 "일자부적격/일자확인필요" 오판정 재발 방지
   - 영수증을 먼저 첨부하고 운행 시작일을 나중에 바꾸면, OCR 재호출 없이 읽어 둔 날짜(영수증별)로 일자 판정을 다시 함(운행 입력·내 제출기록 수정). 주유비 입력란은 건드리지 않음
